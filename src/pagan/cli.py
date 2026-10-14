@@ -741,6 +741,35 @@ def cmd_palette_adjust(args: argparse.Namespace, out: Output) -> int:
     return 0
 
 
+# --- pagan skill install ----------------------------------------------------------------------
+
+SKILL_FILES = ("SKILL.md", "reference.md")
+
+
+def _git_root(start: Path) -> Path | None:
+    for directory in (start.resolve(), *start.resolve().parents):
+        if (directory / ".git").exists():
+            return directory
+    return None
+
+
+def cmd_skill_install(args: argparse.Namespace, out: Output) -> int:
+    base = Path(args.dir) if args.dir else (_git_root(Path.cwd()) or Path.cwd())
+    target = base / ".claude" / "skills" / "pagan"
+    target.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    for name in SKILL_FILES:
+        text = files("pagan").joinpath("skill", name).read_text(encoding="utf-8")
+        path = target / name
+        if path.exists() and path.read_text(encoding="utf-8") == text:
+            continue
+        path.write_text(text, encoding="utf-8")
+        written.append(display_path(path))
+    out.say(f"PAGAN skill {'installed' if written else 'already up to date'} in {display_path(target)}")
+    out.result({"skill_dir": display_path(target), "written": written})
+    return 0
+
+
 # --- pagan palette show -----------------------------------------------------------------------
 
 
@@ -898,6 +927,12 @@ def build_parser() -> argparse.ArgumentParser:
     bump_cmd = style_cmds.add_parser("bump", parents=[common], help="record a style change; flags older assets for review")
     bump_cmd.add_argument("note", help='what changed, e.g. "more shadows: ambient 0.2 -> 0.1"')
     bump_cmd.set_defaults(handler=cmd_style_bump)
+
+    skill = commands.add_parser("skill", help="the Claude skill that teaches agents to use PAGAN")
+    skill_cmds = skill.add_subparsers(title="skill commands", metavar="<subcommand>", required=True)
+    skill_install = skill_cmds.add_parser("install", parents=[common], help="install into <repo>/.claude/skills/pagan/")
+    skill_install.add_argument("dir", nargs="?", help="repo root (default: the git root containing the cwd)")
+    skill_install.set_defaults(handler=cmd_skill_install)
 
     palette = commands.add_parser("palette", help="palette tools")
     palette_cmds = palette.add_subparsers(title="palette commands", metavar="<subcommand>", required=True)

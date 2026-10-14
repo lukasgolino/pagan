@@ -42,6 +42,8 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
 - `tests/` — pytest suite
+- `src/pagan/skill/` — the Claude skill (SKILL.md workflow + reference.md notation); `pagan skill install` copies it.
+  `.claude/skills/pagan/` is this repo's installed copy: after editing the skill run `pagan skill install` (a test checks they match).
 - `examples/demo/` — an example PAGAN project (palettes: ember, tide, arcade); tests keep it valid
 - `examples/godot/` — Godot 4.7 project receiving the demo's build output; `scenes/art_test.tscn` shows everything
 - `.github/workflows/` — CI

@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 from typing import Any
@@ -238,3 +239,42 @@ def test_preview_and_gallery(in_tmp: Path, capsys: pytest.CaptureFixture[str]) -
     assert code == 0 and result["assets"] == 1
     assert (in_tmp / "previews" / "gallery.png").exists()
     assert main(["preview", "d", "--bg", "plaid"]) == 1
+
+
+# --- skill ---
+
+REPO = Path(__file__).parent.parent
+
+
+def test_skill_install(tmp_path: Path) -> None:
+    assert main(["skill", "install", str(tmp_path)]) == 0
+    skill = (tmp_path / ".claude" / "skills" / "pagan" / "SKILL.md").read_text()
+    assert skill.startswith("---\nname: pagan\n")
+    assert (tmp_path / ".claude" / "skills" / "pagan" / "reference.md").exists()
+
+
+def test_repo_skill_copy_is_current() -> None:
+    # The repo's own .claude/skills/pagan must match the packaged skill: run `pagan skill install` after editing.
+    for name in ("SKILL.md", "reference.md"):
+        packaged = (REPO / "src" / "pagan" / "skill" / name).read_text()
+        assert (REPO / ".claude" / "skills" / "pagan" / name).read_text() == packaged, name
+
+
+def test_reference_lists_every_command() -> None:
+    reference = (REPO / "src" / "pagan" / "skill" / "reference.md").read_text()
+    from pagan.cli import build_parser
+
+    parser = build_parser()
+    subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    for command in subparsers.choices:
+        assert f"`pagan {command}" in reference, f"reference.md doesn't document `pagan {command}`"
+
+
+def test_reference_lists_every_rule() -> None:
+    reference = (REPO / "src" / "pagan" / "skill" / "reference.md").read_text()
+    from pagan.lint import WARNING_RULES
+
+    for rule in WARNING_RULES:
+        assert rule in reference
+    for number in range(14):
+        assert f"E{number:03d}" in reference

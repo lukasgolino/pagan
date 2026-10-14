@@ -1,0 +1,125 @@
+---
+name: pagan
+description: Make and maintain pixel-art game assets with PAGAN (Pixel Art Grammar And Notation) - sprites, characters, enemies, items, tiles, icons, 3D ships/vehicles/buildings rendered in 4/8/16 directions, animations - and change a game's art style over time (darker, more contrast, pastel, more shadows, new palette). Use whenever the user asks for game art, a sprite, an asset, a tileset, rotations/headings, an animation, or a look change, or mentions pagan / pagan.toml.
+---
+
+# PAGAN: making game art as text
+
+PAGAN turns text into pixel art. You write palette-keyed grids (2D) or voxel shapes (3D) in YAML;
+the `pagan` CLI lints them against the project's style rules, renders previews you can look at, and
+builds engine-ready assets (PNG sheets, manifest.json, Godot SpriteFrames). Full notation:
+[reference.md](reference.md). Everything below is the workflow.
+
+## 0. Setup check
+
+1. `pagan --version`. If missing: `pip install -e <path to the PAGAN repo>` (into the project's venv).
+2. Find the art project: `pagan status` from the repo root, or look for `pagan.toml`
+   (`find . -name pagan.toml -not -path '*/node_modules/*'`). That folder is the game's **art home**:
+   - `BRIEF.md` - what the game is, its key assets, the wishlist, and a dated feedback log
+   - `STYLE.md` - how the art must look, with a versioned changelog
+   - `pagan.toml` - palette, camera, light, lint rules, output dir
+   - `palettes/`, `sprites/`, `tiles/`, `models/` - the sources; every asset has a `description`
+3. **Always read BRIEF.md and STYLE.md before making or changing anything**, and run `pagan status`.
+   They are your memory between sessions: the chosen palette, sizes, perspective, references and
+   every decision the owner made live there, not in your head.
+4. No `pagan.toml` yet -> do **First-time setup** (section 1) before drawing anything.
+
+## 1. First-time setup (a new game)
+
+Ask once, in ONE compact message, each question with a recommended default so the owner can just say
+"defaults":
+
+1. **The game** - name, genre, what the player does. (needed for BRIEF.md)
+2. **Perspective** - top-down 3/4 (default), straight top-down, side-on, or isometric. Sets `[camera]`.
+3. **Mood / references** - e.g. "warm and earthy", "neon", "Stardew-like", "Hyper Light Drifter".
+4. **Sizes** - small things 16x16 (default) or 32x32; big things (vehicles, bosses) e.g. 64-96px.
+5. **Look rules** - dark 1px outline (default) or none; light from the top-left (default).
+6. **Engine** - Godot 4 (default; give the path to the Godot project) or plain PNGs.
+
+Then:
+- `pagan init art` (inside the game repo; `--open` only for throwaway prototypes).
+- Palette: propose 2-3 palettes (16-32 colors, grouped into ramps dark -> light; one ramp per material:
+  skin, wood, foliage, stone, metal, cloth...). Write them to `palettes/`, run `pagan palette show`,
+  **look at the swatches**, show the owner the paths, let them pick or tweak. Set `default_palette`.
+- `pagan.toml`: `output_dir` (e.g. `../game/assets/generated`), `export = ["png", "godot"]`,
+  `[camera] elevation` (top-down 3/4 ~ 40-45, straight down 90, side-on 10-15), `[light]`.
+- Fill in BRIEF.md (game, perspective, mood, key assets) and STYLE.md (ramp intent, scale, outline,
+  light, shading, animation rules). Log the owner's answers in BRIEF.md's feedback log.
+
+## 2. Making an asset
+
+**Ask only what you can't infer** (BRIEF/STYLE usually answer size, palette, outline). Typical
+questions, with your defaults: what it looks like (colors, key features), size, 2D or 3D, how many
+directions, which animations. Start with ONE asset and get it approved before making related ones.
+
+**2D or 3D?**
+- **3D model** (`pagan new model`) for anything that needs several headings or rotations (ships,
+  vehicles, top-down characters that turn), props seen at angles, buildings. Headings come out
+  consistent automatically and share the project light. Animate with poses (parts move by whole voxels).
+- **2D sprite** (`pagan new sprite`) for icons, UI, items, front/side-view characters, effects, and
+  anything flat. Use `mirror: horizontal` for symmetric subjects, derived frames (`from`/`flip`/`shift`)
+  to avoid redrawing.
+- **Tileset** (`pagan new tiles`) for terrain; tiles must be seamless.
+
+**The loop** (cap at ~4 rounds, then show the owner what you have):
+1. Scaffold: `pagan new sprite|model|tiles <name> --size WxH --description "..."` (description = what it
+   is and what it should look like; future you will rely on it).
+2. Author the grid / parts. Write rows carefully: every row exactly the frame width.
+3. `pagan lint <file>` -> fix every error; read warnings (orphans, ramps, jitter) and fix real ones.
+4. `pagan preview <name>` -> **open `previews/<name>/sheet.png` with the Read tool and look at it.**
+5. Self-review against STYLE.md and the reference assets (`pagan gallery` shows the whole set):
+   silhouette readable at 1x? light from the right side? ramps used dark->light? no pillow shading?
+   consistent with the other assets' size and detail? For animations: the "changes" row should only
+   light up the parts that are meant to move - no jumps.
+6. Show the owner: the sheet path (and GIF paths), a one-line summary, and any choice you made.
+7. On approval: `pagan mark <name> --status approved`, add it to BRIEF.md "Done" (and log feedback),
+   `pagan build` (add `--verify-godot` if GODOT is set).
+
+## 3. Follow-up requests on existing assets
+
+- **"Give it 8 directions / rotations"**: if it's a 2D sprite, rebuild it as a model (`models/`) so
+  every heading is consistent (`directions: 8`), matching the approved sprite's colors and proportions,
+  then remove/rename the sprite (asset names must be unique). Models already have them: change
+  `directions`.
+- **New animation** (sword swing, walk, hop): models -> add parts with `id:` and an `animations:` entry
+  with one pose per frame; 2D -> add frames (derive with `from`/`shift` where possible) and an
+  `animations` entry. Keep everything that shouldn't move on exactly the same pixels; check the changes
+  row and W007. Typical frame counts: idle 2-4, walk 4-6, attack 3-5.
+- **"Make an enemy / another character"**: new asset in the same style - same palette, outline, light,
+  proportions; compare side by side with `pagan gallery`. Variants (`variants:` ramp_swap/key_swap/
+  palette) are the cheap way to make recolored versions (elite enemy, night version).
+
+## 4. Changing the look over time
+
+Look changes go through the palette and the project light whenever possible, because then **every
+asset updates at once** and stays consistent:
+
+| Owner says | Do |
+|---|---|
+| "darker" / "lighter" | `pagan palette adjust <pal> --lightness -0.05` (or +) |
+| "more contrast" | `pagan palette adjust <pal> --contrast 1.15` |
+| "more pastel" / "muted" | `pagan palette adjust <pal> --saturation 0.6 --lightness 0.04` |
+| "more vivid" | `--saturation 1.2` |
+| "warmer" / "cooler" | `--warmth 0.02` / `--warmth -0.02` |
+| "only the greens darker" | add `--ramp <ramp>` (or `--keys ...`) |
+| "more / softer shadows" | 3D: lower `[light] ambient` (e.g. 0.2 -> 0.1), keep `shadows = true`; 2D: needs redrawing (below) |
+| "light from the right" | 3D: change `[light] direction`; 2D: redraw (below) |
+| "try a different palette" | `--out <new>` to make a copy, or a new palette with the SAME keys, then switch `default_palette` (grids reference keys, so assets carry over) |
+
+Always use `--dry-run` or the before/after swatch it writes, then `pagan gallery` to check the whole
+set, and log the change in BRIEF.md's feedback log.
+
+**When existing 2D art must be redrawn** (more shading, new outline style, new proportions):
+1. `pagan style bump "what changed and why"` - bumps `style_version`, logs it in STYLE.md.
+2. Update STYLE.md's rules to match.
+3. `pagan status` lists every asset flagged "review for style vN" (lint W006).
+4. Go through them one by one: update, preview, look, then `pagan mark <name> --current`.
+5. `pagan gallery` at the end; `pagan build`.
+
+## 5. Rules of thumb
+
+- Never invent colors: everything comes from the palette (strict mode makes this an error anyway).
+- Keep 1px of transparent border when `outline: auto` (E007 otherwise).
+- Previews are for looking; `pagan build` output is what the game uses. Don't hand-edit build output.
+- Don't commit or push unless the owner asks.
+- If PAGAN itself seems wrong (a crash, a misleading error), say so instead of working around it silently.
