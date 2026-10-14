@@ -22,3 +22,11 @@ def test_demo_palettes_are_valid(path: Path) -> None:
     # Every color belongs to at least one ramp.
     in_ramps = {key for ramp in palette.ramps.values() for key in ramp}
     assert in_ramps == set(palette.colors)
+
+
+def test_demo_project_lints_clean() -> None:
+    from pagan.lint import lint_paths
+
+    result = lint_paths(load_project(DEMO))
+    assert not result.findings, [f.format() for f in result.findings]
+    assert {a.name for a in result.assets} >= {"ship", "sailor", "slime", "potion", "meadow"}
