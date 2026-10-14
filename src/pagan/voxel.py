@@ -214,7 +214,8 @@ def render_heading(
     norm = math.sqrt(lx * lx + ly * ly + lz * lz)
     light_world: Vec = (lx / norm, ly / norm, lz / norm)
     light_model = to_model(light_world, False)
-    reach = 2.0 * (max(hi[i] - lo[i] for i in range(3)) + 2) + 2 * max(abs(c) for c in origin) + 4
+    corners = [(x, y, z) for x in (lo[0], hi[0] + 1) for y in (lo[1], hi[1] + 1) for z in (lo[2], hi[2] + 1)]
+    reach = 2.0 * max(math.dist(c, origin) for c in corners) + 4  # rays start beyond every voxel
 
     # Only pixels inside the projected bounding box can hit anything: skip the rest.
     xs_screen: list[float] = []

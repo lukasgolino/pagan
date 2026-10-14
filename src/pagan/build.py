@@ -158,9 +158,19 @@ def _ref(path: Path, out: Path, godot_root: Path | None) -> str:
 
 
 def _previous_outputs(out: Path) -> set[Path]:
+    """Files the previous build recorded. Only paths inside output_dir count: never delete anything else."""
     manifest = out / MANIFEST
+    root = out.resolve()
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
-        return {(out / f).resolve() for f in data.get("files", []) if ".." not in Path(f).parts}
-    except (OSError, ValueError, AttributeError):
+        names = data.get("files", []) if isinstance(data, dict) else []
+    except (OSError, ValueError):
         return set()
+    found: set[Path] = set()
+    for name in names:
+        if not isinstance(name, str) or Path(name).is_absolute():
+            continue
+        path = (root / name).resolve()
+        if path.is_relative_to(root) and path != root and path.suffix in (".png", ".tres", ".json"):
+            found.add(path)
+    return found

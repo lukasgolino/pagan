@@ -80,7 +80,7 @@ def test_lint_whole_project_reports_broken_palette_once(project: Project) -> Non
 def test_e012_duplicate_asset_names(project: Project) -> None:
     (project.root / "sprites" / "dup.sprite.yaml").write_text(SOLID.replace("thing", "dup"))
     (project.root / "tiles" / "dup.tiles.yaml").write_text("name: dup\ntile_size: [1, 1]\ntiles:\n  a: |\n    1\n")
-    assert [f.rule for f in lint_paths(project).errors] == ["E012"]
+    assert [f.rule for f in lint_paths(project).errors] == ["E012", "E012"]  # both files flagged
 
 
 def test_sprite_with_broken_palette_fails_when_linted_alone(project: Project) -> None:

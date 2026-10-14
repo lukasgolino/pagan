@@ -59,7 +59,7 @@ def sprite_frames_tres(
             f'"frames": [{frames}],\n'
             f'"loop": {"true" if anim.loop else "false"},\n'
             f'"name": &{_string(anim.name)},\n'
-            f'"speed": {anim.fps:.1f}\n'
+            f'"speed": {float(anim.fps)!r}\n'
             "}"
         )
     lines += ["[resource]", f"animations = [{', '.join(entries)}]", ""]
@@ -105,6 +105,12 @@ def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: 
             [godot, "--headless", "--path", str(godot_root), "-s", "res://.pagan_verify.gd", "--", manifest_res],
             capture_output=True, text=True, timeout=timeout,
         )  # fmt: skip
+    except FileNotFoundError:
+        return GodotCheck(ok=False, output=f"Godot binary not found: {godot} (set GODOT=/path/to/godot)")
+    except PermissionError:
+        return GodotCheck(ok=False, output=f"can't run {godot}: not executable")
+    except subprocess.TimeoutExpired:
+        return GodotCheck(ok=False, output=f"Godot didn't finish within {timeout}s")
     finally:
         for leftover in (godot_root / ".pagan_verify.gd", godot_root / ".pagan_verify.gd.uid"):
             leftover.unlink(missing_ok=True)

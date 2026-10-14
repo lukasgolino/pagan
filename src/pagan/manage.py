@@ -65,7 +65,8 @@ def catalogue(project: Project) -> list[AssetStatus]:
             entry = AssetStatus(
                 name=asset.name, kind=asset.kind, path=path, description=asset.description, status=asset.status,
                 style_version=asset.style_version, size=asset.size, frames=len(asset.frames),
-                animations=len(asset.animations), errors=0, warnings=len(findings), tags=asset.tags,
+                animations=len(asset.animations), errors=sum(f.severity == "error" for f in findings),
+                warnings=sum(f.severity == "warning" for f in findings), tags=asset.tags,
             )  # fmt: skip
         else:
             raw = _raw_fields(path)
@@ -125,30 +126,43 @@ def adjust_colors(palette: Palette, keys: list[str], adj: Adjustment) -> dict[st
 
 
 def apply_palette_hexes(path: Path, new_hexes: dict[str, str], new_name: str | None = None) -> str:
-    """Return the palette file's text with each key's hex replaced on its own line (comments kept)."""
+    """Return the palette file's text with each key's hex replaced at its exact position (comments kept)."""
     text = path.read_text(encoding="utf-8")
     data = load_yaml(path)
     if not isinstance(data, LineMap) or not isinstance(data.get("colors"), LineMap):
         raise PaganError([Finding("E005", "can't edit this palette: no colors mapping", path)])
     colors: LineMap = data["colors"]
-    lines = text.split("\n")
+    edits: list[tuple[int, int, int, str]] = []  # (line, start col, end col, replacement)
     for raw_key, value in colors.items():
         key = str(raw_key)
         if key not in new_hexes:
             continue
-        old = value if isinstance(value, str) else value.get("hex") if isinstance(value, dict) else None
-        line = value.line_of("hex") if isinstance(value, LineMap) and "hex" in value else colors.line_of(raw_key)
-        if not isinstance(old, str) or line is None:
-            continue
-        index = line - 1
-        replaced, count = re.subn(re.escape(old), new_hexes[key], lines[index], count=1, flags=re.IGNORECASE)
-        if count != 1:
-            raise PaganError([Finding("E005", f"couldn't find {old} for key {key!r} on line {line}", path, line)])
-        lines[index] = replaced
-    if new_name is not None:
-        name_line = data.line_of("name")
-        if name_line is not None:
-            lines[name_line - 1] = re.sub(r"^(\s*name:\s*)\S+", rf"\g<1>{new_name}", lines[name_line - 1])
+        span = (
+            value.value_spans.get("hex")
+            if isinstance(value, LineMap)
+            else colors.value_spans.get(raw_key)
+            if isinstance(value, str)
+            else None
+        )
+        if span is None:
+            raise PaganError([Finding("E005", f"can't locate the hex for key {key!r}", path, colors.line_of(raw_key))])
+        line, start_col, end_col = span
+        lines_text = text.split("\n")
+        written = lines_text[line - 1][start_col:end_col]
+        quote = written[0] if written[:1] in ("'", '"') else ""
+        edits.append((line, start_col, end_col, f"{quote}{new_hexes[key]}{quote}"))
+    if new_name is not None and isinstance(data.value_spans.get("name"), tuple):
+        line, start_col, end_col = data.value_spans["name"]
+        edits.append((line, start_col, end_col, new_name))
+    return _apply_edits(text, edits)
+
+
+def _apply_edits(text: str, edits: list[tuple[int, int, int, str]]) -> str:
+    """Replace column spans; right-to-left per line so earlier columns stay valid."""
+    lines = text.split("\n")
+    for line, start_col, end_col, replacement in sorted(edits, key=lambda e: (e[0], -e[1])):
+        current = lines[line - 1]
+        lines[line - 1] = current[:start_col] + replacement + current[end_col:]
     return "\n".join(lines)
 
 
@@ -158,14 +172,19 @@ def apply_palette_hexes(path: Path, new_hexes: dict[str, str], new_name: str | N
 def set_top_level_field(path: Path, field: str, value: str) -> None:
     """Set `field: value` at the top level of a YAML source file, keeping everything else as written."""
     text = path.read_text(encoding="utf-8")
-    pattern = re.compile(rf"^{re.escape(field)}:[^\n]*$", re.MULTILINE)
-    if pattern.search(text):
-        text = pattern.sub(f"{field}: {value}", text, count=1)
+    data = load_yaml(path)
+    if not isinstance(data, LineMap):
+        raise PaganError([Finding("E001", "not a mapping; can't edit", path)])
+    if field in data:
+        span = data.value_spans.get(field)
+        if span is None:
+            raise PaganError([Finding("E001", f"can't edit {field!r}: write it as a one-line value", path, data.line_of(field))])
+        text = _apply_edits(text, [(span[0], span[1], span[2], value)])
     else:
-        name = re.search(r"^name:[^\n]*$", text, re.MULTILINE)
-        insert_at = name.end() if name else 0
-        prefix = "\n" if name else ""
-        text = text[:insert_at] + f"{prefix}{field}: {value}" + ("" if name else "\n") + text[insert_at:]
+        lines = text.split("\n")
+        after = data.line_of("name") if "name" in data else 0
+        lines.insert(after or 0, f"{field}: {value}")
+        text = "\n".join(lines)
     path.write_text(text, encoding="utf-8")
 
 

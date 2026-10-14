@@ -53,7 +53,7 @@ def _get(mapping: dict[str, Any], key: str, default: Any = None) -> Any:
 
 
 def _num(value: Any) -> bool:
-    return isinstance(value, int | float) and not isinstance(value, bool)
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def _vec(value: Any, n: int = 3) -> tuple[float, ...] | None:
@@ -93,7 +93,7 @@ def _parse_materials(raw: Any, palette: Palette, line: int | None, error: ErrorF
         keys: tuple[str, ...] | None = None
         if "ramp" in spec:
             ramp = spec["ramp"]
-            if ramp not in palette.ramps:
+            if not isinstance(ramp, str) or ramp not in palette.ramps:
                 known = ", ".join(palette.ramps) or "none"
                 error("E013", f"unknown ramp {ramp!r} (palette ramps: {known})", mline, where)
                 continue
@@ -123,6 +123,10 @@ def _parse_materials(raw: Any, palette: Palette, line: int | None, error: ErrorF
 
 
 # --- primitives -------------------------------------------------------------------------------
+
+
+MAX_PART_CELLS = 2_000_000  # per shape, checked before filling
+MAX_MODEL_VOXELS = 2_000_000
 
 
 class _Builder:
@@ -169,6 +173,10 @@ class _Builder:
             if hidden and part_id is not None:
                 self.model.hidden_by_default.add(part_id)
             self.pending_normals = {}
+            volume = _estimated_cells(shape, spec)
+            if volume > MAX_PART_CELLS:
+                self.error("E013", f"this {shape} would fill ~{volume:,.0f} voxels (limit {MAX_PART_CELLS:,}); make it smaller", pline, where)
+                continue
             cells = getattr(self, f"_{shape}")(spec, pline, f"{where}.{shape}")
             if cells is None:
                 continue
@@ -193,6 +201,9 @@ class _Builder:
                         self.model.normals[cell] = shape_normals[cell]
                     else:
                         self.model.normals.pop(cell, None)
+            if len(self.model.voxels) > MAX_MODEL_VOXELS:
+                self.error("E013", f"the model has over {MAX_MODEL_VOXELS:,} voxels; make it smaller", pline, where)
+                return
 
     # Each shape returns {cell: material} or None after reporting an error.
 
@@ -202,7 +213,7 @@ class _Builder:
             if required:
                 self.error("E013", f"missing {key}", line, where)
             return None
-        if value not in self.materials:
+        if not isinstance(value, str) or value not in self.materials:
             self.error("E013", f"unknown material {value!r} (defined: {', '.join(self.materials) or 'none'})", line, where)
             return None
         return str(value)
@@ -436,7 +447,7 @@ class _Builder:
             if not isinstance(char, str) or len(char) != 1 or char == TRANSPARENT:
                 self.error("E013", f"legend keys must be single characters other than '.', got {char!r}", line, where)
                 ok = False
-            elif material not in self.materials:
+            elif not isinstance(material, str) or material not in self.materials:
                 self.error("E013", f"legend: unknown material {material!r}", line, where)
                 ok = False
         if not ok:
@@ -456,6 +467,38 @@ class _Builder:
                     # Grids are seen from above with the model's front to the right: rows run towards -y.
                     cells[(at[0] + col, at[1] - row, at[2] + layer)] = legend[char]
         return cells
+
+
+def _estimated_cells(shape: str, spec: dict[str, Any]) -> float:
+    """Upper bound on the voxels a shape fills, from its parameters (inf if they're absurd)."""
+
+    def size(key: str, default: float = 1.0) -> float:
+        value = spec.get(key, default)
+        return abs(float(value)) if _num(value) else default
+
+    def extent(a: Any, b: Any) -> float:
+        if isinstance(a, list) and isinstance(b, list) and len(a) == len(b) == 3 and all(_num(v) for v in a + b):
+            return math.prod(abs(float(x) - float(y)) + 1 for x, y in zip(a, b, strict=True))
+        return 1.0
+
+    if shape == "box":
+        return extent(spec.get("from"), spec.get("to"))
+    if shape == "hull":
+        return (size("length") + 1) * (size("beam") + 1) * (size("height") + 1)
+    if shape == "cylinder":
+        return (size("height") + 1) * (2 * size("radius", 0) + 1) ** 2
+    if shape == "ellipsoid":
+        radii = spec.get("radii")
+        if isinstance(radii, list) and all(_num(v) for v in radii):
+            return math.prod(2 * abs(float(r)) + 1 for r in radii)
+        return 1.0
+    if shape == "line":
+        a, b = spec.get("from"), spec.get("to")
+        length = math.dist(a, b) if isinstance(a, list) and isinstance(b, list) and len(a) == len(b) == 3 and all(_num(v) for v in a + b) else 1.0
+        return (length + 1) * (2 * size("radius", 0) + 1) ** 3
+    if shape == "sail":
+        return (size("width") + 9) * (size("height") + 1) * 4
+    return 0.0  # layers: bounded by the text itself
 
 
 # --- poses ------------------------------------------------------------------------------------
@@ -499,7 +542,7 @@ def _parse_poses(
             show: set[str] = set()
             for part_id, change in pose.items():
                 if part_id in ("hide", "show"):
-                    if not isinstance(change, list) or not all(c in ids for c in change):
+                    if not isinstance(change, list) or not all(isinstance(c, str) and c in ids for c in change):
                         error("E013", f"poses[{index}].{part_id} must list part ids ({', '.join(sorted(ids)) or 'none defined'})", aline, where)
                     elif part_id == "hide":
                         hide = set(change)
@@ -591,7 +634,7 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
             pivot = (raw_pivot[0], raw_pivot[1])
 
     directions = data.get("directions", 8)
-    if directions not in DIRECTION_NAMES:
+    if isinstance(directions, bool) or not isinstance(directions, int) or directions not in DIRECTION_NAMES:
         error("E013", "directions must be 1, 4, 8 or 16", _line(data, "directions"), "directions")
         directions = 8
     heading = data.get("heading", 0 if directions > 1 else 270)
@@ -631,6 +674,9 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
     poses = _parse_poses(
         data.get("animations"), _line(data, "animations"), set(model.groups.values()), error, model.hidden_by_default
     )
+    for anim_name in poses:
+        if anim_name in DIRECTION_NAMES.get(directions, []):
+            error("E013", f"animation name {anim_name!r} is also a heading name; pick another", _line(data, "animations"), f"animations.{anim_name}")
 
     origin_raw = data.get("origin")
     origin: tuple[float, float, float] | None = None
@@ -733,9 +779,16 @@ def _cached_render(
     if cache_file.is_file():
         try:
             cached = json.loads(cache_file.read_text(encoding="utf-8"))
-            return {frame: tuple(rows) for frame, rows in cached.items()}
+            width, height = size
+            if isinstance(cached, dict) and all(
+                isinstance(cached.get(job[0]), list)
+                and len(cached[job[0]]) == height
+                and all(isinstance(row, str) and len(row) == width for row in cached[job[0]])
+                for job in jobs
+            ):
+                return {job[0]: tuple(cached[job[0]]) for job in jobs}
         except (OSError, ValueError):
-            pass  # unreadable cache: just render again
+            pass  # unreadable or malformed cache: render again
     frames: dict[str, Grid] = {}
     for frame_name, angle, offsets, hidden in jobs:
         posed = model.posed(offsets, hidden)

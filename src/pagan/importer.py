@@ -87,6 +87,18 @@ def _pixels(image: Image.Image, alpha_threshold: int) -> list[list[RGB | None]]:
     return rows
 
 
+def _to_rgba(image: Image.Image, alpha_threshold: int) -> Image.Image:
+    """8-bit RGBA with fully transparent pixels normalised (their RGB can be junk that breaks scale detection)."""
+    if image.mode in ("I", "I;16", "I;16B", "I;16L", "I;16N"):
+        image = image.point(lambda v: v / 257).convert("L")  # 16-bit grey -> 8-bit, keeping the levels
+    rgba = image.convert("RGBA")
+    data = bytearray(rgba.tobytes())
+    for i in range(0, len(data), 4):
+        if data[i + 3] < alpha_threshold:
+            data[i : i + 4] = b"\0\0\0\0"
+    return Image.frombytes("RGBA", rgba.size, bytes(data))
+
+
 def import_png(
     image: Image.Image,
     *,
@@ -96,9 +108,12 @@ def import_png(
     max_colors: int = 32,
 ) -> tuple[list[str], dict[str, str] | None, ImportReport]:
     """Returns (grid rows, inline palette key->hex or None when snapping to `palette`, report)."""
+    if max_colors < 1:
+        raise ValueError("max_colors must be at least 1")
     source_size = image.size
-    scale = scale or detect_scale(image.convert("RGBA"))
-    small = _downscale(image.convert("RGBA"), scale)
+    rgba = _to_rgba(image, alpha_threshold)
+    scale = scale or detect_scale(rgba)
+    small = _downscale(rgba, scale)
     pixels = _pixels(small, alpha_threshold)
     colors = sorted({p for row in pixels for p in row if p is not None})
     report = ImportReport(

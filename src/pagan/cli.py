@@ -567,6 +567,10 @@ def cmd_import(args: argparse.Namespace, out: Output) -> int:
         raise _usage_error(f"invalid name {name!r}: pass --name")
     if args.scale is not None and args.scale < 1:
         raise _usage_error("--scale must be at least 1")
+    if not 1 <= args.max_colors <= 62:
+        raise _usage_error("--max-colors must be 1-62 (palette keys are single characters)")
+    if not 0 <= args.alpha_threshold <= 255:
+        raise _usage_error("--alpha-threshold must be 0-255")
     rows, inline, report = import_png(
         image, palette=palette, scale=args.scale, alpha_threshold=args.alpha_threshold, max_colors=args.max_colors
     )

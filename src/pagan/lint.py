@@ -71,15 +71,19 @@ def lint_paths(project: Project, paths: list[Path] | None = None) -> LintResult:
         if asset is not None:
             assets.append(asset)
             findings.extend(lint_asset(asset, project))
-    by_name: dict[str, Asset] = {}
+    by_name: dict[str, list[Asset]] = {}
     for asset in assets:
-        other = by_name.setdefault(asset.name, asset)
-        if other is not asset:
+        by_name.setdefault(asset.name, []).append(asset)
+    for name, group in by_name.items():
+        if len(group) < 2:
+            continue
+        for asset in group:
+            others = ", ".join(o.path.name if o.path else "another asset" for o in group if o is not asset)
             findings.append(
                 Finding(
                     "E012",
-                    f"asset name {asset.name!r} is also used by {other.path.name if other.path else 'another asset'}; "
-                    "names must be unique across sprites, tilesets and models (outputs would overwrite each other)",
+                    f"asset name {name!r} is also used by {others}; names must be unique across sprites, "
+                    "tilesets and models (outputs would overwrite each other)",
                     asset.path,
                     None,
                     "name",
