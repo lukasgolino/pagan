@@ -174,6 +174,86 @@
           ],
           "loop": true
         },
+        "swing_e": {
+          "fps": 10.0,
+          "frames": [
+            "swing_e_0",
+            "swing_e_1",
+            "swing_e_2",
+            "swing_e_3"
+          ],
+          "loop": false
+        },
+        "swing_n": {
+          "fps": 10.0,
+          "frames": [
+            "swing_n_0",
+            "swing_n_1",
+            "swing_n_2",
+            "swing_n_3"
+          ],
+          "loop": false
+        },
+        "swing_ne": {
+          "fps": 10.0,
+          "frames": [
+            "swing_ne_0",
+            "swing_ne_1",
+            "swing_ne_2",
+            "swing_ne_3"
+          ],
+          "loop": false
+        },
+        "swing_nw": {
+          "fps": 10.0,
+          "frames": [
+            "swing_nw_0",
+            "swing_nw_1",
+            "swing_nw_2",
+            "swing_nw_3"
+          ],
+          "loop": false
+        },
+        "swing_s": {
+          "fps": 10.0,
+          "frames": [
+            "swing_s_0",
+            "swing_s_1",
+            "swing_s_2",
+            "swing_s_3"
+          ],
+          "loop": false
+        },
+        "swing_se": {
+          "fps": 10.0,
+          "frames": [
+            "swing_se_0",
+            "swing_se_1",
+            "swing_se_2",
+            "swing_se_3"
+          ],
+          "loop": false
+        },
+        "swing_sw": {
+          "fps": 10.0,
+          "frames": [
+            "swing_sw_0",
+            "swing_sw_1",
+            "swing_sw_2",
+            "swing_sw_3"
+          ],
+          "loop": false
+        },
+        "swing_w": {
+          "fps": 10.0,
+          "frames": [
+            "swing_w_0",
+            "swing_w_1",
+            "swing_w_2",
+            "swing_w_3"
+          ],
+          "loop": false
+        },
         "w": {
           "fps": 1.0,
           "frames": [
@@ -262,7 +342,7 @@
           "loop": true
         }
       },
-      "description": "Deckhand character: tricorn hat, blue shirt, brown trousers, dark boots. Top-down 3/4 view like the ship, 8 headings, 4-frame walk where legs and arms swing in opposition (body stays put, so no jumps).",
+      "description": "Deckhand character: tricorn hat, blue shirt, brown trousers, dark boots. Top-down 3/4 view like the ship, 8 headings, 4-frame walk where legs and arms swing in opposition (body stays put, so no jumps), and a 4-frame cutlass swing (the sword only exists during the swing).",
       "frames": {
         "e": [
           0,
@@ -272,43 +352,235 @@
         ],
         "n": [
           64,
-          32,
+          64,
           32,
           32
         ],
         "ne": [
-          160,
-          0,
+          32,
+          32,
           32,
           32
         ],
         "nw": [
-          224,
-          32,
+          96,
+          96,
           32,
           32
         ],
         "s": [
           192,
-          96,
+          192,
           32,
           32
         ],
         "se": [
+          224,
+          224,
+          32,
+          32
+        ],
+        "sw": [
+          160,
+          160,
+          32,
+          32
+        ],
+        "swing_e_0": [
+          160,
+          0,
+          32,
+          32
+        ],
+        "swing_e_1": [
+          192,
+          0,
+          32,
+          32
+        ],
+        "swing_e_2": [
+          224,
+          0,
+          32,
+          32
+        ],
+        "swing_e_3": [
+          0,
+          32,
+          32,
+          32
+        ],
+        "swing_n_0": [
+          224,
+          64,
+          32,
+          32
+        ],
+        "swing_n_1": [
+          0,
+          96,
+          32,
+          32
+        ],
+        "swing_n_2": [
+          32,
+          96,
+          32,
+          32
+        ],
+        "swing_n_3": [
+          64,
+          96,
+          32,
+          32
+        ],
+        "swing_ne_0": [
+          192,
+          32,
+          32,
+          32
+        ],
+        "swing_ne_1": [
+          224,
+          32,
+          32,
+          32
+        ],
+        "swing_ne_2": [
+          0,
+          64,
+          32,
+          32
+        ],
+        "swing_ne_3": [
+          32,
+          64,
+          32,
+          32
+        ],
+        "swing_nw_0": [
+          0,
+          128,
+          32,
+          32
+        ],
+        "swing_nw_1": [
+          32,
+          128,
+          32,
+          32
+        ],
+        "swing_nw_2": [
+          64,
+          128,
+          32,
+          32
+        ],
+        "swing_nw_3": [
           96,
           128,
           32,
           32
         ],
-        "sw": [
-          32,
+        "swing_s_0": [
           96,
+          224,
+          32,
+          32
+        ],
+        "swing_s_1": [
+          128,
+          224,
+          32,
+          32
+        ],
+        "swing_s_2": [
+          160,
+          224,
+          32,
+          32
+        ],
+        "swing_s_3": [
+          192,
+          224,
+          32,
+          32
+        ],
+        "swing_se_0": [
+          128,
+          256,
+          32,
+          32
+        ],
+        "swing_se_1": [
+          160,
+          256,
+          32,
+          32
+        ],
+        "swing_se_2": [
+          192,
+          256,
+          32,
+          32
+        ],
+        "swing_se_3": [
+          224,
+          256,
+          32,
+          32
+        ],
+        "swing_sw_0": [
+          64,
+          192,
+          32,
+          32
+        ],
+        "swing_sw_1": [
+          96,
+          192,
+          32,
+          32
+        ],
+        "swing_sw_2": [
+          128,
+          192,
+          32,
+          32
+        ],
+        "swing_sw_3": [
+          160,
+          192,
+          32,
+          32
+        ],
+        "swing_w_0": [
+          32,
+          160,
+          32,
+          32
+        ],
+        "swing_w_1": [
+          64,
+          160,
+          32,
+          32
+        ],
+        "swing_w_2": [
+          96,
+          160,
+          32,
+          32
+        ],
+        "swing_w_3": [
+          128,
+          160,
           32,
           32
         ],
         "w": [
           128,
-          64,
+          128,
           32,
           32
         ],
@@ -338,169 +610,169 @@
         ],
         "walk_n_0": [
           96,
-          32,
+          64,
           32,
           32
         ],
         "walk_n_1": [
           128,
-          32,
+          64,
           32,
           32
         ],
         "walk_n_2": [
           160,
-          32,
+          64,
           32,
           32
         ],
         "walk_n_3": [
           192,
-          32,
+          64,
           32,
           32
         ],
         "walk_ne_0": [
-          192,
-          0,
+          64,
+          32,
           32,
           32
         ],
         "walk_ne_1": [
-          224,
-          0,
+          96,
+          32,
           32,
           32
         ],
         "walk_ne_2": [
-          0,
+          128,
           32,
           32,
           32
         ],
         "walk_ne_3": [
-          32,
+          160,
           32,
           32,
           32
         ],
         "walk_nw_0": [
-          0,
-          64,
+          128,
+          96,
           32,
           32
         ],
         "walk_nw_1": [
-          32,
-          64,
+          160,
+          96,
           32,
           32
         ],
         "walk_nw_2": [
-          64,
-          64,
+          192,
+          96,
           32,
           32
         ],
         "walk_nw_3": [
+          224,
           96,
-          64,
           32,
           32
         ],
         "walk_s_0": [
           224,
-          96,
+          192,
           32,
           32
         ],
         "walk_s_1": [
           0,
-          128,
+          224,
           32,
           32
         ],
         "walk_s_2": [
           32,
-          128,
+          224,
           32,
           32
         ],
         "walk_s_3": [
           64,
-          128,
+          224,
           32,
           32
         ],
         "walk_se_0": [
-          128,
-          128,
+          0,
+          256,
           32,
           32
         ],
         "walk_se_1": [
-          160,
-          128,
+          32,
+          256,
           32,
           32
         ],
         "walk_se_2": [
-          192,
-          128,
+          64,
+          256,
           32,
           32
         ],
         "walk_se_3": [
-          224,
-          128,
+          96,
+          256,
           32,
           32
         ],
         "walk_sw_0": [
-          64,
-          96,
+          192,
+          160,
           32,
           32
         ],
         "walk_sw_1": [
-          96,
-          96,
+          224,
+          160,
           32,
           32
         ],
         "walk_sw_2": [
-          128,
-          96,
+          0,
+          192,
           32,
           32
         ],
         "walk_sw_3": [
-          160,
-          96,
+          32,
+          192,
           32,
           32
         ],
         "walk_w_0": [
           160,
-          64,
+          128,
           32,
           32
         ],
         "walk_w_1": [
           192,
-          64,
+          128,
           32,
           32
         ],
         "walk_w_2": [
           224,
-          64,
+          128,
           32,
           32
         ],
         "walk_w_3": [
           0,
-          96,
+          160,
           32,
           32
         ]
