@@ -311,6 +311,7 @@ The `examples/demo/` project in this repo has a filled-in STYLE.md as a worked e
 frame, row/col where relevant, a rule id, and a message.
 
 Errors:
+- `E000` command/usage error (not about a source file's content: no project found, file exists, ...)
 - `E001` YAML parse error / missing required field
 - `E002` unknown pixel character (not `.` and not a palette key)
 - `E003` frame dimensions don't match `size` (row count or row width), accounting for `mirror`
@@ -358,7 +359,7 @@ scope to shift as we go.
 - **Done when:** `pip install -e . && pagan --version && pytest` all succeed locally, and the CI workflow is in place
   (green once the repo is pushed to GitHub).
 
-### ☐ Milestone 1 — Palettes + project config
+### ☑ Milestone 1 — Palettes + project config
 - Palette loading/validation (file and inline), `pagan.toml` loading with defaults, project discovery.
 - `pagan palette show`, `pagan init`, `pagan new palette`.
 - Ship 2–3 example palettes (16–32 colors, organized into ramps, different moods) in `examples/demo/`

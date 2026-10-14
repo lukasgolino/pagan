@@ -1,0 +1,25 @@
+# PAGAN project config. Paths are relative to this file.
+
+# "strict": every sprite uses a palette file from palettes/ (one cohesive look).
+# "open":   sprites may also define their own palette inline.
+palette_mode = "strict"
+
+# Palette for sprites that don't name one. Create one with `pagan new palette <name>`.
+default_palette = "ember"
+
+# Where `pagan build` writes final assets, e.g. your game engine's asset folder.
+output_dir = "build"
+
+# Scratch output from `pagan render` / `pagan preview`. Keep it out of version control.
+preview_dir = "previews"
+
+# What `pagan build` produces: "png" (sprite sheets + manifest.json), "godot" (SpriteFrames .tres).
+export = ["png"]
+
+[lint]
+# W003: warn when a sprite uses colors from more than this many ramps.
+max_ramps_per_sprite = 3
+# Rule ids to turn off, e.g. ["W001"].
+disable = []
+# Require `outline: auto` on every sprite.
+require_outline = false

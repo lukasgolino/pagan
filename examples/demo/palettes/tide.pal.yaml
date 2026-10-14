@@ -1,0 +1,33 @@
+name: tide
+# Cool and moody: deep water, fog, dusk violets, with one warm lantern ramp for contrast. 24 colors.
+colors:
+  "0": { hex: "#0d0f1a", name: abyss }
+  "1": { hex: "#1d2233", name: deep }
+  "2": { hex: "#343b52", name: slate_dark }
+  "3": { hex: "#565f7a", name: slate }
+  "4": { hex: "#8590a8", name: fog }
+  "5": { hex: "#c3cad6", name: mist }
+  "6": { hex: "#eef0f2", name: foam }
+  "7": { hex: "#0f2a2e", name: kelp_deep }
+  "8": { hex: "#17464a", name: kelp }
+  "9": { hex: "#22706b", name: teal }
+  "a": { hex: "#3fa38f", name: seaglass }
+  "b": { hex: "#86d1b3", name: spray }
+  "c": { hex: "#241a38", name: dusk_deep }
+  "d": { hex: "#3e2f5b", name: dusk }
+  "e": { hex: "#635089", name: heather }
+  "f": { hex: "#9a83b8", name: lavender }
+  "g": { hex: "#142a4f", name: navy }
+  "h": { hex: "#1f4c80", name: ocean }
+  "i": { hex: "#3a7bb8", name: cerulean }
+  "j": { hex: "#78b4e0", name: shallows }
+  "k": { hex: "#6b3a2e", name: ember }
+  "l": { hex: "#c4683a", name: lantern }
+  "m": { hex: "#f2b25c", name: glow }
+  "n": { hex: "#f7e3a6", name: candle }
+ramps:
+  stone:   ["0", "1", "2", "3", "4", "5", "6"]
+  sea:     ["7", "8", "9", "a", "b"]
+  dusk:    ["c", "d", "e", "f"]
+  water:   ["g", "h", "i", "j"]
+  lantern: ["k", "l", "m", "n"]

@@ -1,0 +1,33 @@
+name: ember
+# Warm and earthy: hearth light, rust, moss and old stone. 24 colors.
+colors:
+  "0": { hex: "#1a1220", name: ink }
+  "1": { hex: "#3a2a33", name: umber_dark }
+  "2": { hex: "#5e4a48", name: umber }
+  "3": { hex: "#8a7465", name: taupe }
+  "4": { hex: "#b8a68d", name: sand }
+  "5": { hex: "#e8dcc0", name: cream }
+  "6": { hex: "#4a1f1f", name: oxblood }
+  "7": { hex: "#7a3326", name: rust_dark }
+  "8": { hex: "#a8532e", name: rust }
+  "9": { hex: "#d07f3a", name: amber }
+  "a": { hex: "#ecb45b", name: gold }
+  "b": { hex: "#f6e09a", name: straw }
+  "c": { hex: "#1f2b22", name: moss_deep }
+  "d": { hex: "#364a2c", name: moss_dark }
+  "e": { hex: "#5a6e33", name: olive }
+  "f": { hex: "#8a9a45", name: lichen }
+  "g": { hex: "#c2c46e", name: sage }
+  "h": { hex: "#22263f", name: night }
+  "i": { hex: "#39486a", name: slate_blue }
+  "j": { hex: "#5f7f99", name: mist_blue }
+  "k": { hex: "#9dbbc4", name: sky_pale }
+  "l": { hex: "#8c2f3f", name: wine }
+  "m": { hex: "#c95a5a", name: coral }
+  "n": { hex: "#f0a08a", name: peach }
+ramps:
+  earth: ["0", "1", "2", "3", "4", "5"]
+  fire:  ["6", "7", "8", "9", "a", "b"]
+  moss:  ["c", "d", "e", "f", "g"]
+  sky:   ["h", "i", "j", "k"]
+  rose:  ["l", "m", "n"]

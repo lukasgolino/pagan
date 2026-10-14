@@ -12,12 +12,12 @@ license-files = ["LICENSE"]
 authors = [{ name = "Lukas Golino" }]
 requires-python = ">=3.11"
 dependencies = [
-    "Pillow>=10",
+    "Pillow>=10.1",
     "PyYAML>=6",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "mypy>=1.10", "types-PyYAML"]
 
 [project.scripts]
 pagan = "pagan.cli:main"
@@ -27,6 +27,10 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 pagan = ["templates/*"]
+
+[tool.mypy]
+strict = true
+files = ["src/pagan", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

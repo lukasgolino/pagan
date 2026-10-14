@@ -1,0 +1,40 @@
+name: arcade
+# Bright and punchy: saturated hues, hard contrast, a skin ramp for characters. 29 colors.
+colors:
+  "0": { hex: "#0b0b14", name: black }
+  "1": { hex: "#2a2a3d", name: charcoal }
+  "2": { hex: "#555570", name: gray }
+  "3": { hex: "#9a9ab4", name: silver }
+  "4": { hex: "#f4f4ff", name: white }
+  "5": { hex: "#6a0f2c", name: crimson_dark }
+  "6": { hex: "#c41e3a", name: crimson }
+  "7": { hex: "#ff4f5e", name: red }
+  "8": { hex: "#ff9a8a", name: salmon }
+  "9": { hex: "#9c3d00", name: rust }
+  "a": { hex: "#ff7a00", name: orange }
+  "b": { hex: "#ffc400", name: yellow }
+  "c": { hex: "#fff38a", name: lemon }
+  "d": { hex: "#0b4d3a", name: pine }
+  "e": { hex: "#0f9b4a", name: green }
+  "f": { hex: "#4ce36b", name: lime }
+  "g": { hex: "#b8ff8a", name: mint }
+  "h": { hex: "#0a2a6b", name: cobalt }
+  "i": { hex: "#1f5fff", name: blue }
+  "j": { hex: "#29c4ff", name: cyan }
+  "k": { hex: "#a8f0ff", name: ice }
+  "l": { hex: "#3d1466", name: grape }
+  "m": { hex: "#8a2be2", name: violet }
+  "n": { hex: "#ff3fb4", name: magenta }
+  "o": { hex: "#ffa8e0", name: pink }
+  "p": { hex: "#4a2414", name: cocoa }
+  "q": { hex: "#9a5a34", name: tan }
+  "r": { hex: "#e8a77a", name: skin }
+  "s": { hex: "#ffd9bd", name: skin_light }
+ramps:
+  neutral: ["0", "1", "2", "3", "4"]
+  red:     ["5", "6", "7", "8"]
+  sun:     ["9", "a", "b", "c"]
+  green:   ["d", "e", "f", "g"]
+  blue:    ["h", "i", "j", "k"]
+  purple:  ["l", "m", "n", "o"]
+  skin:    ["p", "q", "r", "s"]

@@ -12,7 +12,7 @@ frames:
     ...0556776650...
 ```
 
-> **Status:** early development. Only `pagan --version` works so far. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status:** early development. Palettes and projects work; sprites are next. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Install (development)
 
@@ -25,6 +25,18 @@ pip install -e ".[dev]"
 pagan --version
 pytest
 ```
+
+## Quick start
+
+```sh
+pagan init my-art            # creates pagan.toml, STYLE.md, palettes/, sprites/, tiles/
+cd my-art
+pagan new palette dusk       # scaffolds palettes/dusk.pal.yaml
+pagan palette show           # renders swatches to previews/palettes/*.png
+```
+
+Every command accepts `--json` for machine-readable output and exits non-zero on errors.
+See `examples/demo/` for an example project with three palettes.
 
 ## License
 
