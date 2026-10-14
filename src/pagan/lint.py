@@ -17,6 +17,7 @@ WARNING_RULES = {
     "W004": "empty frame",
     "W005": "animation jitter",
     "W006": "made under an older style version",
+    "W007": "too much change between animation frames",
 }
 
 
@@ -50,6 +51,7 @@ def source_files(project: Project, paths: list[Path] | None = None) -> list[Path
 
 def lint_paths(project: Project, paths: list[Path] | None = None) -> LintResult:
     files = source_files(project, paths)
+    linted = {f.resolve() for f in files}
     findings: list[Finding] = []
     assets: list[Asset] = []
     for path in files:
@@ -60,11 +62,28 @@ def lint_paths(project: Project, paths: list[Path] | None = None) -> LintResult:
                 findings.extend(exc.findings)
             continue
         asset, asset_findings = load_asset(path, project)
-        # A broken palette file is reported once, from the palette itself.
-        findings.extend(f for f in asset_findings if f.path is None or not f.path.name.endswith(PALETTE_SUFFIX))
+        # A broken palette file that is itself being linted is reported once, from the palette.
+        kept = [f for f in asset_findings if f.path is None or f.path.resolve() not in linted or f.path == path]
+        findings.extend(kept)
+        if asset is None and not any(f.severity == "error" for f in kept):
+            findings.append(Finding("E005", "this file's palette is invalid; run `pagan lint` on palettes/", path))
         if asset is not None:
             assets.append(asset)
             findings.extend(lint_asset(asset, project))
+    by_name: dict[str, Asset] = {}
+    for asset in assets:
+        other = by_name.setdefault(asset.name, asset)
+        if other is not asset:
+            findings.append(
+                Finding(
+                    "E012",
+                    f"asset name {asset.name!r} is also used by {other.path.name if other.path else 'another asset'}; "
+                    "names must be unique across sprites, tilesets and models (outputs would overwrite each other)",
+                    asset.path,
+                    None,
+                    "name",
+                )
+            )
     disabled = set(project.config.lint.disable)
     findings = [f for f in findings if f.rule not in disabled]
     return LintResult(files=files, findings=_dedupe(findings), assets=assets)
@@ -139,6 +158,29 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
                 )
             )
 
+    limit_change = project.config.lint.max_frame_change
+    for anim in asset.animations.values():
+        pairs = list(zip(anim.frames, anim.frames[1:]))
+        if anim.loop and len(anim.frames) > 2:
+            pairs.append((anim.frames[-1], anim.frames[0]))
+        for a, b in pairs:
+            if a == b:
+                continue
+            change, (dx, dy) = frame_change(asset.frames[a], asset.frames[b])
+            if change > limit_change:
+                moved = f" (best alignment: moved {dx:+d},{dy:+d})" if dx or dy else ""
+                findings.append(
+                    Finding(
+                        "W007",
+                        f"{a} -> {b}: {change:.0%} of pixels change{moved}; the project limit is "
+                        f"{limit_change:.0%}. Keep unchanged parts on exactly the same pixels (see the "
+                        "preview's changes row)",
+                        asset.path,
+                        asset.frame_lines.get(b),
+                        f"animations.{anim.name}",
+                    )
+                )
+
     current = project.config.style_version
     if asset.style_version < current:
         findings.append(
@@ -152,6 +194,32 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
             )
         )
     return findings
+
+
+def frame_change(a: Grid, b: Grid, max_shift: int = 2) -> tuple[float, tuple[int, int]]:
+    """Share of pixels that differ between two frames, after the best whole-sprite shift (|d| <= max_shift).
+
+    Counted over pixels opaque in either frame; a pure 1px bob therefore scores ~0.
+    """
+    height, width = len(a), len(a[0]) if a else 0
+    best = (2.0, (0, 0))
+    for dy in range(-max_shift, max_shift + 1):
+        for dx in range(-max_shift, max_shift + 1):
+            differ = total = 0
+            for y in range(height):
+                for x in range(width):
+                    pa = a[y][x]
+                    sx, sy = x + dx, y + dy
+                    pb = b[sy][sx] if 0 <= sx < width and 0 <= sy < height else TRANSPARENT
+                    if pa == TRANSPARENT and pb == TRANSPARENT:
+                        continue
+                    total += 1
+                    differ += pa != pb
+            score = differ / total if total else 0.0
+            # Prefer no movement when scores tie, then the smallest movement.
+            if (score, abs(dx) + abs(dy)) < (best[0], abs(best[1][0]) + abs(best[1][1])):
+                best = (score, (dx, dy))
+    return best
 
 
 def _orphans(grid: Grid) -> list[tuple[int, int]]:

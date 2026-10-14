@@ -331,6 +331,8 @@ Warnings:
 - `W004` frame is fully transparent
 - `W005` animation frames have very different opaque bounding boxes (possible jitter)
 - `W006` asset was made under an older project `style_version` (needs review against STYLE.md changes)
+- `W007` too much change between consecutive animation frames (after allowing a ±2px whole-sprite move) — catches jumps
+- `E012` two assets share a name (outputs would overwrite each other)
 
 Configurable per project via `pagan.toml` (turn rules on/off, thresholds, required outline).
 Lint also works with no `pagan.toml` at all (sensible defaults, open mode), so a single file can be checked anywhere.
@@ -376,7 +378,7 @@ scope to shift as we go.
 - Determinism test: building twice yields identical bytes.
 - **Done when:** a fixture sprite with mirror + outline renders correctly and every lint rule has a test that triggers it.
 
-### ☐ Milestone 3 — Preview loop
+### ☑ Milestone 3 — Preview loop
 - `preview`: upscaled frames, contact sheet with frame labels, optional grid lines, checkerboard background,
   animated GIF per animation at its fps.
 - **Done when:** the agent can run `pagan preview X`, open the resulting PNG with its image-reading tool,
@@ -387,6 +389,20 @@ scope to shift as we go.
 - `variants` (key_swap, ramp_swap), tileset format + atlas + JSON manifest, `import` (snap-to-palette and open-mode extraction, with a change report).
 - **Done when:** a variant renders correctly, a 4-tile tileset builds into an atlas with correct coordinates,
   and importing a deliberately off-palette PNG produces a clean sprite file plus a report.
+
+### ☐ Milestone 4b — 3D voxel models (added 2026-10-14 at the owner's request)
+Most game assets will be 3D-looking and need several headings (e.g. a player ship with 8 directions);
+drawing every heading by hand is slow and the rotations drift apart. So PAGAN gets a 3D source format:
+- `models/<name>.model.yaml`: a voxel model, still text. Built from **primitives** (box, cylinder,
+  ellipsoid, hull, plane/sail, line) and/or **layer grids** (one palette-keyed grid per z level — a model is
+  literally a stack of PAGAN grids). Each part has a **material** = a palette ramp (+ optional fixed key).
+- Rendered by PAGAN with a project-wide camera (elevation angle, scale) and light direction from `pagan.toml`,
+  so every 3D asset is lit and projected identically → cohesive look for free.
+- Shading picks the ramp step from smoothed voxel normals · light; `outline: auto` as for sprites.
+- `directions: 8` (or 1/4/16) → frames `e, ne, n, …` + one animation per heading. Optional poses/keyframes later.
+- A model loads as a normal `Asset`, so lint, preview, variants, gallery and the Godot export just work.
+- `pagan bake <model>` writes a regular `.sprite.yaml` for hand touch-ups when needed.
+- 2D sprites stay first-class for icons, UI and anything flat.
 
 ### ☐ Milestone 5 — Build + Godot exporter
 - `pagan build` outputs into the configured output dir:

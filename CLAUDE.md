@@ -27,6 +27,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `palette.py` palette parsing/validation (files and inline); `project.py` `pagan.toml` + project discovery;
   - `asset.py` sprite + tileset parsing (grids, mirror, derived frames, outline, animations, variants, metadata);
   - `render.py` frames/sheets to RGBA images + deterministic PNG saving; `lint.py` warnings W001-W006;
+  - `preview.py` upscaled frames, contact sheets (with animation "changes" rows), GIFs, tiling check, gallery;
   - `swatch.py` palette swatch images; `templates/` files copied by `pagan init`.
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
@@ -68,3 +69,6 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-14: Variants can also swap to another palette (`palette: night`), not just ramp_swap/key_swap.
 - 2026-10-14: Asset metadata for long-term management: `description`, `tags`, `status` (draft|approved), `style_version` (vs. pagan.toml `style_version`, W006).
 - 2026-10-14: Only warnings can be disabled in `[lint] disable`.
+- 2026-10-14: Animation consistency is a first-class concern (owner feedback): W007 measures frame-to-frame pixel churn after the best ±2px alignment; preview sheets show a "changes" row per animation (magenta = changed, cyan = removed).
+- 2026-10-14: `pagan render`/`preview`/`lint` find the project from the target path, not the cwd.
+- 2026-10-14: GIF frame durations are rounded to 10ms (GIF's resolution).

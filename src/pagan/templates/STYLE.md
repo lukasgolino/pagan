@@ -53,6 +53,10 @@ Do:
 - **TODO**
 
 Don't:
+- Flip lit art vertically (`flip: vertical`): the highlights end up on the wrong side. Horizontal flips
+  are fine for symmetric-ish lighting; for strict top-left light, draw or render each direction.
+- Let anything jump between animation frames: the anchor (feet) and unchanged parts must stay on exactly
+  the same pixels. Check the preview's "changes" rows; lint W007 flags large frame-to-frame churn.
 - Use colors outside the palette.
 - Leave orphan pixels (single pixels with no neighbours).
 - **TODO**

@@ -51,7 +51,7 @@ def test_w004_empty_frame(project: Project) -> None:
 
 def test_w005_jitter(project: Project) -> None:
     text = "name: thing\nsize: [4, 4]\nframes:\n  a: |\n    1111\n    1111\n    1111\n    1111\n  b: |\n    ....\n    .11.\n    .11.\n    ....\nanimations:\n  idle: [a, b]\n"
-    assert lint_one(project, text) == ["W005"]
+    assert "W005" in lint_one(project, text)
 
 
 def test_w006_old_style_version(tmp_path: Path) -> None:
@@ -75,3 +75,45 @@ def test_lint_whole_project_reports_broken_palette_once(project: Project) -> Non
     palette_findings = [f for f in result.findings if f.path is not None and f.path.name == "test.pal.yaml"]
     assert len(palette_findings) == 1 and palette_findings[0].rule == "E005"
     assert len(result.files) == 4  # 2 palettes + 2 sprites
+
+
+def test_e012_duplicate_asset_names(project: Project) -> None:
+    (project.root / "sprites" / "dup.sprite.yaml").write_text(SOLID.replace("thing", "dup"))
+    (project.root / "tiles" / "dup.tiles.yaml").write_text("name: dup\ntile_size: [1, 1]\ntiles:\n  a: |\n    1\n")
+    assert [f.rule for f in lint_paths(project).errors] == ["E012"]
+
+
+def test_sprite_with_broken_palette_fails_when_linted_alone(project: Project) -> None:
+    (project.root / "palettes" / "test.pal.yaml").write_text('name: wrongname\ncolors:\n  "1": "#ffffff"\n')
+    path = project.root / "sprites" / "thing.sprite.yaml"
+    path.write_text(SOLID)
+    result = lint_paths(project, [path])
+    assert result.errors, "a sprite whose palette is broken must not lint clean"
+
+
+def test_unhashable_ramp_swap_is_an_error_not_a_crash(project: Project) -> None:
+    assert lint_one(project, SOLID + "variants:\n  v: { ramp_swap: { red: [green] } }\n") == ["E006"]
+
+
+def test_derived_frame_error_reported_once(project: Project) -> None:
+    text = SOLID + "  b: { from: a, flip: sideways }\n  c: { from: b }\n  d: { from: b }\n"
+    path = project.root / "sprites" / "thing.sprite.yaml"
+    path.write_text(text)
+    from pagan.asset import load_asset
+
+    _, findings = load_asset(path, project)
+    assert [f.rule for f in findings] == ["E010"]
+
+
+def test_w007_big_frame_change(project: Project) -> None:
+    text = (
+        "name: thing\nsize: [4, 4]\nframes:\n"
+        "  a: |\n    1111\n    1111\n    1111\n    1111\n"
+        "  b: |\n    2222\n    2222\n    2222\n    2222\n"
+        "  c: { from: a, shift: [0, 0] }\n"
+        "animations:\n  bad: [a, b]\n  fine: [a, c]\n"
+    )
+    path = project.root / "sprites" / "thing.sprite.yaml"
+    path.write_text(text)
+    findings = [f for f in lint_paths(project, [path]).findings if f.rule == "W007"]
+    assert [f.where for f in findings] == ["animations.bad"]

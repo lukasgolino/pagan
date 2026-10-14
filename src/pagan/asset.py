@@ -235,7 +235,8 @@ def _resolve_palette(
     line = _line(data, "palette")
     if raw is None:
         if project.config.default_palette is None:
-            error("E001", "missing 'palette' (and pagan.toml has no default_palette)", _line(data), "palette")
+            reason = "pagan.toml has no default_palette" if project.config_path else "no pagan.toml found, so no default_palette"
+            error("E001", f"missing 'palette' ({reason})", _line(data), "palette")
             return None
         raw = project.config.default_palette
     if isinstance(raw, str):
@@ -321,8 +322,16 @@ def _parse_frames(
     for name, raw in section.items():
         frame_line = _line(section, name)
         where = f"{section_name}.{name}"
-        if not isinstance(name, str) or not FRAME_NAME_RE.match(name):
-            error("E001", f"frame name {name!r} must be letters, digits, '_' or '-' (quote names like 'on')", frame_line, where)
+        if not isinstance(name, str):
+            error(
+                "E001",
+                f"YAML read this frame name as a {type(name).__name__} ({name!r}); quote it, e.g. \"{name}\":",
+                frame_line,
+                where,
+            )
+            continue
+        if not FRAME_NAME_RE.match(name):
+            error("E001", f"frame name {name!r} must be letters, digits, '_' or '-'", frame_line, where)
             continue
         order.append(name)
         lines[name] = frame_line
@@ -346,54 +355,63 @@ def _parse_frames(
 
     derived_from: dict[str, str] = {}
     resolving: set[str] = set()
+    failed: set[str] = set()
 
     def resolve(name: str) -> Grid | None:
         if name in frames:
             return frames[name]
-        if name not in derived_specs:
+        if name not in derived_specs or name in failed:
             return None
         spec, spec_line = derived_specs[name]
         where = f"{section_name}.{name}"
         if name in resolving:
             error("E010", "derived frames form a cycle", spec_line, where)
+            failed.add(name)
             return None
         resolving.add(name)
+        result: Grid | None = None
         try:
-            for key in spec:
-                if key not in ("from", "flip", "shift"):
-                    error("E001", f"unknown derived-frame field {key!r}; allowed: from, flip, shift", spec_line, where)
-            source = spec.get("from")
-            if not isinstance(source, str):
-                error("E010", "a derived frame needs `from: <frame name>`", spec_line, where)
-                return None
-            if source not in derived_specs and source not in lines:
-                error("E010", f"derived from unknown frame {source!r}", spec_line, where)
-                return None
-            grid = resolve(source)
-            if grid is None:
-                return None  # the source frame's own error was reported
-            flip = spec.get("flip", "none")
-            if flip not in ("none", "horizontal", "vertical", "both"):
-                error("E010", "flip must be none, horizontal, vertical or both", spec_line, where)
-                return None
-            grid = _flip(grid, flip)
-            shift = spec.get("shift", [0, 0])
-            if not (
-                isinstance(shift, list)
-                and len(shift) == 2
-                and all(isinstance(v, int) and not isinstance(v, bool) for v in shift)
-            ):
-                error("E010", "shift must be [dx, dy] (whole pixels; +x right, +y down)", spec_line, where)
-                return None
-            shifted = _shift(grid, shift[0], shift[1])
-            if shifted is None:
-                error("E010", f"shift {shift} pushes opaque pixels off the canvas", spec_line, where)
-                return None
-            frames[name] = shifted
-            derived_from[name] = source
-            return shifted
+            result = _derive(name, spec, spec_line, where)
+            return result
         finally:
             resolving.discard(name)
+            if result is None:
+                failed.add(name)
+
+    def _derive(name: str, spec: dict[str, Any], spec_line: int | None, where: str) -> Grid | None:
+        for key in spec:
+            if key not in ("from", "flip", "shift"):
+                error("E001", f"unknown derived-frame field {key!r}; allowed: from, flip, shift", spec_line, where)
+        source = spec.get("from")
+        if not isinstance(source, str):
+            error("E010", "a derived frame needs `from: <frame name>`", spec_line, where)
+            return None
+        if source not in derived_specs and source not in lines:
+            error("E010", f"derived from unknown frame {source!r}", spec_line, where)
+            return None
+        grid = resolve(source)
+        if grid is None:
+            return None  # the source frame's own error was reported
+        flip = spec.get("flip", "none")
+        if flip not in ("none", "horizontal", "vertical", "both"):
+            error("E010", "flip must be none, horizontal, vertical or both", spec_line, where)
+            return None
+        grid = _flip(grid, flip)
+        shift = spec.get("shift", [0, 0])
+        if not (
+            isinstance(shift, list)
+            and len(shift) == 2
+            and all(isinstance(v, int) and not isinstance(v, bool) for v in shift)
+        ):
+            error("E010", "shift must be [dx, dy] (whole pixels; +x right, +y down)", spec_line, where)
+            return None
+        shifted = _shift(grid, shift[0], shift[1])
+        if shifted is None:
+            error("E010", f"shift {shift} pushes opaque pixels off the canvas", spec_line, where)
+            return None
+        frames[name] = shifted
+        derived_from[name] = source
+        return shifted
 
     for name in derived_specs:
         resolve(name)
@@ -434,7 +452,7 @@ def _parse_variants(
             try:
                 target = project.load_palette(spec["palette"])
             except PaganError as exc:
-                error("E006", exc.findings[0].message, vline, where)
+                error("E006", f"variant palette {spec['palette']!r} can't be used: {exc.findings[0].message}", vline, where)
                 continue
 
         mapping: dict[str, str] = {}
@@ -444,6 +462,10 @@ def _parse_variants(
             ok = False
             ramp_swap = {}
         for src, dst in ramp_swap.items():
+            if not isinstance(src, str) or not isinstance(dst, str):
+                error("E006", f"ramp_swap entries must be ramp names, got {src!r}: {dst!r}", vline, where)
+                ok = False
+                continue
             if src not in palette.ramps:
                 error("E006", f"ramp_swap: unknown ramp {src!r}", vline, where)
                 ok = False

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections.abc import Callable, Sequence
 from importlib.resources import files
 from pathlib import Path
@@ -16,6 +17,7 @@ from pagan.findings import Finding, PaganError, display_path
 from pagan.lint import lint_paths
 from pagan.palette import NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
+from pagan.preview import PreviewOptions, gallery, write_previews
 from pagan.render import frame_image, save_png, sheet_image
 from pagan.swatch import render_swatch
 
@@ -245,6 +247,15 @@ def resolve_asset_path(target: str, project: Project) -> Path:
     raise _usage_error(f"no such asset: {target} (give a path, or the name of a file in sprites/ or tiles/)")
 
 
+def project_for(targets: list[str]) -> Project:
+    """The project containing the first target that is an existing path; else the one at the cwd."""
+    for target in targets:
+        path = Path(target)
+        if path.exists():
+            return discover_project(path if path.is_dir() else path.parent)
+    return discover_project()
+
+
 def _load_targets(targets: list[str], project: Project) -> tuple[list[Asset], list[Finding]]:
     assets: list[Asset] = []
     findings: list[Finding] = []
@@ -257,7 +268,7 @@ def _load_targets(targets: list[str], project: Project) -> tuple[list[Asset], li
 
 
 def cmd_render(args: argparse.Namespace, out: Output) -> int:
-    project = discover_project()
+    project = project_for(args.assets)
     assets, findings = _load_targets(args.assets, project)
     outputs: list[dict[str, Any]] = []
     for asset in assets:
@@ -266,7 +277,7 @@ def cmd_render(args: argparse.Namespace, out: Output) -> int:
         for variant in (None, *asset.variants):
             folder = base if variant is None else base / variant
             for frame in asset.frames:
-                path = folder / f"{frame}.png"
+                path = folder / "frames" / f"{frame}.png"
                 save_png(frame_image(asset, frame, variant), path)
                 written.append(display_path(path))
             sheet = folder / "sheet.png"
@@ -281,11 +292,63 @@ def cmd_render(args: argparse.Namespace, out: Output) -> int:
     return 0
 
 
+# --- pagan preview / gallery -----------------------------------------------------------------
+
+
+def _preview_options(args: argparse.Namespace) -> PreviewOptions:
+    background: str = args.bg
+    if background not in ("checker", "none") and not re.fullmatch(r"#[0-9a-fA-F]{6}", background):
+        raise _usage_error("--bg must be checker, none or #rrggbb")
+    if args.scale is not None and not 1 <= args.scale <= 64:
+        raise _usage_error("--scale must be between 1 and 64")
+    return PreviewOptions(scale=args.scale, grid=args.grid, background=background)
+
+
+def cmd_preview(args: argparse.Namespace, out: Output) -> int:
+    project = project_for(args.assets)
+    options = _preview_options(args)
+    assets, findings = _load_targets(args.assets, project)
+    outputs: list[dict[str, Any]] = []
+    for asset in assets:
+        result = write_previews(asset, project.preview_dir, options)
+        out.say(f"{asset.name}: {display_path(result.sheet)}")
+        for gif in result.gifs:
+            out.say(f"  animation: {display_path(gif)}")
+        out.say(f"  frames: {display_path(result.sheet.parent / 'frames')}/ ({len(result.frames)} PNGs)")
+        outputs.append(
+            {
+                "asset": asset.name,
+                "sheet": display_path(result.sheet),
+                "gifs": [display_path(g) for g in result.gifs],
+                "frames": [display_path(f) for f in result.frames],
+            }
+        )
+    if findings:
+        out.failure(findings, {"outputs": outputs})
+        return 1
+    out.result({"outputs": outputs})
+    return 0
+
+
+def cmd_gallery(args: argparse.Namespace, out: Output) -> int:
+    project = discover_project()
+    options = _preview_options(args)
+    result = lint_paths(project)
+    path = Path(args.out) if args.out else project.preview_dir / "gallery.png"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    gallery(result.assets, options, f"{project.root.name} gallery").save(path)
+    out.say(f"wrote {display_path(path)} ({len(result.assets)} assets)")
+    if result.errors:
+        out.say(f"{len(result.errors)} errors: assets with errors are missing; run `pagan lint`")
+    out.result({"gallery": display_path(path), "assets": len(result.assets), "errors": len(result.errors)})
+    return 0
+
+
 # --- pagan lint -------------------------------------------------------------------------------
 
 
 def cmd_lint(args: argparse.Namespace, out: Output) -> int:
-    project = discover_project()
+    project = project_for(args.paths)
     paths = [Path(p) for p in args.paths] or None
     missing = [p for p in paths or [] if not p.exists()]
     if missing:
@@ -401,6 +464,21 @@ def build_parser() -> argparse.ArgumentParser:
     render = commands.add_parser("render", parents=[common], help="render assets to native-size PNGs")
     render.add_argument("assets", nargs="+", help="asset files or names")
     render.set_defaults(handler=cmd_render)
+
+    view = argparse.ArgumentParser(add_help=False)
+    view.add_argument("--scale", type=int, help="pixel scale (default: automatic, about 256px per frame)")
+    view.add_argument("--grid", action="store_true", help="draw pixel grid lines")
+    view.add_argument("--bg", default="checker", help="background: checker (default), none, or #rrggbb")
+
+    preview = commands.add_parser(
+        "preview", parents=[common, view], help="upscaled previews: contact sheet, frames, animated GIFs"
+    )
+    preview.add_argument("assets", nargs="+", help="asset files or names")
+    preview.set_defaults(handler=cmd_preview)
+
+    gallery_cmd = commands.add_parser("gallery", parents=[common, view], help="every asset side by side in one image")
+    gallery_cmd.add_argument("--out", help="output PNG path (default: <previews>/gallery.png)")
+    gallery_cmd.set_defaults(handler=cmd_gallery)
 
     lint = commands.add_parser("lint", parents=[common], help="check source files for errors and style warnings")
     lint.add_argument("paths", nargs="*", help="files or directories (default: the whole project)")

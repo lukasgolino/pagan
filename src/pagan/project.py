@@ -22,6 +22,7 @@ PaletteMode = Literal["strict", "open"]
 @dataclass(frozen=True)
 class LintConfig:
     max_ramps_per_sprite: int = 3
+    max_frame_change: float = 0.4  # W007: share of pixels that may change between animation frames
     disable: tuple[str, ...] = ()
     require_outline: bool = False
 
@@ -102,6 +103,8 @@ def load_project(root: Path) -> Project:
         data = tomllib.loads(config_path.read_text(encoding="utf-8"))
     except OSError as exc:
         raise PaganError([Finding("E001", f"cannot read config: {exc.strerror}", config_path)]) from None
+    except UnicodeDecodeError:
+        raise PaganError([Finding("E001", "config is not valid UTF-8 text", config_path)]) from None
     except tomllib.TOMLDecodeError as exc:
         raise PaganError([Finding("E001", f"invalid TOML: {exc}", config_path)]) from None
     return Project(root=root.resolve(), config=parse_config(data, config_path), config_path=config_path)
@@ -176,7 +179,7 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
     if not isinstance(data, dict):
         error("[lint] must be a table", "lint")
         return defaults
-    allowed = ("max_ramps_per_sprite", "disable", "require_outline")
+    allowed = ("max_ramps_per_sprite", "max_frame_change", "disable", "require_outline")
     for key in data:
         if key not in allowed:
             error(f"unknown lint setting {key!r}; allowed: {', '.join(allowed)}", f"lint.{key}")
@@ -185,6 +188,11 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
     if isinstance(max_ramps, bool) or not isinstance(max_ramps, int) or max_ramps < 1:
         error("max_ramps_per_sprite must be a positive integer", "lint.max_ramps_per_sprite")
         max_ramps = defaults.max_ramps_per_sprite
+
+    max_change = data.get("max_frame_change", defaults.max_frame_change)
+    if isinstance(max_change, bool) or not isinstance(max_change, int | float) or not 0 < max_change <= 1:
+        error("max_frame_change must be a number between 0 and 1", "lint.max_frame_change")
+        max_change = defaults.max_frame_change
 
     disable = data.get("disable", [])
     if not isinstance(disable, list) or not all(isinstance(r, str) and re.fullmatch(r"W\d{3}", r) for r in disable):
@@ -196,4 +204,9 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
         error("require_outline must be true or false", "lint.require_outline")
         require_outline = defaults.require_outline
 
-    return LintConfig(max_ramps_per_sprite=max_ramps, disable=tuple(disable), require_outline=require_outline)
+    return LintConfig(
+        max_ramps_per_sprite=max_ramps,
+        max_frame_change=float(max_change),
+        disable=tuple(disable),
+        require_outline=require_outline,
+    )

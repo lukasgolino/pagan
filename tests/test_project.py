@@ -83,3 +83,10 @@ def test_unknown_palette_lists_known_ones(tmp_path: Path) -> None:
     with pytest.raises(PaganError) as exc:
         project.load_palette("dawn")
     assert "palettes: dusk" in exc.value.findings[0].message
+
+
+def test_non_utf8_config(tmp_path: Path) -> None:
+    (tmp_path / "pagan.toml").write_bytes(b"palette_mode = \"\xff\"\n")
+    with pytest.raises(PaganError) as exc:
+        load_project(tmp_path)
+    assert "UTF-8" in exc.value.findings[0].message

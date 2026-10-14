@@ -1,0 +1,44 @@
+name: meadow
+description: >
+  Overworld grass. Tiles must tile seamlessly with themselves and each other (check the 3x3 preview).
+tile_size: [16, 16]
+columns: 4
+status: draft
+style_version: 1
+tags: [terrain, overworld]
+tiles:
+  grass: |
+    eeeeeeeeeeeeeeee
+    eeeefeeeeeeeeeee
+    eeedfeeeeeeeefee
+    eeeeeeeeeeeedfee
+    eeeeeeeeeeeeeeee
+    eeeeeeedeeeeeeee
+    eeeeeeefeeeeeeee
+    eefeeeeeeeeeeeee
+    edfeeeeeeeeeeeee
+    eeeeeeeeeeefeeee
+    eeeeeeeeeedfeeee
+    eeeeefeeeeeeeeee
+    eeeedfeeeeeeeeee
+    eeeeeeeeeeeeeefe
+    eeeeeeeeeeeeedfe
+    eeeeeeeeeeeeeeee
+  grass_flowers: |
+    eeeeeeeeeeeeeeee
+    eeeefeeeeeeeeeee
+    eeedfeeeeenbeeee
+    eeeeeeeeeeneeeee
+    eeeeeeeeeeeeeeee
+    eebneeedeeeeeeee
+    eeneeeefeeeeeeee
+    eeeeeeeeeeeeenbe
+    edfeeeeeeeeeeene
+    eeeeeeeeeeefeeee
+    eeeeeebneedfeeee
+    eeeeefeneeeeeeee
+    eeeedfeeeeeeeeee
+    eeeeeeeeeeeeeefe
+    eeeeeeeeeeeeedfe
+    eeeeeeeeeeeeeeee
+  grass_b: { from: grass, flip: horizontal }

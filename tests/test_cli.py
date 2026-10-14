@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Any
 import subprocess
 import sys
@@ -157,7 +158,7 @@ def test_new_sprite_then_lint_and_render(in_tmp: Path, capsys: pytest.CaptureFix
     assert code == 0  # blank frames are only warnings
     assert {f["rule"] for f in result["findings"]} == {"W004"}
     assert main(["render", "hero"]) == 0
-    assert (in_tmp / "previews" / "hero" / "native" / "idle_0.png").exists()
+    assert (in_tmp / "previews" / "hero" / "native" / "frames" / "idle_0.png").exists()
     assert (in_tmp / "previews" / "hero" / "native" / "sheet.png").exists()
 
 
@@ -195,3 +196,45 @@ def test_render_reports_errors(in_tmp: Path, capsys: pytest.CaptureFixture[str])
     main(["init", "--open"])
     assert main(["render", "missing"]) == 1
     assert "no such asset" in capsys.readouterr().out
+
+
+def test_commands_use_the_project_containing_the_file(in_tmp: Path) -> None:
+    (in_tmp / "art").mkdir()
+    (in_tmp / "elsewhere").mkdir()
+    main(["init", "art"])
+    (in_tmp / "art" / "pagan.toml").write_text('default_palette = "duo"\n')
+    (in_tmp / "art" / "palettes" / "duo.pal.yaml").write_text(PALETTE)
+    (in_tmp / "art" / "sprites" / "dot.sprite.yaml").write_text("name: dot\nsize: [1, 1]\nframes:\n  a: |\n    1\n")
+    os.chdir(in_tmp / "elsewhere")
+    assert main(["lint", "../art"]) == 0
+    assert main(["render", "../art/sprites/dot.sprite.yaml"]) == 0
+    assert (in_tmp / "art" / "previews" / "dot" / "native" / "frames" / "a.png").exists()
+
+
+def test_frame_named_sheet_does_not_clobber_sheet(in_tmp: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    main(["init", "--open"])
+    (in_tmp / "sprites" / "d.sprite.yaml").write_text(
+        'name: d\npalette:\n  colors:\n    "1": "#ffffff"\nsize: [2, 1]\nframes:\n  sheet: |\n    11\n  other: |\n    11\n'
+    )
+    capsys.readouterr()
+    code, result = run_json(["render", "d"], capsys)
+    assert code == 0
+    files = result["outputs"][0]["files"]
+    assert len(files) == len(set(files)) == 3
+
+
+def test_preview_and_gallery(in_tmp: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    main(["init", "--open"])
+    (in_tmp / "sprites" / "d.sprite.yaml").write_text(
+        'name: d\npalette:\n  colors:\n    "1": "#ffffff"\nsize: [2, 2]\nframes:\n  a: |\n    11\n    11\n'
+        "  b: { from: a }\nanimations:\n  idle: [a, b]\n"
+    )
+    capsys.readouterr()
+    code, result = run_json(["preview", "d", "--scale", "4", "--grid", "--bg", "#202020"], capsys)
+    assert code == 0
+    assert result["outputs"][0]["sheet"] == "previews/d/sheet.png"
+    assert result["outputs"][0]["gifs"] == ["previews/d/idle.gif"]
+    code, result = run_json(["gallery"], capsys)
+    assert code == 0 and result["assets"] == 1
+    assert (in_tmp / "previews" / "gallery.png").exists()
+    assert main(["preview", "d", "--bg", "plaid"]) == 1
