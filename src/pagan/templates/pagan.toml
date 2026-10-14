@@ -21,6 +21,17 @@ export = ["png"]
 # Palette color changes don't need a bump: every asset picks them up automatically.
 style_version = 1
 
+# 3D models (models/*.model.yaml) are rendered with this camera and light, shared by the whole project,
+# so every 3D asset is projected and lit the same way.
+[camera]
+elevation = 42      # degrees above the horizon: 90 = straight down, ~30-50 = top-down 3/4 view
+scale = 1           # pixels per voxel
+
+[light]
+direction = [-0.5, 0.45, 0.75]   # towards the light: x right, y up the screen, z up (top-left by default)
+ambient = 0.2                    # brightness of unlit surfaces (0-1); lower = darker shadows, more contrast
+shadows = true                   # parts cast shadows on each other
+
 [lint]
 # W003: warn when a sprite uses colors from more than this many ramps.
 max_ramps_per_sprite = 3

@@ -1,0 +1,22 @@
+name: crate
+description: Golden fixture - box with top material, cylinder, mirrored part, pose animation.
+size: [32, 32]
+pivot: [16, 20]
+directions: 4
+outline: auto
+materials:
+  wood: { ramp: berry }
+  lid: { ramp: leaf }
+  gem: { keys: ["6"] }
+parts:
+  - box: { from: [-4, -4, 0], to: [4, 4, 6], material: wood, top: lid }
+  - cylinder: { base: [0, 0, 7], height: 3, radius: 1.5, material: wood }
+    id: knob
+  - box: { from: [5, 2, 2], to: [5, 3, 3], material: gem }
+    mirror: true
+animations:
+  bob:
+    fps: 4
+    poses:
+      - {}
+      - { knob: { offset: [0, 0, 1] } }

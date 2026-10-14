@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 from pagan.findings import Finding, PaganError
 from pagan.palette import NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
+from pagan.voxel import Camera, Light
 
 CONFIG_NAME = "pagan.toml"
 PALETTE_MODES = ("strict", "open")
@@ -36,6 +37,8 @@ class Config:
     export: tuple[str, ...] = ("png",)
     style_version: int = 1
     lint: LintConfig = field(default_factory=LintConfig)
+    camera: Camera = field(default_factory=Camera)
+    light: Light = field(default_factory=Light)
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,10 @@ class Project:
     @property
     def tiles_dir(self) -> Path:
         return self.root / "tiles"
+
+    @property
+    def models_dir(self) -> Path:
+        return self.root / "models"
 
     @property
     def preview_dir(self) -> Path:
@@ -126,7 +133,9 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         findings.append(Finding("E001", message, path, None, where))
 
     defaults = Config()
-    allowed = ("palette_mode", "default_palette", "output_dir", "preview_dir", "export", "style_version", "lint")
+    allowed = (
+        "palette_mode", "default_palette", "output_dir", "preview_dir", "export", "style_version", "lint", "camera", "light",
+    )  # fmt: skip
     for key in data:
         if key not in allowed:
             error(f"unknown setting {key!r}; allowed: {', '.join(allowed)}", key)
@@ -160,6 +169,7 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         style_version = defaults.style_version
 
     lint = _parse_lint(data.get("lint", {}), error)
+    camera, light = _parse_render(data.get("camera", {}), data.get("light", {}), error)
 
     if findings:
         raise PaganError(findings)
@@ -171,6 +181,8 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         export=tuple(export),
         style_version=style_version,
         lint=lint,
+        camera=camera,
+        light=light,
     )
 
 
@@ -210,3 +222,43 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
         disable=tuple(disable),
         require_outline=require_outline,
     )
+
+
+def _number(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _parse_render(camera_raw: Any, light_raw: Any, error: Callable[[str, str], None]) -> tuple[Camera, Light]:
+    camera, light = Camera(), Light()
+    if not isinstance(camera_raw, dict):
+        error("[camera] must be a table", "camera")
+    else:
+        for key in camera_raw:
+            if key not in ("elevation", "scale"):
+                error(f"unknown camera setting {key!r}; allowed: elevation, scale", f"camera.{key}")
+        elevation = camera_raw.get("elevation", camera.elevation)
+        scale = camera_raw.get("scale", camera.scale)
+        if not (_number(elevation) and 10 <= elevation <= 90):
+            error("camera.elevation must be 10-90 degrees above the horizon (90 = straight down)", "camera.elevation")
+        elif not (_number(scale) and 0.25 <= scale <= 16):
+            error("camera.scale must be 0.25-16 pixels per voxel", "camera.scale")
+        else:
+            camera = Camera(float(elevation), float(scale))
+    if not isinstance(light_raw, dict):
+        error("[light] must be a table", "light")
+    else:
+        for key in light_raw:
+            if key not in ("direction", "ambient", "shadows"):
+                error(f"unknown light setting {key!r}; allowed: direction, ambient, shadows", f"light.{key}")
+        direction = light_raw.get("direction", list(light.direction))
+        ambient = light_raw.get("ambient", light.ambient)
+        shadows = light_raw.get("shadows", light.shadows)
+        if not (isinstance(direction, list) and len(direction) == 3 and all(_number(v) for v in direction) and any(direction)):
+            error("light.direction must be [x, y, z] pointing towards the light (x right, y up-screen, z up)", "light.direction")
+        elif not (_number(ambient) and 0 <= ambient < 1):
+            error("light.ambient must be between 0 and 1", "light.ambient")
+        elif not isinstance(shadows, bool):
+            error("light.shadows must be true or false", "light.shadows")
+        else:
+            light = Light((float(direction[0]), float(direction[1]), float(direction[2])), float(ambient), shadows)
+    return camera, light

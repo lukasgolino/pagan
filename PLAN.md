@@ -333,6 +333,7 @@ Warnings:
 - `W006` asset was made under an older project `style_version` (needs review against STYLE.md changes)
 - `W007` too much change between consecutive animation frames (after allowing a ±2px whole-sprite move) — catches jumps
 - `E012` two assets share a name (outputs would overwrite each other)
+- `E013` 3D model problem (unknown shape/material/part id, bad parameters, empty model)
 
 Configurable per project via `pagan.toml` (turn rules on/off, thresholds, required outline).
 Lint also works with no `pagan.toml` at all (sensible defaults, open mode), so a single file can be checked anywhere.
@@ -390,7 +391,7 @@ scope to shift as we go.
 - **Done when:** a variant renders correctly, a 4-tile tileset builds into an atlas with correct coordinates,
   and importing a deliberately off-palette PNG produces a clean sprite file plus a report.
 
-### ☐ Milestone 4b — 3D voxel models (added 2026-10-14 at the owner's request)
+### ☑ Milestone 4b — 3D voxel models (added 2026-10-14 at the owner's request)
 Most game assets will be 3D-looking and need several headings (e.g. a player ship with 8 directions);
 drawing every heading by hand is slow and the rotations drift apart. So PAGAN gets a 3D source format:
 - `models/<name>.model.yaml`: a voxel model, still text. Built from **primitives** (box, cylinder,

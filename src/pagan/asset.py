@@ -19,7 +19,8 @@ from pagan.yamlio import LineMap, YamlError, load_yaml
 
 SPRITE_SUFFIX = ".sprite.yaml"
 TILESET_SUFFIX = ".tiles.yaml"
-ASSET_SUFFIXES = (SPRITE_SUFFIX, TILESET_SUFFIX)
+MODEL_SUFFIX = ".model.yaml"
+ASSET_SUFFIXES = (SPRITE_SUFFIX, TILESET_SUFFIX, MODEL_SUFFIX)
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 FRAME_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 MAX_SIZE = 1024
@@ -27,7 +28,7 @@ DEFAULT_FPS = 8.0
 STATUSES = ("draft", "approved")
 MAX_PIXEL_FINDINGS = 8  # per frame, so one bad row doesn't drown everything else
 
-Kind = Literal["sprite", "tileset"]
+Kind = Literal["sprite", "tileset", "model"]
 Grid = tuple[str, ...]  # rows of palette keys, "." = transparent
 ErrorFn = Callable[[str, str, int | None, str | None], None]
 
@@ -82,6 +83,8 @@ def asset_kind(path: Path) -> Kind | None:
         return "sprite"
     if path.name.endswith(TILESET_SUFFIX):
         return "tileset"
+    if path.name.endswith(MODEL_SUFFIX):
+        return "model"
     return None
 
 
@@ -189,16 +192,18 @@ def opaque(grid: Grid, x: int, y: int) -> bool:
 
 
 def _outline(grid: Grid, color: str) -> Grid:
-    out = []
+    """Paint `color` on transparent pixels 4-adjacent to opaque ones."""
+    height = len(grid)
+    width = len(grid[0]) if grid else 0
+    rows = [list(row) for row in grid]
     for y, row in enumerate(grid):
-        chars = list(row)
         for x, char in enumerate(row):
-            if char == TRANSPARENT and any(
-                opaque(grid, x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
-            ):
-                chars[x] = color
-        out.append("".join(chars))
-    return tuple(out)
+            if char == TRANSPARENT:
+                continue
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if 0 <= nx < width and 0 <= ny < height and grid[ny][nx] == TRANSPARENT:
+                    rows[ny][nx] = color
+    return tuple("".join(r) for r in rows)
 
 
 def _edge_pixel(grid: Grid) -> tuple[int, int] | None:
@@ -726,6 +731,10 @@ def load_asset(path: Path, project: Project) -> tuple[Asset | None, list[Finding
         data = load_yaml(path)
     except YamlError as exc:
         return None, [Finding("E001", exc.message, path, exc.line)]
+    if kind == "model":
+        from pagan.model import parse_model  # local import: model builds on this module
+
+        return parse_model(data, path, project, path.read_text(encoding="utf-8"))
     return parse_asset(data, path, project, kind)
 
 

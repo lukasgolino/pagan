@@ -55,10 +55,10 @@ def test_init_creates_a_loadable_project(in_tmp: Path, capsys: pytest.CaptureFix
     code, result = run_json(["init", "art"], capsys)
     assert code == 0 and result["ok"] is True
     root = in_tmp / "art"
-    for name in ("pagan.toml", "STYLE.md", ".gitignore", "palettes", "sprites", "tiles"):
+    for name in ("pagan.toml", "STYLE.md", ".gitignore", "palettes", "sprites", "tiles", "models"):
         assert (root / name).exists(), name
     assert load_project(root).config.palette_mode == "strict"
-    assert (root / ".gitignore").read_text() == "previews/\n"
+    assert (root / ".gitignore").read_text() == "previews/\n.pagan-cache/\n"
 
 
 def test_init_open_mode(in_tmp: Path) -> None:

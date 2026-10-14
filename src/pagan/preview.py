@@ -113,9 +113,18 @@ def _labelled_grid(title: str, subtitle: str, rows: list[tuple[str, list[tuple[s
 def contact_sheet(asset: Asset, options: PreviewOptions) -> Image.Image:
     scale = options.scale or auto_scale(asset.size)
     rows: list[tuple[str, list[tuple[str, Image.Image]]]] = []
-    for variant in (None, *asset.variants):
-        cells = [(name, upscale(frame_image(asset, name, variant), scale, options)) for name in asset.frames]
-        rows.append(("" if variant is None and not asset.variants else (variant or "base"), cells))
+    if asset.kind == "model":
+        # One row per heading: the static frame, then that heading's animation frames.
+        headings = [a.name for a in asset.animations.values() if a.frames == (a.name,)]
+        for heading in headings:
+            names = [heading] + [f for a in asset.animations.values() if a.name.endswith(f"_{heading}") for f in a.frames]
+            rows.append((f"heading {heading}", [(n, upscale(frame_image(asset, n), scale, options)) for n in names]))
+        for variant_name in asset.variants:
+            rows.append((variant_name, [(h, upscale(frame_image(asset, h, variant_name), scale, options)) for h in headings]))
+    else:
+        for variant in (None, *asset.variants):
+            cells = [(name, upscale(frame_image(asset, name, variant), scale, options)) for name in asset.frames]
+            rows.append(("" if variant is None and not asset.variants else (variant or "base"), cells))
     if asset.kind == "tileset":
         rows.append(("tiled 3x3 (check seams)", [(name, upscale(tiled(asset, name, 3), max(1, scale // 2), options)) for name in asset.frames]))
     for anim in asset.animations.values():
@@ -126,7 +135,7 @@ def contact_sheet(asset: Asset, options: PreviewOptions) -> Image.Image:
             previous = anim.frames[i - 1]  # frame 0 compares with the last (the loop seam)
             cells.append((f"{previous}->{name}", upscale(change_image(asset, previous, name), scale, options)))
         rows.append((f"{anim.name}: changes (magenta = changed/new pixel, cyan = pixel removed)", cells))
-    if asset.animations:
+    if asset.animations and asset.kind != "model":
         summary = ", ".join(f"{a.name} ({len(a.frames)}f @ {a.fps:g}fps{'' if a.loop else ', once'})" for a in asset.animations.values())
         rows.append((f"animations: {summary}", []))
     width, height = asset.size

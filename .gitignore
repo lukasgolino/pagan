@@ -22,3 +22,4 @@ previews/
 .vscode/
 .idea/
 .DS_Store
+.pagan-cache/

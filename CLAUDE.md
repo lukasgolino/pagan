@@ -29,6 +29,8 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `render.py` frames/sheets to RGBA images + deterministic PNG saving; `lint.py` warnings W001-W006;
   - `preview.py` upscaled frames, contact sheets (with animation "changes" rows), GIFs, tiling check, gallery;
   - `color.py` OKLab/OKLCh conversions + gamut mapping; `importer.py` PNG -> sprite (scale detection, snapping);
+  - `voxel.py` voxel model + renderer (grid ray traversal, smoothed/exact normals, wrap light, soft shadows);
+  - `model.py` `.model.yaml` parsing (materials, primitives, poses) -> Asset, with a render cache in `.pagan-cache/`;
   - `swatch.py` palette swatch images; `templates/` files copied by `pagan init`.
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
@@ -74,3 +76,6 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-14: `pagan render`/`preview`/`lint` find the project from the target path, not the cwd.
 - 2026-10-14: GIF frame durations are rounded to 10ms (GIF's resolution).
 - 2026-10-14: `pagan import` picks the largest uniform block size as the upscale factor (gcd of pixel run lengths); snapping uses nearest OKLab color; open mode orders extracted keys darkest-first so "0" suits outlines.
+- 2026-10-14: 3D voxel models (`models/*.model.yaml`) are first-class assets (kind "model"): rendered with the project-wide `[camera]`/`[light]` so all 3D assets match; frames per heading (`e`, `ne`, ...), pose animations as `<anim>_<heading>`. Poses move parts by whole voxels, so animation frames stay pixel-consistent.
+- 2026-10-14: Renderer: exact grid traversal per pixel; normals from the occupancy gradient, or exact from shapes that know them (sails); wrap lighting (0.3) and partial shadows (0.65) read better at pixel scale than hard Lambert; parts never shadow themselves. Trig results are rounded to 12 decimals for cross-platform byte stability.
+- 2026-10-14: Model renders are cached in `<project>/.pagan-cache/models/` keyed by file text + materials + camera + light + RENDERER_VERSION (bump it when rendering changes).

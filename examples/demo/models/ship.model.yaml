@@ -1,0 +1,52 @@
+name: ship
+description: >
+  Player ship: a wooden three-masted age-of-exploration ship (square sails braced to catch the wind,
+  raised stern castle with lit windows, forecastle, bowsprit, pennants). Top-down 3/4 view, no water
+  (it sits on a moving sea). 8 headings; pennants flutter in the "sail" animation.
+palette: ember
+size: [96, 96]
+pivot: [48, 60]
+origin: [35, 0, 0]          # the hull's centre at the waterline lands on the pivot
+directions: 8
+outline: auto
+status: draft
+style_version: 1
+tags: [player, vehicle, ship]
+
+materials:
+  hull:   { keys: ["6", "7", "8", "9"] }      # fire ramp without the brightest steps
+  deck:   { keys: ["7", "8", "9"] }
+  rail:   { keys: ["1", "2"] }
+  mast:   { keys: ["1", "2", "3"] }
+  sail:   { keys: ["3", "4", "5"], two_sided: true }
+  flag:   { ramp: rose }
+  window: { keys: ["a"] }                     # one key = unshaded: lit windows glow
+
+parts:
+  - hull: { from: [0, 0, 0], length: 70, beam: 21, height: 8, bow: 0.38, stern: 0.08, material: hull, top: deck, rim: rail }
+  - box: { from: [0, -7, 8], to: [14, 7, 11], material: hull, top: deck, rim: rail }      # stern castle
+  - box: { from: [56, -6, 8], to: [62, 6, 9], material: hull, top: deck, rim: rail }      # forecastle
+  - box: { from: [-1, 2, 9], to: [-1, 3, 10], material: window }                          # stern windows
+    mirror: true
+  - cylinder: { base: [17, 0, 8], height: 28, material: mast }                            # mizzen
+  - cylinder: { base: [36, 0, 8], height: 39, material: mast }                            # main
+  - cylinder: { base: [53, 0, 8], height: 33, material: mast }                            # fore
+  - line: { from: [66, 0, 9], to: [79, 0, 15], material: mast }                           # bowsprit
+  - sail: { at: [36, 0, 13], width: 22, height: 14, bulge: 2.4, brace: 30, material: sail, yard: mast }
+  - sail: { at: [36, 0, 30], width: 16, height: 11, bulge: 2, brace: 30, material: sail, yard: mast }
+  - sail: { at: [53, 0, 13], width: 18, height: 12, bulge: 2.2, brace: 30, material: sail, yard: mast }
+  - sail: { at: [53, 0, 28], width: 13, height: 8, bulge: 1.8, brace: 30, material: sail, yard: mast }
+  - sail: { at: [17, 0, 14], width: 12, height: 13, bulge: 1, brace: 90, material: sail }  # fore-aft spanker
+  - box: { from: [37, 0, 46], to: [42, 0, 47], material: flag }
+    id: pennant
+  - box: { from: [54, 0, 40], to: [56, 0, 41], material: flag }
+    id: fore_pennant
+
+animations:
+  sail:
+    fps: 6
+    poses:
+      - {}
+      - { pennant: { offset: [0, 1, 0] }, fore_pennant: { offset: [0, 1, 0] } }
+      - {}
+      - { pennant: { offset: [0, -1, 0] }, fore_pennant: { offset: [0, -1, 0] } }

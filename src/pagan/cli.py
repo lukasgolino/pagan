@@ -12,7 +12,7 @@ from string import Template
 from typing import Any
 
 from pagan import __version__
-from pagan.asset import SPRITE_SUFFIX, TILESET_SUFFIX, Asset, load_asset_or_raise
+from pagan.asset import MODEL_SUFFIX, SPRITE_SUFFIX, TILESET_SUFFIX, Asset, load_asset_or_raise
 from pagan.findings import Finding, PaganError, display_path
 from pagan.importer import import_png, sprite_yaml
 from pagan.lint import lint_paths
@@ -77,7 +77,7 @@ def cmd_init(args: argparse.Namespace, out: Output) -> int:
     config_path.write_text(Template(_template("pagan.toml")).substitute(palette_mode=mode), encoding="utf-8")
     created.append(config_path)
 
-    for name, content in (("STYLE.md", _template("STYLE.md")), (".gitignore", "previews/\n")):
+    for name, content in (("STYLE.md", _template("STYLE.md")), (".gitignore", "previews/\n.pagan-cache/\n")):
         path = root / name
         if path.exists():
             skipped.append(path)
@@ -85,7 +85,7 @@ def cmd_init(args: argparse.Namespace, out: Output) -> int:
             path.write_text(content, encoding="utf-8")
             created.append(path)
 
-    for name in ("palettes", "sprites", "tiles"):
+    for name in ("palettes", "sprites", "tiles", "models"):
         path = root / name
         if path.is_dir():
             skipped.append(path)
@@ -233,6 +233,105 @@ def cmd_new_asset(args: argparse.Namespace, out: Output) -> int:
     return 0
 
 
+# --- pagan new model / pagan bake -------------------------------------------------------------
+
+
+def cmd_new_model(args: argparse.Namespace, out: Output) -> int:
+    name: str = args.name
+    if not NAME_RE.match(name):
+        raise _usage_error(f"invalid name {name!r}: use lowercase letters, digits, '_' or '-'")
+    project = _require_project()
+    width, height = _parse_size_arg(args.size)
+    palette_name = args.palette or project.config.default_palette
+    if palette_name is None:
+        raise _usage_error("no --palette given and pagan.toml has no default_palette")
+    palette = project.load_palette(palette_name)
+    if not palette.ramps:
+        raise _usage_error(f"palette {palette_name!r} has no ramps; models shade with ramps")
+    ramps = list(palette.ramps)
+    main_ramp, accent_ramp = ramps[0], ramps[min(1, len(ramps) - 1)]
+    if args.directions not in (1, 4, 8, 16):
+        raise _usage_error("--directions must be 1, 4, 8 or 16")
+    description = args.description or "TODO: what this is and what it should look like"
+    text = f"""name: {name}
+description: {json.dumps(description)}
+palette: {palette_name}
+size: [{width}, {height}]
+pivot: [{width // 2}, {round(height * 0.62)}]     # where `origin` lands in each frame
+origin: [0, 0, 0]                 # model point (x forward, y left, z up) placed on the pivot
+directions: {args.directions}                     # 1, 4, 8 or 16 headings -> frames e, ne, n, ...
+outline: auto
+status: draft
+style_version: {project.config.style_version}
+tags: []
+
+# Materials shade with a palette ramp (dark -> light) under the project's light ([light] in pagan.toml).
+materials:
+  body:   {{ ramp: {main_ramp} }}
+  accent: {{ ramp: {accent_ramp} }}
+
+# Shapes: box, hull, cylinder, ellipsoid, line, sail, layers. Whole voxels; x forward, y left, z up.
+# Per part: `mirror: true` reflects across y = 0, `carve: true` removes voxels, `id:` names it for poses.
+parts:
+  - box: {{ from: [-4, -3, 0], to: [4, 3, 5], material: body, top: accent }}
+
+# animations:
+#   bob:
+#     fps: 6
+#     poses:                # one pose per frame; parts with an id move by whole voxels
+#       - {{}}
+#       - {{ lid: {{ offset: [0, 0, 1] }} }}
+"""
+    path = project.models_dir / f"{name}{MODEL_SUFFIX}"
+    if path.exists():
+        raise _usage_error("file already exists", path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    out.say(f"created {display_path(path)}")
+    out.result({"created": display_path(path), "kind": "model", "name": name})
+    return 0
+
+
+def cmd_bake(args: argparse.Namespace, out: Output) -> int:
+    project = project_for([args.model])
+    asset = load_asset_or_raise(resolve_asset_path(args.model, project), project)
+    if asset.kind != "model":
+        raise _usage_error(f"{asset.name} is a {asset.kind}, not a model")
+    name = args.name or asset.name
+    if not NAME_RE.match(name):
+        raise _usage_error(f"invalid name {name!r}")
+    path = Path(args.out) if args.out else project.sprites_dir / f"{name}{SPRITE_SUFFIX}"
+    if path.exists() and not args.force:
+        raise _usage_error("file already exists (pass --force to overwrite)", path)
+    lines = [
+        f"name: {name}",
+        f"description: {json.dumps(asset.description or '')}",
+        f"palette: {asset.palette.name}" if asset.palette.name else "# palette: (inline palettes aren't baked)",
+        f"size: [{asset.size[0]}, {asset.size[1]}]",
+        f"pivot: [{asset.pivot[0]}, {asset.pivot[1]}]",
+        "outline: none                  # the outline is already baked into the pixels",
+        f"status: {asset.status}",
+        f"style_version: {asset.style_version}",
+        f"tags: [{', '.join([*asset.tags, 'baked'])}]",
+        "frames:",
+    ]
+    for frame, grid in asset.frames.items():
+        lines.append(f"  {frame}: |")
+        lines.extend(f"    {row}" for row in grid)
+    lines.append("animations:")
+    for anim in asset.animations.values():
+        lines.append(
+            f"  {anim.name}: {{ frames: [{', '.join(anim.frames)}], fps: {anim.fps:g}, loop: {'true' if anim.loop else 'false'} }}"
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    out.say(f"baked {asset.name} ({len(asset.frames)} frames) -> {display_path(path)}")
+    if name == asset.name:
+        out.say(f"Asset names must be unique: rename or remove {display_path(asset.path) if asset.path else 'the model'} if you keep the bake.")
+    out.result({"created": display_path(path), "frames": len(asset.frames)})
+    return 0
+
+
 # --- pagan render -----------------------------------------------------------------------------
 
 
@@ -242,10 +341,14 @@ def resolve_asset_path(target: str, project: Project) -> Path:
     if path.is_file():
         return path
     if NAME_RE.match(target):
-        for candidate in (project.sprites_dir / f"{target}{SPRITE_SUFFIX}", project.tiles_dir / f"{target}{TILESET_SUFFIX}"):
+        for candidate in (
+            project.sprites_dir / f"{target}{SPRITE_SUFFIX}",
+            project.tiles_dir / f"{target}{TILESET_SUFFIX}",
+            project.models_dir / f"{target}{MODEL_SUFFIX}",
+        ):
             if candidate.is_file():
                 return candidate
-    raise _usage_error(f"no such asset: {target} (give a path, or the name of a file in sprites/ or tiles/)")
+    raise _usage_error(f"no such asset: {target} (give a path, or the name of a file in sprites/, tiles/ or models/)")
 
 
 def project_for(targets: list[str]) -> Project:
@@ -531,6 +634,21 @@ def build_parser() -> argparse.ArgumentParser:
         else:
             sub.set_defaults(mirror=False, outline=False)
         sub.set_defaults(handler=cmd_new_asset, kind="sprite" if kind == "sprite" else "tileset")
+
+    new_model = new_kinds.add_parser("model", parents=[common], help="scaffold a 3D voxel model")
+    new_model.add_argument("name", help="model name, e.g. ship")
+    new_model.add_argument("--size", default="64x64", help="frame size WIDTHxHEIGHT (default 64x64)")
+    new_model.add_argument("--palette", help="palette name (default: the project's default_palette)")
+    new_model.add_argument("--directions", type=int, default=8, help="headings to render: 1, 4, 8 or 16 (default 8)")
+    new_model.add_argument("--description", help="what the asset is; kept in the file for future reference")
+    new_model.set_defaults(handler=cmd_new_model)
+
+    bake = commands.add_parser("bake", parents=[common], help="write a model's rendered frames as an editable sprite")
+    bake.add_argument("model", help="model file or name")
+    bake.add_argument("--name", help="sprite name (default: the model's name)")
+    bake.add_argument("--out", help="output path (default: sprites/<name>.sprite.yaml)")
+    bake.add_argument("--force", action="store_true", help="overwrite an existing file")
+    bake.set_defaults(handler=cmd_bake)
 
     render = commands.add_parser("render", parents=[common], help="render assets to native-size PNGs")
     render.add_argument("assets", nargs="+", help="asset files or names")

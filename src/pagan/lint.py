@@ -37,8 +37,8 @@ class LintResult:
 
 
 def source_files(project: Project, paths: list[Path] | None = None) -> list[Path]:
-    """Palette and asset files under `paths` (default: the project's palettes/, sprites/, tiles/)."""
-    roots = paths or [project.palettes_dir, project.sprites_dir, project.tiles_dir]
+    """Palette and asset files under `paths` (default: the project's palettes/, sprites/, tiles/, models/)."""
+    roots = paths or [project.palettes_dir, project.sprites_dir, project.tiles_dir, project.models_dir]
     suffixes = (PALETTE_SUFFIX, *ASSET_SUFFIXES)
     found: set[Path] = set()
     for root in roots:
@@ -201,24 +201,24 @@ def frame_change(a: Grid, b: Grid, max_shift: int = 2) -> tuple[float, tuple[int
 
     Counted over pixels opaque in either frame; a pure 1px bob therefore scores ~0.
     """
-    height, width = len(a), len(a[0]) if a else 0
+    pa = {(x, y): c for y, row in enumerate(a) for x, c in enumerate(row) if c != TRANSPARENT}
+    pb = {(x, y): c for y, row in enumerate(b) for x, c in enumerate(row) if c != TRANSPARENT}
+    if not pa and not pb:
+        return 0.0, (0, 0)
     best = (2.0, (0, 0))
-    for dy in range(-max_shift, max_shift + 1):
-        for dx in range(-max_shift, max_shift + 1):
-            differ = total = 0
-            for y in range(height):
-                for x in range(width):
-                    pa = a[y][x]
-                    sx, sy = x + dx, y + dy
-                    pb = b[sy][sx] if 0 <= sx < width and 0 <= sy < height else TRANSPARENT
-                    if pa == TRANSPARENT and pb == TRANSPARENT:
-                        continue
-                    total += 1
-                    differ += pa != pb
-            score = differ / total if total else 0.0
-            # Prefer no movement when scores tie, then the smallest movement.
-            if (score, abs(dx) + abs(dy)) < (best[0], abs(best[1][0]) + abs(best[1][1])):
-                best = (score, (dx, dy))
+    shifts = sorted(
+        ((dx, dy) for dx in range(-max_shift, max_shift + 1) for dy in range(-max_shift, max_shift + 1)),
+        key=lambda d: (abs(d[0]) + abs(d[1]), d),
+    )
+    for dx, dy in shifts:  # smallest movements first, so ties keep the smaller move
+        moved = {(x - dx, y - dy): c for (x, y), c in pb.items()}  # b's pixel that lands on a's (x, y)
+        union = pa.keys() | moved.keys()
+        differ = sum(1 for p in union if pa.get(p) != moved.get(p))
+        score = differ / len(union)
+        if score < best[0]:
+            best = (score, (dx, dy))
+            if score == 0:
+                break
     return best
 
 
