@@ -24,3 +24,6 @@ jobs:
         run: mypy
       - name: Run tests
         run: pytest
+      - name: Lint the demo project
+        working-directory: examples/demo
+        run: pagan lint

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -32,6 +33,7 @@ class Config:
     output_dir: str = "build"
     preview_dir: str = "previews"
     export: tuple[str, ...] = ("png",)
+    style_version: int = 1
     lint: LintConfig = field(default_factory=LintConfig)
 
 
@@ -40,6 +42,7 @@ class Project:
     root: Path
     config: Config
     config_path: Path | None  # None when running without a pagan.toml
+    _palettes: dict[str, Palette] = field(default_factory=dict, compare=False, repr=False)
 
     @property
     def palettes_dir(self) -> Path:
@@ -70,13 +73,18 @@ class Project:
         return sorted(p.name[: -len(PALETTE_SUFFIX)] for p in self.palettes_dir.glob(f"*{PALETTE_SUFFIX}"))
 
     def load_palette(self, name: str) -> Palette:
+        """Load a palette by name (cached per project). Raises PaganError."""
+        if name in self._palettes:
+            return self._palettes[name]
         path = self.palette_path(name)
         if not path.is_file():
             known = ", ".join(self.palette_names()) or "none"
             raise PaganError(
                 [Finding("E005", f"unknown palette {name!r}: {path} doesn't exist (palettes: {known})", self.config_path)]
             )
-        return load_palette_file(path)
+        palette = load_palette_file(path)
+        self._palettes[name] = palette
+        return palette
 
 
 def find_project_root(start: Path) -> Path | None:
@@ -115,7 +123,7 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         findings.append(Finding("E001", message, path, None, where))
 
     defaults = Config()
-    allowed = ("palette_mode", "default_palette", "output_dir", "preview_dir", "export", "lint")
+    allowed = ("palette_mode", "default_palette", "output_dir", "preview_dir", "export", "style_version", "lint")
     for key in data:
         if key not in allowed:
             error(f"unknown setting {key!r}; allowed: {', '.join(allowed)}", key)
@@ -143,6 +151,11 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         error(f"export must be a list drawn from {', '.join(EXPORTERS)}", "export")
         export = list(defaults.export)
 
+    style_version = data.get("style_version", defaults.style_version)
+    if isinstance(style_version, bool) or not isinstance(style_version, int) or style_version < 1:
+        error("style_version must be a positive integer", "style_version")
+        style_version = defaults.style_version
+
     lint = _parse_lint(data.get("lint", {}), error)
 
     if findings:
@@ -153,6 +166,7 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         output_dir=dirs["output_dir"],
         preview_dir=dirs["preview_dir"],
         export=tuple(export),
+        style_version=style_version,
         lint=lint,
     )
 
@@ -173,8 +187,8 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
         max_ramps = defaults.max_ramps_per_sprite
 
     disable = data.get("disable", [])
-    if not isinstance(disable, list) or not all(isinstance(r, str) for r in disable):
-        error('disable must be a list of rule ids, e.g. ["W001"]', "lint.disable")
+    if not isinstance(disable, list) or not all(isinstance(r, str) and re.fullmatch(r"W\d{3}", r) for r in disable):
+        error('disable must be a list of warning rule ids, e.g. ["W001"] (errors can\'t be disabled)', "lint.disable")
         disable = []
 
     require_outline = data.get("require_outline", defaults.require_outline)

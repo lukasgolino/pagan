@@ -1,4 +1,5 @@
 import json
+from typing import Any
 import subprocess
 import sys
 from pathlib import Path
@@ -27,7 +28,7 @@ def in_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def run_json(args: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, dict[str, object]]:
+def run_json(args: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, dict[str, Any]]:
     code = main([*args, "--json"])
     return code, json.loads(capsys.readouterr().out)
 
@@ -77,7 +78,7 @@ def test_init_refuses_existing_project(in_tmp: Path, capsys: pytest.CaptureFixtu
     capsys.readouterr()
     code, result = run_json(["init"], capsys)
     assert code == 1 and result["ok"] is False
-    assert "already exists" in result["findings"][0]["message"]  # type: ignore[index]
+    assert "already exists" in result["findings"][0]["message"]
 
 
 # --- new palette ---
@@ -93,7 +94,7 @@ def test_new_palette_is_valid(in_tmp: Path) -> None:
 def test_new_palette_needs_a_project(in_tmp: Path, capsys: pytest.CaptureFixture[str]) -> None:
     code, result = run_json(["new", "palette", "dusk"], capsys)
     assert code == 1
-    assert "pagan init" in result["findings"][0]["message"]  # type: ignore[index]
+    assert "pagan init" in result["findings"][0]["message"]
 
 
 def test_new_palette_refuses_overwrite_and_bad_names(in_tmp: Path) -> None:
@@ -139,3 +140,58 @@ def test_palette_show_reports_invalid_palette(in_tmp: Path, capsys: pytest.Captu
 
 def test_palette_show_by_name_needs_project(in_tmp: Path) -> None:
     assert main(["palette", "show", "dusk"]) == 1
+
+
+# --- new sprite / tiles, render, lint ---
+
+
+def test_new_sprite_then_lint_and_render(in_tmp: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    main(["init"])
+    (in_tmp / "palettes" / "duo.pal.yaml").write_text(PALETTE)
+    assert main(["new", "sprite", "hero", "--size", "8x8", "--palette", "duo", "--frames", "2", "--mirror"]) == 0
+    text = (in_tmp / "sprites" / "hero.sprite.yaml").read_text()
+    assert "mirror: horizontal" in text and "idle: { frames: [idle_0, idle_1]" in text
+    assert "    ....\n" in text  # authored half width
+    capsys.readouterr()
+    code, result = run_json(["lint"], capsys)
+    assert code == 0  # blank frames are only warnings
+    assert {f["rule"] for f in result["findings"]} == {"W004"}
+    assert main(["render", "hero"]) == 0
+    assert (in_tmp / "previews" / "hero" / "native" / "idle_0.png").exists()
+    assert (in_tmp / "previews" / "hero" / "native" / "sheet.png").exists()
+
+
+def test_new_tiles(in_tmp: Path) -> None:
+    main(["init"])
+    (in_tmp / "palettes" / "duo.pal.yaml").write_text(PALETTE)
+    assert main(["new", "tiles", "floor", "--size", "4x4", "--palette", "duo", "--frames", "3"]) == 0
+    assert "tile_2: |" in (in_tmp / "tiles" / "floor.tiles.yaml").read_text()
+
+
+def test_new_sprite_requires_palette_in_strict_mode(in_tmp: Path) -> None:
+    main(["init"])
+    assert main(["new", "sprite", "hero"]) == 1
+
+
+def test_new_sprite_open_mode_gets_inline_palette(in_tmp: Path) -> None:
+    main(["init", "--open"])
+    assert main(["new", "sprite", "hero", "--size", "4x4"]) == 0
+    assert "\n  colors:\n" in (in_tmp / "sprites" / "hero.sprite.yaml").read_text()
+    assert main(["lint"]) == 0
+
+
+def test_lint_exit_codes(in_tmp: Path) -> None:
+    main(["init", "--open"])
+    sprite = in_tmp / "sprites" / "x.sprite.yaml"
+    sprite.write_text('name: x\npalette:\n  colors:\n    "1": "#ffffff"\nsize: [2, 1]\nframes:\n  a: |\n    1.\n')
+    assert main(["lint"]) == 0  # one orphan-pixel warning
+    assert main(["lint", "--warnings-as-errors"]) == 1
+    sprite.write_text(sprite.read_text().replace("1.", "1z"))
+    assert main(["lint"]) == 1
+    assert main(["lint", "nope/"]) == 1
+
+
+def test_render_reports_errors(in_tmp: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    main(["init", "--open"])
+    assert main(["render", "missing"]) == 1
+    assert "no such asset" in capsys.readouterr().out

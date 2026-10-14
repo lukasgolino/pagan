@@ -1,0 +1,17 @@
+name: turf
+tile_size: [4, 4]
+columns: 2
+tiles:
+  plain: |
+    2222
+    2322
+    2221
+    2222
+  flower: |
+    2222
+    2562
+    2652
+    2222
+  plain_flip:
+    from: plain
+    flip: horizontal

@@ -16,6 +16,11 @@ preview_dir = "previews"
 # What `pagan build` produces: "png" (sprite sheets + manifest.json), "godot" (SpriteFrames .tres).
 export = ["png"]
 
+# Bump this when STYLE.md changes in a way that means existing art should be revisited (e.g. "more
+# shadows"). Assets record the style_version they were made under; older ones get lint warning W006.
+# Palette color changes don't need a bump: every asset picks them up automatically.
+style_version = 1
+
 [lint]
 # W003: warn when a sprite uses colors from more than this many ramps.
 max_ramps_per_sprite = 3

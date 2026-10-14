@@ -1,0 +1,12 @@
+name: mini
+colors:
+  "0": { hex: "#14101c", name: ink }
+  "1": { hex: "#3c5a2c", name: leaf_dark }
+  "2": { hex: "#6e9a3c", name: leaf }
+  "3": { hex: "#b4d264", name: leaf_light }
+  "4": { hex: "#7a2c2c", name: berry_dark }
+  "5": { hex: "#c8504a", name: berry }
+  "6": { hex: "#f0a082", name: berry_light }
+ramps:
+  leaf: ["1", "2", "3"]
+  berry: ["4", "5", "6"]

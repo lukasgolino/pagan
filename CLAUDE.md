@@ -25,7 +25,11 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `cli.py` argparse commands; `findings.py` Finding/PaganError (rule ids, file:line output, JSON);
   - `yamlio.py` YAML loader (rejects duplicate keys, tracks line numbers via `LineMap`);
   - `palette.py` palette parsing/validation (files and inline); `project.py` `pagan.toml` + project discovery;
+  - `asset.py` sprite + tileset parsing (grids, mirror, derived frames, outline, animations, variants, metadata);
+  - `render.py` frames/sheets to RGBA images + deterministic PNG saving; `lint.py` warnings W001-W006;
   - `swatch.py` palette swatch images; `templates/` files copied by `pagan init`.
+- `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
+  rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
 - `tests/` — pytest suite
 - `examples/demo/` — an example PAGAN project (palettes: ember, tide, arcade); tests keep it valid
 - `.github/workflows/` — CI
@@ -56,3 +60,11 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-14: No `pagan.toml` found → commands run in open mode rooted at cwd, so single files work anywhere.
 - 2026-10-14: Added mypy (strict) + types-PyYAML as dev deps and a CI step, to enforce "typed Python" from the plan.
 - 2026-10-14: Swatch images use Pillow's bundled default font (needs Pillow>=10.1); swatches are previews, not build output.
+- 2026-10-14: Golden tests compare decoded pixels exactly (not PNG bytes: zlib builds may differ across machines); a separate test checks byte-identical output between two runs.
+- 2026-10-14: Sprites and tilesets share one `Asset` type (`kind` = sprite | tileset); tilesets have no mirror/outline/animations.
+- 2026-10-14: Derived frames: a frame may be `{ from: other, flip: horizontal|vertical|both, shift: [dx, dy] }` — cheap rotations/bobs without redrawing (E010 for problems).
+- 2026-10-14: `outline_color` defaults to the palette's darkest color (by luminance), not a fixed key.
+- 2026-10-14: `pivot` is in pixel-edge coordinates, 0..w × 0..h; default is bottom centre `[w // 2, h]`.
+- 2026-10-14: Variants can also swap to another palette (`palette: night`), not just ramp_swap/key_swap.
+- 2026-10-14: Asset metadata for long-term management: `description`, `tags`, `status` (draft|approved), `style_version` (vs. pagan.toml `style_version`, W006).
+- 2026-10-14: Only warnings can be disabled in `[lint] disable`.

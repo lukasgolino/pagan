@@ -321,6 +321,8 @@ Errors:
 - `E007` `outline: auto` would clip at canvas edge
 - `E008` pivot outside canvas
 - `E009` inline palette used in a strict-mode project
+- `E010` derived frame problem (`from` unknown frame, cycle, bad `flip`, `shift` pushes pixels off canvas)
+- `E011` `outline: auto` required by `pagan.toml` but missing
 
 Warnings:
 - `W001` orphan pixel (single opaque pixel with no opaque 8-neighbors) — usually a mistake
@@ -328,6 +330,7 @@ Warnings:
 - `W003` sprite uses colors from > N ramps (N configurable) — style drift hint
 - `W004` frame is fully transparent
 - `W005` animation frames have very different opaque bounding boxes (possible jitter)
+- `W006` asset was made under an older project `style_version` (needs review against STYLE.md changes)
 
 Configurable per project via `pagan.toml` (turn rules on/off, thresholds, required outline).
 Lint also works with no `pagan.toml` at all (sensible defaults, open mode), so a single file can be checked anywhere.
@@ -367,7 +370,7 @@ scope to shift as we go.
 - Draft the `STYLE.md` template.
 - **Done when:** `pagan init` creates a working project, and `pagan palette show` renders the example palettes.
 
-### ☐ Milestone 2 — Sprite format, render, lint
+### ☑ Milestone 2 — Sprite format, render, lint
 - Sprite parsing (named and inline palettes), `mirror`, `outline: auto`, `new sprite`, `render`, `lint` (all E-rules, W001–W004).
 - Golden-image tests: small fixture sprites rendered and compared byte-for-byte to committed expected PNGs.
 - Determinism test: building twice yields identical bytes.

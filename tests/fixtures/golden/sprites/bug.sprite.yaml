@@ -1,0 +1,28 @@
+name: bug
+description: Golden fixture - mirror, outline, derived frames, animation, variant.
+size: [9, 9]
+pivot: [4, 8]
+mirror: horizontal
+outline: auto
+frames:
+  walk_0: |
+    .....
+    .....
+    ...1.
+    ..12.
+    .1232
+    .1222
+    ..122
+    ...1.
+    .....
+  walk_1:
+    from: walk_0
+    shift: [0, -1]
+  walk_flip:
+    from: walk_0
+    flip: vertical
+animations:
+  walk: { frames: [walk_0, walk_1], fps: 6, loop: true }
+  flip: { frames: [walk_flip], fps: 1, loop: false }
+variants:
+  ripe: { ramp_swap: { leaf: berry } }

@@ -11,9 +11,12 @@ from string import Template
 from typing import Any
 
 from pagan import __version__
+from pagan.asset import SPRITE_SUFFIX, TILESET_SUFFIX, Asset, load_asset_or_raise
 from pagan.findings import Finding, PaganError, display_path
+from pagan.lint import lint_paths
 from pagan.palette import NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
+from pagan.render import frame_image, save_png, sheet_image
 from pagan.swatch import render_swatch
 
 
@@ -140,6 +143,176 @@ def cmd_new_palette(args: argparse.Namespace, out: Output) -> int:
     return 0
 
 
+# --- pagan new sprite / tiles ----------------------------------------------------------------
+
+_INLINE_PALETTE_STARTER = """\
+palette:                  # inline palette (open mode); or name a palette file instead
+  colors:
+    "0": { hex: "#1a1c2c", name: ink }
+    "1": { hex: "#5d5d72", name: shadow }
+    "2": { hex: "#a0a0b4", name: mid }
+    "3": { hex: "#f4f4f4", name: light }
+  ramps:
+    main: ["0", "1", "2", "3"]
+"""
+
+
+def _parse_size_arg(text: str) -> tuple[int, int]:
+    parts = text.lower().split("x")
+    if len(parts) != 2 or not all(p.isdigit() and 0 < int(p) <= 1024 for p in parts):
+        raise _usage_error(f"invalid size {text!r}: use WIDTHxHEIGHT, e.g. 16x16")
+    return int(parts[0]), int(parts[1])
+
+
+def _palette_lines(project: Project, palette: str | None) -> str:
+    if palette is not None:
+        project.load_palette(palette)  # fail early on a typo
+        return f"palette: {palette}\n"
+    if project.config.default_palette is not None:
+        return f"# palette: {project.config.default_palette}   (project default)\n"
+    if project.config.palette_mode == "open":
+        return _INLINE_PALETTE_STARTER
+    raise _usage_error("no --palette given and pagan.toml has no default_palette")
+
+
+def _blank(width: int, height: int, indent: str) -> str:
+    return "".join(f"{indent}{'.' * width}\n" for _ in range(height))
+
+
+def cmd_new_asset(args: argparse.Namespace, out: Output) -> int:
+    kind: str = args.kind
+    name: str = args.name
+    if not NAME_RE.match(name):
+        raise _usage_error(f"invalid name {name!r}: use lowercase letters, digits, '_' or '-'")
+    project = _require_project()
+    width, height = _parse_size_arg(args.size)
+    count: int = args.frames
+    if count < 1:
+        raise _usage_error("--frames must be at least 1")
+    description = args.description or "TODO: what this is and what it should look like"
+
+    lines = [f"name: {name}", f"description: {json.dumps(description)}", _palette_lines(project, args.palette).rstrip("\n")]
+    if kind == "sprite":
+        authored = -(-width // 2) if args.mirror else width
+        lines += [
+            f"size: [{width}, {height}]",
+            f"pivot: [{width // 2}, {height}]      # anchor point (feet): x, y from the top-left corner",
+            f"mirror: {'horizontal' if args.mirror else 'none'}" + (f"       # author only the left {authored} columns" if args.mirror else ""),
+            f"outline: {'auto' if args.outline else 'none'}",
+            "status: draft",
+            f"style_version: {project.config.style_version}",
+            "tags: []",
+            "frames:",
+        ]
+        frame_names = [f"idle_{i}" for i in range(count)] if count > 1 else ["main"]
+        body = "\n".join(lines) + "\n" + "".join(f"  {f}: |\n{_blank(authored, height, '    ')}" for f in frame_names)
+        if count > 1:
+            body += f"animations:\n  idle: {{ frames: [{', '.join(frame_names)}], fps: 4, loop: true }}\n"
+        path = project.sprites_dir / f"{name}{SPRITE_SUFFIX}"
+    else:
+        lines += [
+            f"tile_size: [{width}, {height}]",
+            "columns: 8",
+            "status: draft",
+            f"style_version: {project.config.style_version}",
+            "tags: []",
+            "tiles:",
+        ]
+        body = "\n".join(lines) + "\n" + "".join(f"  tile_{i}: |\n{_blank(width, height, '    ')}" for i in range(count))
+        path = project.tiles_dir / f"{name}{TILESET_SUFFIX}"
+
+    if path.exists():
+        raise _usage_error("file already exists", path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+    out.say(f"created {display_path(path)}")
+    out.result({"created": display_path(path), "kind": kind, "name": name})
+    return 0
+
+
+# --- pagan render -----------------------------------------------------------------------------
+
+
+def resolve_asset_path(target: str, project: Project) -> Path:
+    """A path to an asset file, or a bare asset name looked up in sprites/ and tiles/."""
+    path = Path(target)
+    if path.is_file():
+        return path
+    if NAME_RE.match(target):
+        for candidate in (project.sprites_dir / f"{target}{SPRITE_SUFFIX}", project.tiles_dir / f"{target}{TILESET_SUFFIX}"):
+            if candidate.is_file():
+                return candidate
+    raise _usage_error(f"no such asset: {target} (give a path, or the name of a file in sprites/ or tiles/)")
+
+
+def _load_targets(targets: list[str], project: Project) -> tuple[list[Asset], list[Finding]]:
+    assets: list[Asset] = []
+    findings: list[Finding] = []
+    for target in targets:
+        try:
+            assets.append(load_asset_or_raise(resolve_asset_path(target, project), project))
+        except PaganError as exc:
+            findings.extend(exc.findings)
+    return assets, findings
+
+
+def cmd_render(args: argparse.Namespace, out: Output) -> int:
+    project = discover_project()
+    assets, findings = _load_targets(args.assets, project)
+    outputs: list[dict[str, Any]] = []
+    for asset in assets:
+        base = project.preview_dir / asset.name / "native"
+        written: list[str] = []
+        for variant in (None, *asset.variants):
+            folder = base if variant is None else base / variant
+            for frame in asset.frames:
+                path = folder / f"{frame}.png"
+                save_png(frame_image(asset, frame, variant), path)
+                written.append(display_path(path))
+            sheet = folder / "sheet.png"
+            save_png(sheet_image(asset, variant), sheet)
+            written.append(display_path(sheet))
+        out.say(f"{asset.name}: wrote {len(written)} PNGs to {display_path(base)}")
+        outputs.append({"asset": asset.name, "files": written})
+    if findings:
+        out.failure(findings, {"outputs": outputs})
+        return 1
+    out.result({"outputs": outputs})
+    return 0
+
+
+# --- pagan lint -------------------------------------------------------------------------------
+
+
+def cmd_lint(args: argparse.Namespace, out: Output) -> int:
+    project = discover_project()
+    paths = [Path(p) for p in args.paths] or None
+    missing = [p for p in paths or [] if not p.exists()]
+    if missing:
+        raise _usage_error(f"no such file or directory: {', '.join(map(str, missing))}")
+    result = lint_paths(project, paths)
+    failed = bool(result.errors) or (args.warnings_as_errors and bool(result.warnings))
+    summary = f"{len(result.files)} files: {len(result.errors)} errors, {len(result.warnings)} warnings"
+    if out.as_json:
+        print(
+            json.dumps(
+                {
+                    "ok": not failed,
+                    "files": [display_path(f) for f in result.files],
+                    "errors": len(result.errors),
+                    "warnings": len(result.warnings),
+                    "findings": [f.to_dict() for f in result.findings],
+                },
+                indent=2,
+            )
+        )
+    else:
+        for finding in result.findings:
+            print(finding.format())
+        print(summary)
+    return 1 if failed else 0
+
+
 # --- pagan palette show -----------------------------------------------------------------------
 
 
@@ -210,6 +383,29 @@ def build_parser() -> argparse.ArgumentParser:
     new_palette = new_kinds.add_parser("palette", parents=[common], help="scaffold a palette file")
     new_palette.add_argument("name", help="palette name, e.g. dusk")
     new_palette.set_defaults(handler=cmd_new_palette)
+
+    for kind, help_text in (("sprite", "scaffold a sprite"), ("tiles", "scaffold a tileset")):
+        sub = new_kinds.add_parser(kind, parents=[common], help=help_text)
+        sub.add_argument("name", help="asset name, e.g. slime")
+        sub.add_argument("--size", default="16x16", help="WIDTHxHEIGHT of one frame/tile (default 16x16)")
+        sub.add_argument("--palette", help="palette name (default: the project's default_palette)")
+        sub.add_argument("--frames", type=int, default=1, help="number of blank frames/tiles (default 1)")
+        sub.add_argument("--description", help="what the asset is; kept in the file for future reference")
+        if kind == "sprite":
+            sub.add_argument("--mirror", action="store_true", help="symmetric: author only the left half")
+            sub.add_argument("--outline", action="store_true", help="outline: auto (1px outline added by PAGAN)")
+        else:
+            sub.set_defaults(mirror=False, outline=False)
+        sub.set_defaults(handler=cmd_new_asset, kind="sprite" if kind == "sprite" else "tileset")
+
+    render = commands.add_parser("render", parents=[common], help="render assets to native-size PNGs")
+    render.add_argument("assets", nargs="+", help="asset files or names")
+    render.set_defaults(handler=cmd_render)
+
+    lint = commands.add_parser("lint", parents=[common], help="check source files for errors and style warnings")
+    lint.add_argument("paths", nargs="*", help="files or directories (default: the whole project)")
+    lint.add_argument("--warnings-as-errors", action="store_true", help="exit non-zero on warnings too")
+    lint.set_defaults(handler=cmd_lint)
 
     palette = commands.add_parser("palette", help="palette tools")
     palette_cmds = palette.add_subparsers(title="palette commands", metavar="<subcommand>", required=True)
