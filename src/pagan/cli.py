@@ -14,6 +14,7 @@ from typing import Any
 from pagan import __version__
 from pagan.asset import SPRITE_SUFFIX, TILESET_SUFFIX, Asset, load_asset_or_raise
 from pagan.findings import Finding, PaganError, display_path
+from pagan.importer import import_png, sprite_yaml
 from pagan.lint import lint_paths
 from pagan.palette import NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
@@ -376,6 +377,76 @@ def cmd_lint(args: argparse.Namespace, out: Output) -> int:
     return 1 if failed else 0
 
 
+# --- pagan import -----------------------------------------------------------------------------
+
+
+def cmd_import(args: argparse.Namespace, out: Output) -> int:
+    from PIL import Image, UnidentifiedImageError
+
+    source = Path(args.png)
+    project = discover_project()
+    try:
+        image = Image.open(source)
+        image.load()
+    except (OSError, UnidentifiedImageError) as exc:
+        raise _usage_error(f"can't read image: {exc}", source) from None
+
+    palette: Palette | None = None
+    palette_name: str | None = args.palette
+    if not args.open:
+        palette_name = palette_name or project.config.default_palette
+        if palette_name is None and project.config.palette_mode == "strict" and project.config_path is not None:
+            raise _usage_error("no --palette given and pagan.toml has no default_palette (or pass --open)")
+        if palette_name is not None:
+            palette = project.load_palette(palette_name)
+
+    name = args.name or re.sub(r"[^a-z0-9_-]+", "_", source.stem.lower()).strip("_") or "imported"
+    if not NAME_RE.match(name):
+        raise _usage_error(f"invalid name {name!r}: pass --name")
+    if args.scale is not None and args.scale < 1:
+        raise _usage_error("--scale must be at least 1")
+    rows, inline, report = import_png(
+        image, palette=palette, scale=args.scale, alpha_threshold=args.alpha_threshold, max_colors=args.max_colors
+    )
+    if not rows or not rows[0]:
+        raise _usage_error("image is empty after downscaling")
+
+    path = Path(args.out) if args.out else project.sprites_dir / f"{name}{SPRITE_SUFFIX}"
+    if path.exists() and not args.force:
+        raise _usage_error("file already exists (pass --force to overwrite)", path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(sprite_yaml(name, rows, palette_name if palette else None, inline, source), encoding="utf-8")
+
+    w, h = report.size
+    out.say(f"imported {display_path(source)} -> {display_path(path)}")
+    out.say(f"  size: {report.source_size[0]}x{report.source_size[1]}, scale {report.scale} -> {w}x{h}, {report.opaque_pixels} opaque pixels")
+    if palette is not None:
+        out.say(
+            f"  snapped {report.source_colors} colors to palette {palette_name!r}: {report.changed_pixels} pixels changed, "
+            f"worst color distance {report.max_distance:.3f} (OKLab; <0.02 is invisible, >0.1 is obvious)"
+        )
+        for src, (key, d) in sorted(report.mapping.items(), key=lambda item: -item[1][1]):
+            if d > 0:
+                out.say(f"    {src} -> {key!r} ({palette.colors[key].hex}, distance {d:.3f})")
+    else:
+        reduced = f", reduced from {report.reduced_from} ({report.changed_pixels} pixels changed)" if report.reduced_from else ""
+        out.say(f"  inline palette with {len(inline or {})} colors{reduced}")
+    out.result(
+        {
+            "created": display_path(path),
+            "name": name,
+            "scale": report.scale,
+            "size": [w, h],
+            "source_colors": report.source_colors,
+            "changed_pixels": report.changed_pixels,
+            "max_distance": round(report.max_distance, 4),
+            "mapping": {k: {"key": v[0], "distance": v[1]} for k, v in report.mapping.items()},
+            "palette": palette_name if palette else None,
+        }
+    )
+    return 0
+
+
 # --- pagan palette show -----------------------------------------------------------------------
 
 
@@ -464,6 +535,18 @@ def build_parser() -> argparse.ArgumentParser:
     render = commands.add_parser("render", parents=[common], help="render assets to native-size PNGs")
     render.add_argument("assets", nargs="+", help="asset files or names")
     render.set_defaults(handler=cmd_render)
+
+    imp = commands.add_parser("import", parents=[common], help="convert a PNG into a sprite source file")
+    imp.add_argument("png", help="image to import")
+    imp.add_argument("--palette", help="snap colors to this palette (default: the project's default_palette)")
+    imp.add_argument("--open", action="store_true", help="keep the image's own colors as an inline palette")
+    imp.add_argument("--scale", type=int, help="upscale factor to undo (default: detect)")
+    imp.add_argument("--alpha-threshold", type=int, default=128, help="alpha below this is transparent (default 128)")
+    imp.add_argument("--max-colors", type=int, default=32, help="open mode: reduce to at most this many colors (max 62)")
+    imp.add_argument("--name", help="asset name (default: from the file name)")
+    imp.add_argument("--out", help="output path (default: sprites/<name>.sprite.yaml)")
+    imp.add_argument("--force", action="store_true", help="overwrite an existing file")
+    imp.set_defaults(handler=cmd_import)
 
     view = argparse.ArgumentParser(add_help=False)
     view.add_argument("--scale", type=int, help="pixel scale (default: automatic, about 256px per frame)")

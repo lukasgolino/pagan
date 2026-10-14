@@ -385,7 +385,7 @@ scope to shift as we go.
   and judge it. Demonstrate by drawing **3 test sprites** in `examples/demo/` (one item, one creature with
   an idle animation, one tile) and iterating on them with the owner.
 
-### ☐ Milestone 4 — Variants, tilesets, import
+### ☑ Milestone 4 — Variants, tilesets, import
 - `variants` (key_swap, ramp_swap), tileset format + atlas + JSON manifest, `import` (snap-to-palette and open-mode extraction, with a change report).
 - **Done when:** a variant renders correctly, a 4-tile tileset builds into an atlas with correct coordinates,
   and importing a deliberately off-palette PNG produces a clean sprite file plus a report.
