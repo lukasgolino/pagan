@@ -48,6 +48,17 @@ See `examples/demo/` for an example project (palettes, a potion, a slime, meadow
 8-heading 3D ship) and `examples/godot/` for the Godot project it builds into: open it in Godot 4.7 and
 press Play.
 
+## Using PAGAN with Claude
+
+PAGAN ships a Claude skill that teaches an agent the whole workflow: setting up a game's art folder,
+asking the right questions, drawing/modelling, looking at previews, and changing the look over time.
+
+```sh
+pagan skill install          # copies it to <repo>/.claude/skills/pagan/
+```
+
+Then just ask: "I'm making a naval exploration game; make the player's ship, three masts, 8 headings."
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

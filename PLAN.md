@@ -432,7 +432,7 @@ Game art is made over months, with style changes along the way ("darker", "more 
   palette (every asset follows; models re-render). `pagan style bump "note"`: flags older assets (W006).
   `pagan mark --current/--status approved`: record reviews. `pagan gallery`: check the whole set together.
 
-### ☐ Milestone 6 — The Claude skill (how to use PAGAN)
+### ☑ Milestone 6 — The Claude skill (how to use PAGAN)
 - **Priority note:** this skill is *required* before PAGAN is used to build assets for a real game.
   Everything in §12 can wait; this cannot.
 - Write a Claude skill that ships with PAGAN (e.g. `pagan init` can drop `.claude/skills/make-asset/SKILL.md`
@@ -445,6 +445,7 @@ Game art is made over months, with style changes along the way ("darker", "more 
 - Also document the PAGAN notation itself concisely enough to fit in an agent's context (a "language reference").
 - Base it on what actually happened in Milestones 3–5, not on guesses.
 - **Done when:** a fresh agent given only "make a wooden barrel prop" in the demo project produces a lint-clean, on-style asset.
+  *(Done 2026-10-14: a fresh agent made `examples/demo/sprites/barrel.sprite.yaml` from the skill alone; its feedback was folded back into the skill and tool.)*
 
 ---
 
