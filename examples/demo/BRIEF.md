@@ -21,6 +21,8 @@ the way. Agents read this (with STYLE.md) before making or changing any asset, a
 - **Sailor** (`models/sailor.model.yaml`): deckhand, 32x32, 8 headings, 4-frame walk (legs/arms swing,
   body stays put).
 - **Slime** (`sprites/slime.sprite.yaml`): green enemy, 16x16, symmetric, 2-frame idle squash.
+- **Barrel** (`sprites/barrel.sprite.yaml`): oak barrel prop with iron hoops, 16x16, one view (made by a
+  fresh agent from just "make a wooden barrel prop" and the skill, as PAGAN's Milestone 6 test).
 - **Potion** (`sprites/potion.sprite.yaml`): red health potion item, 16x16.
 - **Meadow** (`tiles/meadow.tiles.yaml`): island grass tiles, 16x16, seamless.
 
@@ -32,7 +34,7 @@ the way. Agents read this (with STYLE.md) before making or changing any asset, a
 
 ## Done
 
-- Player ship, sailor, slime, potion, meadow tiles (style v1)
+- Player ship, sailor, slime, potion, barrel, meadow tiles (style v1)
 
 ## Decisions and feedback log
 

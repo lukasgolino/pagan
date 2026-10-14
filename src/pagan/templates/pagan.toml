@@ -38,6 +38,8 @@ max_ramps_per_sprite = 3
 # W007: warn when more than this share of pixels changes between consecutive animation frames,
 # even after allowing the whole sprite to move by up to 2px. Keeps animations free of jumps.
 max_frame_change = 0.4
+# W008: most shades an asset may use from one ramp (0 = no limit), e.g. 3 for "3 steps per material".
+max_ramp_steps = 0
 # Warning rule ids to turn off, e.g. ["W001"].
 disable = []
 # Require `outline: auto` on every sprite.

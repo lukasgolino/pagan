@@ -32,6 +32,8 @@ shadows = true
 [lint]
 # W003: warn when a sprite uses colors from more than this many ramps.
 max_ramps_per_sprite = 3
+# W008: most shades an asset may use from one ramp (STYLE.md: 3 for sprites, up to 4 for models).
+max_ramp_steps = 4
 # Rule ids to turn off, e.g. ["W001"].
 disable = []
 # Require `outline: auto` on every sprite.

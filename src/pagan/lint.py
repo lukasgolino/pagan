@@ -18,6 +18,7 @@ WARNING_RULES = {
     "W005": "animation jitter",
     "W006": "made under an older style version",
     "W007": "too much change between animation frames",
+    "W008": "too many shades from one ramp",
 }
 
 
@@ -157,6 +158,23 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
                     f"animations.{anim.name}",
                 )
             )
+
+    max_steps = project.config.lint.max_ramp_steps
+    if max_steps and asset.kind != "model":  # models are checked per material when they're parsed
+        used = {c for grid in asset.base_frames.values() for row in grid for c in row if c != TRANSPARENT}
+        for ramp in ramps:
+            steps = [k for k in asset.palette.ramps[ramp] if k in used]
+            if len(steps) > max_steps:
+                findings.append(
+                    Finding(
+                        "W008",
+                        f"uses {len(steps)} shades of ramp {ramp!r} ({', '.join(steps)}); the project allows "
+                        f"{max_steps} per material (STYLE.md shading rules)",
+                        asset.path,
+                        None,
+                        "palette",
+                    )
+                )
 
     limit_change = project.config.lint.max_frame_change
     for anim in asset.animations.values():

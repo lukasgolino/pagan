@@ -54,6 +54,7 @@ class VoxelModel:
     groups: dict[Cell, str] = field(default_factory=dict)  # cell -> part id (for poses)
     normals: dict[Cell, Vec] = field(default_factory=dict)  # exact normals from shapes that know them (sails)
     parts: dict[Cell, int] = field(default_factory=dict)  # cell -> index of the part that made it (no self-shadowing)
+    hidden_by_default: set[str] = field(default_factory=set)  # part ids only shown by poses that `show` them
 
     def bounds(self) -> tuple[Cell, Cell]:
         xs = [c[0] for c in self.voxels]

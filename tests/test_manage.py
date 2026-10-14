@@ -131,3 +131,10 @@ def test_cli_status_json(proj: Project, capsys: pytest.CaptureFixture[str]) -> N
     main(["status", "--json"])
     data = json.loads(capsys.readouterr().out)
     assert data["assets"][0]["needs"] == ["describe"] and data["assets"][1]["needs"][0] == "review for style v2"
+
+
+def test_status_outside_a_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / "empty").mkdir()
+    monkeypatch.chdir(tmp_path / "empty")
+    assert main(["status"]) == 1
+    assert "no pagan.toml" in capsys.readouterr().out

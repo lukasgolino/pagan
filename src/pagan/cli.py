@@ -325,8 +325,10 @@ def cmd_bake(args: argparse.Namespace, out: Output) -> int:
     for frame, grid in asset.frames.items():
         lines.append(f"  {frame}: |")
         lines.extend(f"    {row}" for row in grid)
-    lines.append("animations:")
-    for anim in asset.animations.values():
+    trivial = all(a.frames == (a.name,) for a in asset.animations.values()) and len(asset.frames) == 1
+    if not trivial:
+        lines.append("animations:")
+    for anim in asset.animations.values() if not trivial else []:
         lines.append(
             f"  {anim.name}: {{ frames: [{', '.join(anim.frames)}], fps: {anim.fps:g}, loop: {'true' if anim.loop else 'false'} }}"
         )
@@ -612,6 +614,11 @@ def cmd_import(args: argparse.Namespace, out: Output) -> int:
 
 def cmd_status(args: argparse.Namespace, out: Output) -> int:
     project = project_for([args.project] if args.project else [])
+    if project.config_path is None:
+        raise _usage_error(
+            f"no {CONFIG_NAME} found here or in any parent directory: this isn't a PAGAN project yet "
+            "(run `pagan init <dir>`, or cd into the art folder)"
+        )
     entries = catalogue(project)
     current = project.config.style_version
     if out.as_json:
@@ -902,7 +909,9 @@ def build_parser() -> argparse.ArgumentParser:
     preview.add_argument("assets", nargs="+", help="asset files or names")
     preview.set_defaults(handler=cmd_preview)
 
-    gallery_cmd = commands.add_parser("gallery", parents=[common, view], help="every asset side by side in one image")
+    gallery_cmd = commands.add_parser(
+        "gallery", parents=[common, view], help="every asset side by side at one common scale (default: largest ~192px)"
+    )
     gallery_cmd.add_argument("--out", help="output PNG path (default: <previews>/gallery.png)")
     gallery_cmd.set_defaults(handler=cmd_gallery)
 

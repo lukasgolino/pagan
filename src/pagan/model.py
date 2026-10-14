@@ -144,8 +144,8 @@ class _Builder:
                 continue
             shape = next(k for k in part if k in PART_TYPES)
             for key in part:
-                if key not in (shape, "id", "mirror", "carve"):
-                    self.error("E013", f"unknown part field {key!r}; allowed: {shape}, id, mirror, carve", pline, where)
+                if key not in (shape, "id", "mirror", "carve", "hidden"):
+                    self.error("E013", f"unknown part field {key!r}; allowed: {shape}, id, mirror, carve, hidden", pline, where)
             spec = part[shape]
             if not isinstance(spec, dict):
                 self.error("E013", f"{shape} needs a mapping of options", pline, where)
@@ -162,6 +162,12 @@ class _Builder:
             if not isinstance(carve, bool):
                 self.error("E013", "carve must be true or false", pline, where)
                 continue
+            hidden = part.get("hidden", False)
+            if not isinstance(hidden, bool) or (hidden and part_id is None):
+                self.error("E013", "hidden: true needs an id (poses reveal it with show: [id])", pline, where)
+                continue
+            if hidden and part_id is not None:
+                self.model.hidden_by_default.add(part_id)
             self.pending_normals = {}
             cells = getattr(self, f"_{shape}")(spec, pline, f"{where}.{shape}")
             if cells is None:
@@ -456,9 +462,13 @@ class _Builder:
 
 
 def _parse_poses(
-    raw: Any, line: int | None, ids: set[str], error: ErrorFn
+    raw: Any, line: int | None, ids: set[str], error: ErrorFn, hidden_by_default: set[str] | None = None
 ) -> dict[str, tuple[float, bool, list[tuple[dict[str, Cell], set[str]]]]]:
-    """animations: { name: { fps, loop, poses: [ { part_id: { offset: [dx,dy,dz] }, hide: [ids] }, ... ] } }"""
+    """animations: { name: { fps, loop, poses: [ { part_id: { offset: [...] }, hide: [ids], show: [ids] } ] } }
+
+    Each pose's hidden set = parts hidden by default, minus `show`, plus `hide`.
+    """
+    hidden_by_default = hidden_by_default or set()
     out: dict[str, tuple[float, bool, list[tuple[dict[str, Cell], set[str]]]]] = {}
     if raw is None:
         return out
@@ -485,13 +495,16 @@ def _parse_poses(
                 error("E013", f"poses[{index}] must be a mapping of part id -> {{ offset: [dx, dy, dz] }}", aline, where)
                 break
             offsets: dict[str, Cell] = {}
-            hidden: set[str] = set()
+            hide: set[str] = set()
+            show: set[str] = set()
             for part_id, change in pose.items():
-                if part_id == "hide":
+                if part_id in ("hide", "show"):
                     if not isinstance(change, list) or not all(c in ids for c in change):
-                        error("E013", f"poses[{index}].hide must list part ids ({', '.join(sorted(ids)) or 'none defined'})", aline, where)
+                        error("E013", f"poses[{index}].{part_id} must list part ids ({', '.join(sorted(ids)) or 'none defined'})", aline, where)
+                    elif part_id == "hide":
+                        hide = set(change)
                     else:
-                        hidden = set(change)
+                        show = set(change)
                     continue
                 if part_id not in ids:
                     error("E013", f"poses[{index}]: unknown part id {part_id!r} (ids: {', '.join(sorted(ids)) or 'none'})", aline, where)
@@ -501,7 +514,7 @@ def _parse_poses(
                     error("E013", f"poses[{index}].{part_id} needs offset: [dx, dy, dz] in whole voxels", aline, where)
                     continue
                 offsets[part_id] = (offset[0], offset[1], offset[2])
-            poses.append((offsets, hidden))
+            poses.append((offsets, (hidden_by_default - show) | hide))
         out[name] = (float(fps), loop, poses)
     return out
 
@@ -596,12 +609,28 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
 
     camera, light = _camera_and_light(project, data, error)
     materials = _parse_materials(data.get("materials"), palette, _line(data, "materials"), error)
+    max_steps = project.config.lint.max_ramp_steps
+    if max_steps:
+        for material in materials.values():
+            if len(material.keys) > max_steps:
+                findings.append(
+                    Finding(
+                        "W008",
+                        f"material {material.name!r} has {len(material.keys)} shades; the project allows {max_steps} "
+                        "per material (STYLE.md shading rules)",
+                        path,
+                        _line(data["materials"], material.name),
+                        f"materials.{material.name}",
+                    )
+                )
     model = VoxelModel()
     if materials:
         _Builder(model, error, materials).build(data.get("parts"), _line(data, "parts"))
         if not model.voxels and not has_errors(findings):
             error("E013", "the model has no voxels (everything was carved away?)", _line(data, "parts"), "parts")
-    poses = _parse_poses(data.get("animations"), _line(data, "animations"), set(model.groups.values()), error)
+    poses = _parse_poses(
+        data.get("animations"), _line(data, "animations"), set(model.groups.values()), error, model.hidden_by_default
+    )
 
     origin_raw = data.get("origin")
     origin: tuple[float, float, float] | None = None
@@ -622,7 +651,7 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
     jobs: list[tuple[str, float, dict[str, Cell], set[str]]] = []
     animations: dict[str, Animation] = {}
     for direction_name, angle in heading_angles(directions, float(heading)):
-        jobs.append((direction_name, angle, {}, set()))
+        jobs.append((direction_name, angle, {}, set(model.hidden_by_default)))
         animations[direction_name] = Animation(direction_name, (direction_name,), 1.0, True)
         for anim_name, (fps, loop, pose_list) in poses.items():
             frame_names = []

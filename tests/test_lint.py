@@ -117,3 +117,10 @@ def test_w007_big_frame_change(project: Project) -> None:
     path.write_text(text)
     findings = [f for f in lint_paths(project, [path]).findings if f.rule == "W007"]
     assert [f.where for f in findings] == ["animations.bad"]
+
+
+def test_w008_too_many_shades_from_one_ramp(tmp_path: Path) -> None:
+    (tmp_path / "p").mkdir()
+    project = make_project(tmp_path / "p", 'default_palette = "test"\n[lint]\nmax_ramp_steps = 1\n')
+    assert lint_one(project, "name: thing\nsize: [2, 1]\nframes:\n  a: |\n    12\n") == ["W008"]
+    assert lint_one(project, "name: thing\nsize: [2, 1]\nframes:\n  a: |\n    11\n") == []

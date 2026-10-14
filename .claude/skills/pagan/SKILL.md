@@ -13,7 +13,7 @@ builds engine-ready assets (PNG sheets, manifest.json, Godot SpriteFrames). Full
 ## 0. Setup check
 
 1. `pagan --version`. If missing: `pip install -e <path to the PAGAN repo>` (into the project's venv).
-2. Find the art project: `pagan status` from the repo root, or look for `pagan.toml`
+2. Find the art project: `pagan status` (it says so if there's no `pagan.toml` here or above), or look for one
    (`find . -name pagan.toml -not -path '*/node_modules/*'`). That folder is the game's **art home**:
    - `BRIEF.md` - what the game is, its key assets, the wishlist, and a dated feedback log
    - `STYLE.md` - how the art must look, with a versioned changelog
@@ -57,7 +57,8 @@ directions, which animations. Start with ONE asset and get it approved before ma
   vehicles, top-down characters that turn), props seen at angles, buildings. Headings come out
   consistent automatically and share the project light. Animate with poses (parts move by whole voxels).
 - **2D sprite** (`pagan new sprite`) for icons, UI, items, front/side-view characters, effects, and
-  anything flat. Use `mirror: horizontal` for symmetric subjects, derived frames (`from`/`flip`/`shift`)
+  anything flat. Also for **small props that need one view** (a 16px barrel, crate, potion): at 1 voxel
+  per pixel a tiny model has too few voxels to read, so hand-draw it (or `pagan bake` a model and touch it up). Use `mirror: horizontal` for symmetric subjects, derived frames (`from`/`flip`/`shift`)
   to avoid redrawing.
 - **Tileset** (`pagan new tiles`) for terrain; tiles must be seamless.
 
@@ -72,8 +73,14 @@ directions, which animations. Start with ONE asset and get it approved before ma
    consistent with the other assets' size and detail? For animations: the "changes" row should only
    light up the parts that are meant to move - no jumps.
 6. Show the owner: the sheet path (and GIF paths), a one-line summary, and any choice you made.
+   If the owner isn't around, leave it `status: draft`, note it in BRIEF.md (wishlist: "awaiting review")
+   with the choices and open questions, and move on.
 7. On approval: `pagan mark <name> --status approved`, add it to BRIEF.md "Done" (and log feedback),
    `pagan build` (add `--verify-godot` if GODOT is set).
+
+**Trying alternatives:** asset names must be unique across sprites, tiles and models, so give
+experiments their own names (`barrel_a`, `barrel_b`, or `pagan bake <model> --name <other>`), compare them
+in `pagan gallery`, then delete the losers and keep the winner under the real name.
 
 ## 3. Follow-up requests on existing assets
 

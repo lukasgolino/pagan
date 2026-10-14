@@ -22,8 +22,8 @@ frames:
     ..dee0ef
     .ddee0ee
     .ddeeeee
-    .cddddee
-    ..cccddd
+    .dddddee
+    ..dddddd
     ........
     ........
   idle_1: |
@@ -39,8 +39,8 @@ frames:
     .deeffff
     .ddee0ef
     .ddee0ee
-    .cddeeee
-    .ccccddd
+    .dddeeee
+    .ddddddd
     ........
     ........
 animations:

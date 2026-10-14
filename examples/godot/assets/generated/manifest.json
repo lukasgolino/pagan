@@ -1,5 +1,47 @@
 {
   "assets": {
+    "barrel": {
+      "animations": {
+        "main": {
+          "fps": 1.0,
+          "frames": [
+            "main"
+          ],
+          "loop": true
+        }
+      },
+      "description": "Wooden barrel prop: upright oak barrel, top-down 3/4 view. Planked lid seen from above, slightly bulging body with vertical stave seams, two dark iron hoops that curve with the body. Light from the top-left; static, no ground shadow.",
+      "frames": {
+        "main": [
+          0,
+          0,
+          16,
+          16
+        ]
+      },
+      "godot_offset": [
+        0.0,
+        -6.0
+      ],
+      "godot_sprite_frames": "res://assets/generated/sprites/barrel.tres",
+      "kind": "sprite",
+      "palette": "ember",
+      "pivot": [
+        8,
+        14
+      ],
+      "sheet": "res://assets/generated/sprites/barrel.png",
+      "size": [
+        16,
+        16
+      ],
+      "status": "draft",
+      "style_version": 1,
+      "tags": [
+        "prop"
+      ],
+      "variants": {}
+    },
     "meadow": {
       "columns": 4,
       "description": "Overworld grass. Tiles must tile seamlessly with themselves and each other (check the 3x3 preview).",
@@ -966,6 +1008,8 @@
     }
   },
   "files": [
+    "sprites/barrel.png",
+    "sprites/barrel.tres",
     "sprites/potion.png",
     "sprites/potion.tres",
     "sprites/sailor.png",

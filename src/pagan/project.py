@@ -24,6 +24,7 @@ PaletteMode = Literal["strict", "open"]
 class LintConfig:
     max_ramps_per_sprite: int = 3
     max_frame_change: float = 0.4  # W007: share of pixels that may change between animation frames
+    max_ramp_steps: int = 0  # W008: most keys an asset may use from one ramp (0 = no limit)
     disable: tuple[str, ...] = ()
     require_outline: bool = False
 
@@ -191,7 +192,7 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
     if not isinstance(data, dict):
         error("[lint] must be a table", "lint")
         return defaults
-    allowed = ("max_ramps_per_sprite", "max_frame_change", "disable", "require_outline")
+    allowed = ("max_ramps_per_sprite", "max_frame_change", "max_ramp_steps", "disable", "require_outline")
     for key in data:
         if key not in allowed:
             error(f"unknown lint setting {key!r}; allowed: {', '.join(allowed)}", f"lint.{key}")
@@ -206,6 +207,11 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
         error("max_frame_change must be a number between 0 and 1", "lint.max_frame_change")
         max_change = defaults.max_frame_change
 
+    max_steps = data.get("max_ramp_steps", defaults.max_ramp_steps)
+    if isinstance(max_steps, bool) or not isinstance(max_steps, int) or max_steps < 0:
+        error("max_ramp_steps must be 0 (no limit) or a positive integer", "lint.max_ramp_steps")
+        max_steps = defaults.max_ramp_steps
+
     disable = data.get("disable", [])
     if not isinstance(disable, list) or not all(isinstance(r, str) and re.fullmatch(r"W\d{3}", r) for r in disable):
         error('disable must be a list of warning rule ids, e.g. ["W001"] (errors can\'t be disabled)', "lint.disable")
@@ -219,6 +225,7 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
     return LintConfig(
         max_ramps_per_sprite=max_ramps,
         max_frame_change=float(max_change),
+        max_ramp_steps=max_steps,
         disable=tuple(disable),
         require_outline=require_outline,
     )

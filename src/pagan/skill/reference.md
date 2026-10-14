@@ -109,6 +109,9 @@ parts:                        # applied in order; later parts overwrite earlier 
     id: pennant               # names the part for poses
     mirror: true              # also add the reflection across y = 0
     carve: false              # true removes voxels instead of adding them
+  - line: { from: [2, -4, 10], to: [8, -4, 16], material: steel }
+    id: sword
+    hidden: true              # not in the static frames; poses reveal it with `show: [sword]`
 animations:                   # one pose per frame; parts move by whole voxels (consistent frames)
   sail:
     fps: 6
@@ -116,12 +119,16 @@ animations:                   # one pose per frame; parts move by whole voxels (
     poses:
       - {}
       - { pennant: { offset: [0, 1, 0] } }
-      - { hide: [pennant] }
+      - { hide: [pennant] }                     # hide: take parts away for this frame
+      - { show: [sword], sword: { offset: [1, 0, -2] } }   # show: reveal hidden parts
 variants: ...                 # as for sprites
 ```
 
 Coordinates: x = the model's front, y = its left, z = up; whole voxels (1 voxel = `camera.scale`
-pixels). Heading 0 shows the front pointing right ("e"), 90 away from the camera ("n"), 270 towards it.
+pixels). Sizes count voxels: `cylinder` `height: 3` is 3 layers; `radius: 0` is 1 voxel wide, `radius: r` is
+about 2r+1 wide; `box` corners are inclusive (`from: [0,0,0], to: [0,0,0]` is one voxel).
+Pivot: from above at elevation e, the front of a round base sits about r·sin(e) pixels *below* the origin,
+so put the pivot a few pixels above the frame's bottom (E007 tells you if the outline would be clipped). Heading 0 shows the front pointing right ("e"), 90 away from the camera ("n"), 270 towards it.
 `top:` gives a shape's top layer another material; `rim:` adds a 1-voxel wall around its top edge.
 `box` is inclusive of both corners. Frames: `<heading>` (static) and `<anim>_<heading>_<i>`;
 animations `<heading>` and `<anim>_<heading>` (1 direction: `main`, `<anim>_<i>`, `<anim>`).
@@ -155,7 +162,8 @@ animations:
 ```
 
 Tips: keep hats/brims small (from above they hide the face); give the back of the head hair; a sword
-swing is a `sword` part posed through 3-5 offsets (or several sword parts shown one per pose with `hide`).
+swing: make the sword `hidden: true` so idle frames don't have it, then `show` it in the swing poses; for
+big arcs use several sword parts (`sword_up`, `sword_mid`, `sword_down`, all hidden) and show one per pose.
 
 **Ship / vehicle.** `hull` with `top:` deck and `rim:` rail, `box` castles, `cylinder` masts, `sail`s
 braced ~30° so they read from every heading, `line` for spars, flags as small boxes with an `id` to animate.
@@ -185,6 +193,7 @@ shadows = true
 [lint]
 max_ramps_per_sprite = 3           # W003
 max_frame_change = 0.4             # W007
+max_ramp_steps = 0                 # W008: most shades per ramp/material (0 = no limit)
 disable = []                       # warning ids only
 require_outline = false            # E011
 ```
@@ -220,7 +229,8 @@ E009 inline palette in strict mode, E010 derived frame, E011 outline required, E
 E013 model problem.
 
 Warnings: W001 orphan pixel, W002 unused frame, W003 too many ramps, W004 empty frame, W005 visible area
-jumps between frames, W006 made under an older style version, W007 too much change between frames.
+jumps between frames, W006 made under an older style version, W007 too much change between frames,
+W008 too many shades from one ramp (sprites) / in one material (models), when `max_ramp_steps` is set.
 
 ## Godot
 

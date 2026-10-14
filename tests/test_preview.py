@@ -70,6 +70,11 @@ def test_write_previews(tmp_path: Path) -> None:
         assert gif.size == (36, 36)
 
 
-def test_gallery_includes_variants() -> None:
-    image = gallery([bug()], PreviewOptions(), "test")
-    assert image.width > 0 and image.height > 0
+def test_gallery_includes_every_kind() -> None:
+    project = load_project(GOLDEN)
+    crate = load_asset_or_raise(GOLDEN / "models" / "crate.model.yaml", project)
+    turf = load_asset_or_raise(GOLDEN / "tiles" / "turf.tiles.yaml", project)
+    with_model = gallery([bug(), crate, turf], PreviewOptions(), "test")
+    without = gallery([bug(), turf], PreviewOptions(scale=4), "test")
+    assert with_model.height > without.height  # the model gets its own row
+    assert gallery([bug()], PreviewOptions(), "test").width > 0

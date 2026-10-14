@@ -224,9 +224,9 @@ def gallery(assets: list[Asset], options: PreviewOptions, title: str) -> Image.I
     if not assets:
         return _labelled_grid(title, "no assets", [])
     biggest = max(max(a.size) for a in assets)
-    scale = options.scale or max(1, min(8, 128 // biggest))
+    scale = options.scale or max(2, min(8, 192 // biggest))  # common scale, so relative sizes stay true
     rows: list[tuple[str, list[tuple[str, Image.Image]]]] = []
-    for kind, heading in (("sprite", "sprites"), ("tileset", "tilesets")):
+    for kind, heading in (("model", "3D models"), ("sprite", "sprites"), ("tileset", "tilesets")):
         cells = []
         for asset in sorted((a for a in assets if a.kind == kind), key=lambda a: a.name):
             first = next(iter(asset.frames))
