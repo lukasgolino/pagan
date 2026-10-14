@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -10,11 +11,11 @@ Severity = Literal["error", "warning"]
 
 
 def display_path(path: Path) -> str:
-    """Show a path relative to the working directory when it's inside it."""
+    """Show a path relative to the working directory (with ../ when needed); absolute if on another drive."""
     try:
-        return str(path.resolve().relative_to(Path.cwd().resolve()))
+        return os.path.relpath(path.resolve(), Path.cwd().resolve())
     except ValueError:
-        return str(path)
+        return str(path.resolve())
 
 
 @dataclass(frozen=True)

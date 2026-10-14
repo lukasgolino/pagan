@@ -14,6 +14,8 @@ from typing import Any
 from pagan import __version__
 from pagan.asset import MODEL_SUFFIX, SPRITE_SUFFIX, TILESET_SUFFIX, Asset, load_asset_or_raise
 from pagan.findings import Finding, PaganError, display_path
+from pagan.build import build
+from pagan.exporters.godot import find_godot_binary, res_path, verify_with_godot
 from pagan.importer import import_png, sprite_yaml
 from pagan.lint import lint_paths
 from pagan.palette import NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
@@ -480,6 +482,56 @@ def cmd_lint(args: argparse.Namespace, out: Output) -> int:
     return 1 if failed else 0
 
 
+# --- pagan build ------------------------------------------------------------------------------
+
+
+def cmd_build(args: argparse.Namespace, out: Output) -> int:
+    project = project_for([args.project] if args.project else [])
+    if project.config_path is None:
+        raise _usage_error(f"no {CONFIG_NAME} found; `pagan build` needs a project (run `pagan init`)")
+    result = build(project)
+    if result.errors:
+        out.failure(result.errors)
+        if not out.as_json:
+            print("build failed: fix the errors above (`pagan lint` shows warnings too)")
+        return 1
+    warnings = result.lint.warnings
+    out.say(f"built {len(result.lint.assets)} assets into {display_path(project.output_dir)}")
+    out.say(f"  {len(result.written)} files written, {len(result.unchanged)} unchanged, {len(result.removed)} stale removed")
+    if warnings:
+        out.say(f"  {len(warnings)} lint warnings (run `pagan lint` to see them)")
+    verified: bool | None = None
+    if args.verify_godot:
+        godot = find_godot_binary()
+        if result.godot_root is None or result.manifest is None:
+            raise _usage_error('--verify-godot needs export = ["godot"] in pagan.toml')
+        if godot is None:
+            raise _usage_error("--verify-godot: no Godot binary found; set GODOT=/path/to/godot or put godot on PATH")
+        check = verify_with_godot(godot, result.godot_root, res_path(result.manifest, result.godot_root))
+        verified = check.ok
+        if check.ok:
+            out.say("  Godot: every generated resource loads")
+        else:
+            if out.as_json:
+                out.failure([Finding("E000", "Godot failed to load generated resources:\n" + check.output[-3000:])])
+            else:
+                print(check.output[-3000:])
+                print("Godot verification FAILED")
+            return 1
+    out.result(
+        {
+            "output_dir": display_path(project.output_dir),
+            "assets": len(result.lint.assets),
+            "written": [display_path(p) for p in result.written],
+            "unchanged": len(result.unchanged),
+            "removed": [display_path(p) for p in result.removed],
+            "warnings": len(warnings),
+            "godot_verified": verified,
+        }
+    )
+    return 0
+
+
 # --- pagan import -----------------------------------------------------------------------------
 
 
@@ -653,6 +705,11 @@ def build_parser() -> argparse.ArgumentParser:
     render = commands.add_parser("render", parents=[common], help="render assets to native-size PNGs")
     render.add_argument("assets", nargs="+", help="asset files or names")
     render.set_defaults(handler=cmd_render)
+
+    build_cmd = commands.add_parser("build", parents=[common], help="lint, then write final assets to output_dir")
+    build_cmd.add_argument("project", nargs="?", help="project directory (default: the one containing the cwd)")
+    build_cmd.add_argument("--verify-godot", action="store_true", help="load every generated resource in headless Godot")
+    build_cmd.set_defaults(handler=cmd_build)
 
     imp = commands.add_parser("import", parents=[common], help="convert a PNG into a sprite source file")
     imp.add_argument("png", help="image to import")

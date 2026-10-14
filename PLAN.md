@@ -405,7 +405,7 @@ drawing every heading by hand is slow and the rotations drift apart. So PAGAN ge
 - `pagan bake <model>` writes a regular `.sprite.yaml` for hand touch-ups when needed.
 - 2D sprites stay first-class for icons, UI and anything flat.
 
-### ☐ Milestone 5 — Build + Godot exporter
+### ☑ Milestone 5 — Build + Godot exporter
 - `pagan build` outputs into the configured output dir:
   - one spritesheet PNG per sprite (frames in a grid, deterministic order),
   - tileset atlases,

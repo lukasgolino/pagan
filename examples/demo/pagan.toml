@@ -8,13 +8,26 @@ palette_mode = "strict"
 default_palette = "ember"
 
 # Where `pagan build` writes final assets, e.g. your game engine's asset folder.
-output_dir = "build"
+output_dir = "../godot/assets/generated"
 
 # Scratch output from `pagan render` / `pagan preview`. Keep it out of version control.
 preview_dir = "previews"
 
 # What `pagan build` produces: "png" (sprite sheets + manifest.json), "godot" (SpriteFrames .tres).
-export = ["png"]
+export = ["png", "godot"]
+
+# Bump when STYLE.md changes in a way that means existing art should be revisited (lint W006).
+style_version = 1
+
+# 3D models are rendered with this camera and light, shared by the whole project.
+[camera]
+elevation = 42      # degrees above the horizon: 90 = straight down, ~30-50 = top-down 3/4 view
+scale = 1           # pixels per voxel
+
+[light]
+direction = [-0.5, 0.45, 0.75]   # towards the light: x right, y up the screen, z up (top-left)
+ambient = 0.2                    # brightness of unlit surfaces (0-1); lower = darker shadows
+shadows = true
 
 [lint]
 # W003: warn when a sprite uses colors from more than this many ramps.

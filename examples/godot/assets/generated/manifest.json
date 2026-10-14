@@ -1,0 +1,563 @@
+{
+  "assets": {
+    "meadow": {
+      "columns": 4,
+      "description": "Overworld grass. Tiles must tile seamlessly with themselves and each other (check the 3x3 preview).",
+      "frames": {
+        "grass": [
+          0,
+          0,
+          16,
+          16
+        ],
+        "grass_b": [
+          32,
+          0,
+          16,
+          16
+        ],
+        "grass_flowers": [
+          16,
+          0,
+          16,
+          16
+        ]
+      },
+      "kind": "tileset",
+      "palette": "ember",
+      "sheet": "res://assets/generated/tiles/meadow.png",
+      "size": [
+        16,
+        16
+      ],
+      "status": "draft",
+      "style_version": 1,
+      "tags": [
+        "terrain",
+        "overworld"
+      ],
+      "variants": {}
+    },
+    "potion": {
+      "animations": {
+        "main": {
+          "fps": 1.0,
+          "frames": [
+            "main"
+          ],
+          "loop": true
+        }
+      },
+      "description": "Red health potion: round glass flask with a cork, liquid filling the lower body, glass highlight on the upper left (light from the top-left).",
+      "frames": {
+        "main": [
+          0,
+          0,
+          16,
+          16
+        ]
+      },
+      "godot_offset": [
+        0.0,
+        -7.0
+      ],
+      "godot_sprite_frames": "res://assets/generated/sprites/potion.tres",
+      "kind": "sprite",
+      "palette": "ember",
+      "pivot": [
+        8,
+        15
+      ],
+      "sheet": "res://assets/generated/sprites/potion.png",
+      "size": [
+        16,
+        16
+      ],
+      "status": "draft",
+      "style_version": 1,
+      "tags": [
+        "item",
+        "consumable"
+      ],
+      "variants": {}
+    },
+    "ship": {
+      "animations": {
+        "e": {
+          "fps": 1.0,
+          "frames": [
+            "e"
+          ],
+          "loop": true
+        },
+        "n": {
+          "fps": 1.0,
+          "frames": [
+            "n"
+          ],
+          "loop": true
+        },
+        "ne": {
+          "fps": 1.0,
+          "frames": [
+            "ne"
+          ],
+          "loop": true
+        },
+        "nw": {
+          "fps": 1.0,
+          "frames": [
+            "nw"
+          ],
+          "loop": true
+        },
+        "s": {
+          "fps": 1.0,
+          "frames": [
+            "s"
+          ],
+          "loop": true
+        },
+        "sail_e": {
+          "fps": 6.0,
+          "frames": [
+            "sail_e_0",
+            "sail_e_1",
+            "sail_e_2",
+            "sail_e_3"
+          ],
+          "loop": true
+        },
+        "sail_n": {
+          "fps": 6.0,
+          "frames": [
+            "sail_n_0",
+            "sail_n_1",
+            "sail_n_2",
+            "sail_n_3"
+          ],
+          "loop": true
+        },
+        "sail_ne": {
+          "fps": 6.0,
+          "frames": [
+            "sail_ne_0",
+            "sail_ne_1",
+            "sail_ne_2",
+            "sail_ne_3"
+          ],
+          "loop": true
+        },
+        "sail_nw": {
+          "fps": 6.0,
+          "frames": [
+            "sail_nw_0",
+            "sail_nw_1",
+            "sail_nw_2",
+            "sail_nw_3"
+          ],
+          "loop": true
+        },
+        "sail_s": {
+          "fps": 6.0,
+          "frames": [
+            "sail_s_0",
+            "sail_s_1",
+            "sail_s_2",
+            "sail_s_3"
+          ],
+          "loop": true
+        },
+        "sail_se": {
+          "fps": 6.0,
+          "frames": [
+            "sail_se_0",
+            "sail_se_1",
+            "sail_se_2",
+            "sail_se_3"
+          ],
+          "loop": true
+        },
+        "sail_sw": {
+          "fps": 6.0,
+          "frames": [
+            "sail_sw_0",
+            "sail_sw_1",
+            "sail_sw_2",
+            "sail_sw_3"
+          ],
+          "loop": true
+        },
+        "sail_w": {
+          "fps": 6.0,
+          "frames": [
+            "sail_w_0",
+            "sail_w_1",
+            "sail_w_2",
+            "sail_w_3"
+          ],
+          "loop": true
+        },
+        "se": {
+          "fps": 1.0,
+          "frames": [
+            "se"
+          ],
+          "loop": true
+        },
+        "sw": {
+          "fps": 1.0,
+          "frames": [
+            "sw"
+          ],
+          "loop": true
+        },
+        "w": {
+          "fps": 1.0,
+          "frames": [
+            "w"
+          ],
+          "loop": true
+        }
+      },
+      "description": "Player ship: a wooden three-masted age-of-exploration ship (square sails braced to catch the wind, raised stern castle with lit windows, forecastle, bowsprit, pennants). Top-down 3/4 view, no water (it sits on a moving sea). 8 headings; pennants flutter in the \"sail\" animation.",
+      "frames": {
+        "e": [
+          0,
+          0,
+          96,
+          96
+        ],
+        "n": [
+          192,
+          96,
+          96,
+          96
+        ],
+        "ne": [
+          480,
+          0,
+          96,
+          96
+        ],
+        "nw": [
+          672,
+          96,
+          96,
+          96
+        ],
+        "s": [
+          576,
+          288,
+          96,
+          96
+        ],
+        "sail_e_0": [
+          96,
+          0,
+          96,
+          96
+        ],
+        "sail_e_1": [
+          192,
+          0,
+          96,
+          96
+        ],
+        "sail_e_2": [
+          288,
+          0,
+          96,
+          96
+        ],
+        "sail_e_3": [
+          384,
+          0,
+          96,
+          96
+        ],
+        "sail_n_0": [
+          288,
+          96,
+          96,
+          96
+        ],
+        "sail_n_1": [
+          384,
+          96,
+          96,
+          96
+        ],
+        "sail_n_2": [
+          480,
+          96,
+          96,
+          96
+        ],
+        "sail_n_3": [
+          576,
+          96,
+          96,
+          96
+        ],
+        "sail_ne_0": [
+          576,
+          0,
+          96,
+          96
+        ],
+        "sail_ne_1": [
+          672,
+          0,
+          96,
+          96
+        ],
+        "sail_ne_2": [
+          0,
+          96,
+          96,
+          96
+        ],
+        "sail_ne_3": [
+          96,
+          96,
+          96,
+          96
+        ],
+        "sail_nw_0": [
+          0,
+          192,
+          96,
+          96
+        ],
+        "sail_nw_1": [
+          96,
+          192,
+          96,
+          96
+        ],
+        "sail_nw_2": [
+          192,
+          192,
+          96,
+          96
+        ],
+        "sail_nw_3": [
+          288,
+          192,
+          96,
+          96
+        ],
+        "sail_s_0": [
+          672,
+          288,
+          96,
+          96
+        ],
+        "sail_s_1": [
+          0,
+          384,
+          96,
+          96
+        ],
+        "sail_s_2": [
+          96,
+          384,
+          96,
+          96
+        ],
+        "sail_s_3": [
+          192,
+          384,
+          96,
+          96
+        ],
+        "sail_se_0": [
+          384,
+          384,
+          96,
+          96
+        ],
+        "sail_se_1": [
+          480,
+          384,
+          96,
+          96
+        ],
+        "sail_se_2": [
+          576,
+          384,
+          96,
+          96
+        ],
+        "sail_se_3": [
+          672,
+          384,
+          96,
+          96
+        ],
+        "sail_sw_0": [
+          192,
+          288,
+          96,
+          96
+        ],
+        "sail_sw_1": [
+          288,
+          288,
+          96,
+          96
+        ],
+        "sail_sw_2": [
+          384,
+          288,
+          96,
+          96
+        ],
+        "sail_sw_3": [
+          480,
+          288,
+          96,
+          96
+        ],
+        "sail_w_0": [
+          480,
+          192,
+          96,
+          96
+        ],
+        "sail_w_1": [
+          576,
+          192,
+          96,
+          96
+        ],
+        "sail_w_2": [
+          672,
+          192,
+          96,
+          96
+        ],
+        "sail_w_3": [
+          0,
+          288,
+          96,
+          96
+        ],
+        "se": [
+          288,
+          384,
+          96,
+          96
+        ],
+        "sw": [
+          96,
+          288,
+          96,
+          96
+        ],
+        "w": [
+          384,
+          192,
+          96,
+          96
+        ]
+      },
+      "godot_offset": [
+        0.0,
+        -12.0
+      ],
+      "godot_sprite_frames": "res://assets/generated/sprites/ship.tres",
+      "headings": [
+        "e",
+        "ne",
+        "n",
+        "nw",
+        "w",
+        "sw",
+        "s",
+        "se"
+      ],
+      "kind": "model",
+      "palette": "ember",
+      "pivot": [
+        48,
+        60
+      ],
+      "sheet": "res://assets/generated/sprites/ship.png",
+      "size": [
+        96,
+        96
+      ],
+      "status": "draft",
+      "style_version": 1,
+      "tags": [
+        "player",
+        "vehicle",
+        "ship"
+      ],
+      "variants": {}
+    },
+    "slime": {
+      "animations": {
+        "idle": {
+          "fps": 3.0,
+          "frames": [
+            "idle_0",
+            "idle_1"
+          ],
+          "loop": true
+        }
+      },
+      "description": "Green slime enemy, front view, symmetric (mirror). Idle: a slow squash and stretch between two frames.",
+      "frames": {
+        "idle_0": [
+          0,
+          0,
+          16,
+          16
+        ],
+        "idle_1": [
+          16,
+          0,
+          16,
+          16
+        ]
+      },
+      "godot_offset": [
+        0.0,
+        -6.0
+      ],
+      "godot_sprite_frames": "res://assets/generated/sprites/slime.tres",
+      "kind": "sprite",
+      "palette": "ember",
+      "pivot": [
+        8,
+        14
+      ],
+      "sheet": "res://assets/generated/sprites/slime.png",
+      "size": [
+        16,
+        16
+      ],
+      "status": "draft",
+      "style_version": 1,
+      "tags": [
+        "enemy",
+        "creature"
+      ],
+      "variants": {}
+    }
+  },
+  "files": [
+    "sprites/potion.png",
+    "sprites/potion.tres",
+    "sprites/ship.png",
+    "sprites/ship.tres",
+    "sprites/slime.png",
+    "sprites/slime.tres",
+    "tiles/meadow.png"
+  ],
+  "generator": "pagan 0.1.0",
+  "note": "Generated by `pagan build`. Do not edit: change the sources and rebuild."
+}

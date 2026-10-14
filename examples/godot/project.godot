@@ -1,0 +1,26 @@
+; Godot 4 project used to check PAGAN's output. Assets in assets/generated/ come from
+; `pagan build` in ../demo; open this folder in Godot and press Play to see them all.
+
+config_version=5
+
+[application]
+
+config/name="PAGAN art test"
+run/main_scene="res://scenes/art_test.tscn"
+config/features=PackedStringArray("4.7")
+
+[display]
+
+window/size/viewport_width=480
+window/size/viewport_height=270
+window/size/window_width_override=1440
+window/size/window_height_override=810
+window/stretch/mode="viewport"
+window/stretch/scale_mode="integer"
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+2d/snap/snap_2d_transforms_to_pixel=true
+2d/snap/snap_2d_vertices_to_pixel=true
+environment/defaults/default_clear_color=Color(0.10, 0.16, 0.24, 1)

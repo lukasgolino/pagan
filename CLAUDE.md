@@ -15,7 +15,12 @@ mypy                     # strict type check (config in pyproject.toml)
 pytest
 ```
 
-CI (`.github/workflows/ci.yml`) runs install + mypy + pytest on Python 3.11–3.13 on every push/PR.
+CI (`.github/workflows/ci.yml`) runs install + mypy + pytest on Python 3.11–3.13 on every push/PR, and a
+`godot` job that downloads Godot 4.7.2, rebuilds the demo into `examples/godot/` (failing if the committed
+output differs), verifies every generated resource loads, and runs the demo scene headless.
+
+Godot tests (`tests/test_godot.py`) skip unless a Godot 4 binary is available: `GODOT=/path/to/godot pytest`.
+After changing demo art or rendering: `cd examples/demo && pagan build` and commit `examples/godot/assets/generated/`.
 
 Try the demo project: `cd examples/demo && pagan palette show` → swatches in `examples/demo/previews/palettes/`.
 
@@ -31,11 +36,13 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `color.py` OKLab/OKLCh conversions + gamut mapping; `importer.py` PNG -> sprite (scale detection, snapping);
   - `voxel.py` voxel model + renderer (grid ray traversal, smoothed/exact normals, wrap light, soft shadows);
   - `model.py` `.model.yaml` parsing (materials, primitives, poses) -> Asset, with a render cache in `.pagan-cache/`;
+  - `build.py` `pagan build` (sheets, manifest.json, stale cleanup); `exporters/godot.py` SpriteFrames .tres + headless verify;
   - `swatch.py` palette swatch images; `templates/` files copied by `pagan init`.
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
 - `tests/` — pytest suite
 - `examples/demo/` — an example PAGAN project (palettes: ember, tide, arcade); tests keep it valid
+- `examples/godot/` — Godot 4.7 project receiving the demo's build output; `scenes/art_test.tscn` shows everything
 - `.github/workflows/` — CI
 
 ## Conventions
@@ -79,3 +86,8 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-14: 3D voxel models (`models/*.model.yaml`) are first-class assets (kind "model"): rendered with the project-wide `[camera]`/`[light]` so all 3D assets match; frames per heading (`e`, `ne`, ...), pose animations as `<anim>_<heading>`. Poses move parts by whole voxels, so animation frames stay pixel-consistent.
 - 2026-10-14: Renderer: exact grid traversal per pixel; normals from the occupancy gradient, or exact from shapes that know them (sails); wrap lighting (0.3) and partial shadows (0.65) read better at pixel scale than hard Lambert; parts never shadow themselves. Trig results are rounded to 12 decimals for cross-platform byte stability.
 - 2026-10-14: Model renders are cached in `<project>/.pagan-cache/models/` keyed by file text + materials + camera + light + RENDERER_VERSION (bump it when rendering changes).
+- 2026-10-14: `.tres` format copied from what Godot 4.7.2's ResourceSaver writes (format=3, no uid/load_steps); IDs are deterministic (`1_sheet`, `AtlasTexture_<n>`), frames shared between animations. Verified by loading in headless Godot 4.7.2.
+- 2026-10-14: Sprites without animations export one single-frame animation per frame (so every sprite gets a SpriteFrames). Tilesets export atlas + manifest only.
+- 2026-10-14: `pagan build` always builds the whole project (partial builds would leave an incomplete manifest); only changed files are rewritten; files listed in the previous manifest but no longer produced are deleted (plus Godot's .import sidecar).
+- 2026-10-14: Variant outputs are named `<asset>.<variant>.png/.tres` (a dot can't occur in asset names, so no clashes).
+- 2026-10-14: Example Godot project: 480x270 viewport, integer scaling ×3 window, nearest filtering, pixel snapping. Base resolution is an open question for the owner.
