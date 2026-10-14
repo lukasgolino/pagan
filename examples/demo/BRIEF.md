@@ -18,6 +18,8 @@ the way. Agents read this (with STYLE.md) before making or changing any asset, a
 
 - **Player ship** (`models/ship.model.yaml`): three-masted wooden ship, 96x96, 8 headings, pennants
   flutter in the `sail` animation. No water in the sprite: it sits on a separately animated sea.
+- **Sailor** (`models/sailor.model.yaml`): deckhand, 32x32, 8 headings, 4-frame walk (legs/arms swing,
+  body stays put).
 - **Slime** (`sprites/slime.sprite.yaml`): green enemy, 16x16, symmetric, 2-frame idle squash.
 - **Potion** (`sprites/potion.sprite.yaml`): red health potion item, 16x16.
 - **Meadow** (`tiles/meadow.tiles.yaml`): island grass tiles, 16x16, seamless.
@@ -30,7 +32,7 @@ the way. Agents read this (with STYLE.md) before making or changing any asset, a
 
 ## Done
 
-- Player ship, slime, potion, meadow tiles (style v1)
+- Player ship, sailor, slime, potion, meadow tiles (style v1)
 
 ## Decisions and feedback log
 

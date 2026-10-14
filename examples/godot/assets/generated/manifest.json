@@ -81,6 +81,422 @@
       ],
       "variants": {}
     },
+    "sailor": {
+      "animations": {
+        "e": {
+          "fps": 1.0,
+          "frames": [
+            "e"
+          ],
+          "loop": true
+        },
+        "n": {
+          "fps": 1.0,
+          "frames": [
+            "n"
+          ],
+          "loop": true
+        },
+        "ne": {
+          "fps": 1.0,
+          "frames": [
+            "ne"
+          ],
+          "loop": true
+        },
+        "nw": {
+          "fps": 1.0,
+          "frames": [
+            "nw"
+          ],
+          "loop": true
+        },
+        "s": {
+          "fps": 1.0,
+          "frames": [
+            "s"
+          ],
+          "loop": true
+        },
+        "se": {
+          "fps": 1.0,
+          "frames": [
+            "se"
+          ],
+          "loop": true
+        },
+        "sw": {
+          "fps": 1.0,
+          "frames": [
+            "sw"
+          ],
+          "loop": true
+        },
+        "w": {
+          "fps": 1.0,
+          "frames": [
+            "w"
+          ],
+          "loop": true
+        },
+        "walk_e": {
+          "fps": 8.0,
+          "frames": [
+            "walk_e_0",
+            "walk_e_1",
+            "walk_e_2",
+            "walk_e_3"
+          ],
+          "loop": true
+        },
+        "walk_n": {
+          "fps": 8.0,
+          "frames": [
+            "walk_n_0",
+            "walk_n_1",
+            "walk_n_2",
+            "walk_n_3"
+          ],
+          "loop": true
+        },
+        "walk_ne": {
+          "fps": 8.0,
+          "frames": [
+            "walk_ne_0",
+            "walk_ne_1",
+            "walk_ne_2",
+            "walk_ne_3"
+          ],
+          "loop": true
+        },
+        "walk_nw": {
+          "fps": 8.0,
+          "frames": [
+            "walk_nw_0",
+            "walk_nw_1",
+            "walk_nw_2",
+            "walk_nw_3"
+          ],
+          "loop": true
+        },
+        "walk_s": {
+          "fps": 8.0,
+          "frames": [
+            "walk_s_0",
+            "walk_s_1",
+            "walk_s_2",
+            "walk_s_3"
+          ],
+          "loop": true
+        },
+        "walk_se": {
+          "fps": 8.0,
+          "frames": [
+            "walk_se_0",
+            "walk_se_1",
+            "walk_se_2",
+            "walk_se_3"
+          ],
+          "loop": true
+        },
+        "walk_sw": {
+          "fps": 8.0,
+          "frames": [
+            "walk_sw_0",
+            "walk_sw_1",
+            "walk_sw_2",
+            "walk_sw_3"
+          ],
+          "loop": true
+        },
+        "walk_w": {
+          "fps": 8.0,
+          "frames": [
+            "walk_w_0",
+            "walk_w_1",
+            "walk_w_2",
+            "walk_w_3"
+          ],
+          "loop": true
+        }
+      },
+      "description": "Deckhand character: tricorn hat, blue shirt, brown trousers, dark boots. Top-down 3/4 view like the ship, 8 headings, 4-frame walk where legs and arms swing in opposition (body stays put, so no jumps).",
+      "frames": {
+        "e": [
+          0,
+          0,
+          32,
+          32
+        ],
+        "n": [
+          64,
+          32,
+          32,
+          32
+        ],
+        "ne": [
+          160,
+          0,
+          32,
+          32
+        ],
+        "nw": [
+          224,
+          32,
+          32,
+          32
+        ],
+        "s": [
+          192,
+          96,
+          32,
+          32
+        ],
+        "se": [
+          96,
+          128,
+          32,
+          32
+        ],
+        "sw": [
+          32,
+          96,
+          32,
+          32
+        ],
+        "w": [
+          128,
+          64,
+          32,
+          32
+        ],
+        "walk_e_0": [
+          32,
+          0,
+          32,
+          32
+        ],
+        "walk_e_1": [
+          64,
+          0,
+          32,
+          32
+        ],
+        "walk_e_2": [
+          96,
+          0,
+          32,
+          32
+        ],
+        "walk_e_3": [
+          128,
+          0,
+          32,
+          32
+        ],
+        "walk_n_0": [
+          96,
+          32,
+          32,
+          32
+        ],
+        "walk_n_1": [
+          128,
+          32,
+          32,
+          32
+        ],
+        "walk_n_2": [
+          160,
+          32,
+          32,
+          32
+        ],
+        "walk_n_3": [
+          192,
+          32,
+          32,
+          32
+        ],
+        "walk_ne_0": [
+          192,
+          0,
+          32,
+          32
+        ],
+        "walk_ne_1": [
+          224,
+          0,
+          32,
+          32
+        ],
+        "walk_ne_2": [
+          0,
+          32,
+          32,
+          32
+        ],
+        "walk_ne_3": [
+          32,
+          32,
+          32,
+          32
+        ],
+        "walk_nw_0": [
+          0,
+          64,
+          32,
+          32
+        ],
+        "walk_nw_1": [
+          32,
+          64,
+          32,
+          32
+        ],
+        "walk_nw_2": [
+          64,
+          64,
+          32,
+          32
+        ],
+        "walk_nw_3": [
+          96,
+          64,
+          32,
+          32
+        ],
+        "walk_s_0": [
+          224,
+          96,
+          32,
+          32
+        ],
+        "walk_s_1": [
+          0,
+          128,
+          32,
+          32
+        ],
+        "walk_s_2": [
+          32,
+          128,
+          32,
+          32
+        ],
+        "walk_s_3": [
+          64,
+          128,
+          32,
+          32
+        ],
+        "walk_se_0": [
+          128,
+          128,
+          32,
+          32
+        ],
+        "walk_se_1": [
+          160,
+          128,
+          32,
+          32
+        ],
+        "walk_se_2": [
+          192,
+          128,
+          32,
+          32
+        ],
+        "walk_se_3": [
+          224,
+          128,
+          32,
+          32
+        ],
+        "walk_sw_0": [
+          64,
+          96,
+          32,
+          32
+        ],
+        "walk_sw_1": [
+          96,
+          96,
+          32,
+          32
+        ],
+        "walk_sw_2": [
+          128,
+          96,
+          32,
+          32
+        ],
+        "walk_sw_3": [
+          160,
+          96,
+          32,
+          32
+        ],
+        "walk_w_0": [
+          160,
+          64,
+          32,
+          32
+        ],
+        "walk_w_1": [
+          192,
+          64,
+          32,
+          32
+        ],
+        "walk_w_2": [
+          224,
+          64,
+          32,
+          32
+        ],
+        "walk_w_3": [
+          0,
+          96,
+          32,
+          32
+        ]
+      },
+      "godot_offset": [
+        0.0,
+        -10.0
+      ],
+      "godot_sprite_frames": "res://assets/generated/sprites/sailor.tres",
+      "headings": [
+        "e",
+        "ne",
+        "n",
+        "nw",
+        "w",
+        "sw",
+        "s",
+        "se"
+      ],
+      "kind": "model",
+      "palette": "ember",
+      "pivot": [
+        16,
+        26
+      ],
+      "sheet": "res://assets/generated/sprites/sailor.png",
+      "size": [
+        32,
+        32
+      ],
+      "status": "draft",
+      "style_version": 1,
+      "tags": [
+        "character",
+        "crew"
+      ],
+      "variants": {}
+    },
     "ship": {
       "animations": {
         "e": {
@@ -552,6 +968,8 @@
   "files": [
     "sprites/potion.png",
     "sprites/potion.tres",
+    "sprites/sailor.png",
+    "sprites/sailor.tres",
     "sprites/ship.png",
     "sprites/ship.tres",
     "sprites/slime.png",
