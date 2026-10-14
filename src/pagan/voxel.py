@@ -214,11 +214,31 @@ def render_heading(
     light_world: Vec = (lx / norm, ly / norm, lz / norm)
     light_model = to_model(light_world, False)
     reach = 2.0 * (max(hi[i] - lo[i] for i in range(3)) + 2) + 2 * max(abs(c) for c in origin) + 4
+
+    # Only pixels inside the projected bounding box can hit anything: skip the rest.
+    xs_screen: list[float] = []
+    ys_screen: list[float] = []
+    for cx in (lo[0], hi[0] + 1):
+        for cy in (lo[1], hi[1] + 1):
+            for cz in (lo[2], hi[2] + 1):
+                mx, my, mz = cx - origin[0], cy - origin[1], cz - origin[2]
+                wx, wy = ch * mx - sh * my, sh * mx + ch * my  # model -> world (rotate by +heading)
+                xs_screen.append(pivot[0] + wx * camera.scale)
+                ys_screen.append(pivot[1] - (wy * up[1] + mz * up[2]) * camera.scale)
+    x0, x1 = max(0, math.floor(min(xs_screen)) - 1), min(width, math.ceil(max(xs_screen)) + 1)
+    y0, y1 = max(0, math.floor(min(ys_screen)) - 1), min(height, math.ceil(max(ys_screen)) + 1)
+
     normals: dict[Cell, Vec] = {}
     rows: list[str] = []
     for py in range(height):
         row: list[str] = []
+        if not y0 <= py < y1:
+            rows.append(TRANSPARENT * width)
+            continue
         for px in range(width):
+            if not x0 <= px < x1:
+                row.append(TRANSPARENT)
+                continue
             sx = (px + 0.5 - pivot[0]) / camera.scale
             sy = (pivot[1] - (py + 0.5)) / camera.scale
             start = to_model(
