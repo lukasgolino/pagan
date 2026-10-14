@@ -422,6 +422,16 @@ drawing every heading by hand is slow and the rotations drift apart. So PAGAN ge
   `pagan build --verify-godot` or a separate script.
 - **Done when:** the example Godot project opens, the demo scene runs, and sprites are crisp and correctly animated.
 
+### ☑ Long-term asset management (added 2026-10-14 at the owner's request)
+Game art is made over months, with style changes along the way ("darker", "more contrast", "pastel",
+"more shadows"). The PAGAN project folder is the one linked place holding everything:
+- `BRIEF.md`: the game, its key assets (looks, sizes, directions), wishlist, and a dated feedback log.
+- `STYLE.md`: the style bible with a versioned changelog; `pagan.toml` `style_version` is the current one.
+- Every asset records `description`, `tags`, `status` (draft/approved) and the `style_version` it was made under.
+- `pagan status`: catalogue + what needs attention. `pagan palette adjust`: global look changes through the
+  palette (every asset follows; models re-render). `pagan style bump "note"`: flags older assets (W006).
+  `pagan mark --current/--status approved`: record reviews. `pagan gallery`: check the whole set together.
+
 ### ☐ Milestone 6 — The Claude skill (how to use PAGAN)
 - **Priority note:** this skill is *required* before PAGAN is used to build assets for a real game.
   Everything in §12 can wait; this cannot.

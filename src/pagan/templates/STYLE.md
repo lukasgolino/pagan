@@ -66,3 +66,13 @@ Don't:
 The approved sprites that define the look. Compare every new asset against these in preview.
 
 - **TODO** (pick 2–4 once some art exists)
+
+## Changelog
+
+Each look change that means existing art should be revisited gets a version (`pagan style bump "note"`
+bumps `style_version` in pagan.toml and adds an entry here, newest first). Assets made under an older
+version get lint warning W006 until they're reviewed and stamped (`pagan mark --current <asset>`).
+Palette edits and `[light]`/`[camera]` changes need no bump for 3D models (they re-render automatically);
+bump when 2D sprites need redrawing to match.
+
+- v1: initial style

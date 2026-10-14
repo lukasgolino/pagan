@@ -1,64 +1,64 @@
 # Style bible
 
-The rules that make this project's art look like itself. Agents read this before drawing anything
-and check their previews against it. Replace every **TODO** with a decision; the suggested defaults
-are a reasonable starting point.
-
-Rules that can be checked mechanically belong in `pagan.toml` too (see `[lint]`).
+The rules that make this project's art look like itself. Agents read this before drawing anything and
+check their previews against it. Mechanical rules also live in `pagan.toml` (`[lint]`, `[camera]`, `[light]`).
 
 ## 1. Palette
 
-- Palette file: **TODO** (e.g. `palettes/my_palette.pal.yaml`, or "open" for per-sprite palettes)
-- Ramp intent — what each ramp is for:
-  - **TODO** e.g. `skin`: characters' skin; `foliage`: plants; `stone`: walls and floors; `ui`: interface only
+- Palette file: `palettes/ember.pal.yaml` (24 colors). `tide` and `arcade` are alternatives, not used here.
+- Ramp intent:
+  - `earth`: outlines (`0`), stone, rope, sails (`3`-`5`), neutral details
+  - `fire`: wood (hulls, crates, cork), warm light, lanterns (`a` for glowing windows)
+  - `moss`: grass, foliage, slimes
+  - `sky`: glass, water, metal highlights
+  - `rose`: liquids, flags, skin accents
 
 ## 2. Scale
 
-- Base sprite / tile size: **TODO** (suggested: 16×16)
-- Character height: **TODO** (suggested: 12–14 px in a 16 px tile)
-- Target base resolution and integer scale: **TODO** (suggested: 320×180, scaled ×4 to 1280×720)
+- Items, creatures and tiles: 16x16. Characters about 12-14px tall.
+- Ships and large vehicles: 3D models, 96x96 frames, 1px per voxel.
+- Base resolution 480x270, integer-scaled.
 
 ## 3. Outlines
 
-- Style: **TODO** (suggested: 1 px dark outline using the darkest color)
-- Selective outline (lighter outline on lit edges)? **TODO** (suggested: no)
+- 1px dark outline (`outline: auto`, darkest color `0`) on sprites and models. No outline on tiles.
 
 ## 4. Light
 
-- Light direction: **TODO** (suggested: top-left)
-- Highlights on edges facing the light; the darkest ramp step on the far side.
+- From the top-left (`[light] direction = [-0.5, 0.45, 0.75]`). Highlights on top/left edges, darkest
+  ramp step on the bottom/right.
 
 ## 5. Shading
 
-- Ramp steps per material: **TODO** (suggested: 3 — shadow, mid, highlight)
-- No pillow shading (shading that just follows the outline inward from all sides).
-- Dithering: **TODO** (suggested: allowed sparingly, only on large flat areas, never on small sprites)
+- 3 steps per material for 16px sprites; 3-4 for models (set by the material's keys).
+- No pillow shading. Dithering: never.
 
 ## 6. Proportions
 
-- Head-to-body ratio for characters: **TODO** (suggested: 1:1 to 1:2, chunky and readable)
-- Detail level: readable at 1× scale; if a detail is a single isolated pixel, drop it.
+- Chunky and readable at 1x: if a detail is a single isolated pixel, drop it (lint W001).
 
 ## 7. Animation
 
-- Default fps: **TODO** (suggested: 8)
-- Frame counts: idle **TODO** (suggested 2–4), walk **TODO** (4–6), attack **TODO** (3–5)
-- Squash and stretch: **TODO** (suggested: yes, subtle)
+- Idle: 2 frames at 3-4 fps. Ship sail: 4 frames at 6 fps.
+- Frames must not jump: the base/feet stay planted; check the preview's changes row (lint W007).
 
 ## 8. Do / Don't
 
 Do:
-- Use `mirror: horizontal` for symmetric subjects.
-- Keep silhouettes readable as a solid shape.
-- **TODO**
+- Use `mirror: horizontal` for symmetric front-facing creatures.
+- Use 3D models for anything that needs several headings.
 
 Don't:
-- Use colors outside the palette.
-- Leave orphan pixels (single pixels with no neighbours).
-- **TODO**
+- Flip lit art vertically (`flip: vertical`): the light ends up on the wrong side.
+- Use more than 3 ramps in one asset (lint W003).
 
 ## 9. Reference sprites
 
-The approved sprites that define the look. Compare every new asset against these in preview.
+- `models/ship.model.yaml`, `sprites/slime.sprite.yaml`, `sprites/potion.sprite.yaml`
 
-- **TODO** (pick 2–4 once some art exists)
+## Changelog
+
+Each look change that means existing art should be revisited gets a version (`pagan style bump "note"`).
+Assets made under an older version get lint warning W006 until reviewed and stamped (`pagan mark --current`).
+
+- v1: initial style

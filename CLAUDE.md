@@ -37,6 +37,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `voxel.py` voxel model + renderer (grid ray traversal, smoothed/exact normals, wrap light, soft shadows);
   - `model.py` `.model.yaml` parsing (materials, primitives, poses) -> Asset, with a render cache in `.pagan-cache/`;
   - `build.py` `pagan build` (sheets, manifest.json, stale cleanup); `exporters/godot.py` SpriteFrames .tres + headless verify;
+  - `manage.py` long-term management: catalogue (`pagan status`), palette adjust, `mark`, `style bump` (text edits keep comments);
   - `swatch.py` palette swatch images; `templates/` files copied by `pagan init`.
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
@@ -91,3 +92,5 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-14: `pagan build` always builds the whole project (partial builds would leave an incomplete manifest); only changed files are rewritten; files listed in the previous manifest but no longer produced are deleted (plus Godot's .import sidecar).
 - 2026-10-14: Variant outputs are named `<asset>.<variant>.png/.tres` (a dot can't occur in asset names, so no clashes).
 - 2026-10-14: Example Godot project: 480x270 viewport, integer scaling ×3 window, nearest filtering, pixel snapping. Base resolution is an open question for the owner.
+- 2026-10-14: Long-term asset management: a PAGAN project folder is the single home for a game's art (BRIEF.md = what's wanted + feedback log, STYLE.md = how it looks + versioned changelog, assets carry description/status/style_version). `pagan palette adjust` (OKLab lightness/contrast/saturation/hue/warmth) changes every asset at once; `pagan style bump` flags assets for review (W006) until `pagan mark --current`.
+- 2026-10-14: Source-file edits by PAGAN (`palette adjust`, `mark`, `style bump`) are line-level text edits, never YAML re-serialisation, so comments and layout survive.

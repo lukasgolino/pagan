@@ -18,6 +18,7 @@ from pagan.build import build
 from pagan.exporters.godot import find_godot_binary, res_path, verify_with_godot
 from pagan.importer import import_png, sprite_yaml
 from pagan.lint import lint_paths
+from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_style, catalogue, mark, outdated
 from pagan.palette import NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.preview import PreviewOptions, gallery, write_previews
@@ -79,7 +80,11 @@ def cmd_init(args: argparse.Namespace, out: Output) -> int:
     config_path.write_text(Template(_template("pagan.toml")).substitute(palette_mode=mode), encoding="utf-8")
     created.append(config_path)
 
-    for name, content in (("STYLE.md", _template("STYLE.md")), (".gitignore", "previews/\n.pagan-cache/\n")):
+    for name, content in (
+        ("STYLE.md", _template("STYLE.md")),
+        ("BRIEF.md", _template("BRIEF.md")),
+        (".gitignore", "previews/\n.pagan-cache/\n"),
+    ):
         path = root / name
         if path.exists():
             skipped.append(path)
@@ -602,6 +607,140 @@ def cmd_import(args: argparse.Namespace, out: Output) -> int:
     return 0
 
 
+# --- pagan status / mark / style bump ---------------------------------------------------------
+
+
+def cmd_status(args: argparse.Namespace, out: Output) -> int:
+    project = project_for([args.project] if args.project else [])
+    entries = catalogue(project)
+    current = project.config.style_version
+    if out.as_json:
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "project": display_path(project.root),
+                    "style_version": current,
+                    "default_palette": project.config.default_palette,
+                    "assets": [
+                        {
+                            "name": e.name, "kind": e.kind, "path": display_path(e.path), "description": e.description,
+                            "status": e.status, "style_version": e.style_version,
+                            "size": list(e.size) if e.size else None, "frames": e.frames, "animations": e.animations,
+                            "errors": e.errors, "warnings": e.warnings, "tags": list(e.tags), "needs": e.needs(current),
+                        }  # fmt: skip
+                        for e in entries
+                    ],
+                },
+                indent=2,
+            )
+        )
+        return 0
+    palette = project.config.default_palette or ("open mode" if project.config.palette_mode == "open" else "none")
+    print(f"{display_path(project.root)}: {len(entries)} assets, palette {palette}, style v{current}")
+    for e in entries:
+        size = f"{e.size[0]}x{e.size[1]}" if e.size else "?"
+        flags = ", ".join(e.needs(current)) or "ok"
+        description = (e.description or "").replace("\n", " ")
+        print(f"  {e.name:<20} {e.kind:<8} {size:>7}  {e.status:<8} v{e.style_version}  [{flags}]")
+        if description:
+            print(f"      {description[:100]}{'…' if len(description) > 100 else ''}")
+    stale = [e for e in entries if e.style_version < current]
+    if stale:
+        print(f"{len(stale)} assets predate style v{current}: see the STYLE.md changelog, update them, then `pagan mark --current <asset>`")
+    return 0
+
+
+def cmd_mark(args: argparse.Namespace, out: Output) -> int:
+    project = project_for(args.assets if not args.outdated else [])
+    if args.outdated:
+        paths = outdated(project)
+    else:
+        if not args.assets:
+            raise _usage_error("name the assets to mark (or pass --outdated)")
+        paths = [resolve_asset_path(a, project) for a in args.assets]
+    if args.status is None and not args.current:
+        raise _usage_error("nothing to do: pass --status approved|draft and/or --current")
+    mark(paths, args.status, project.config.style_version if args.current else None)
+    for path in paths:
+        out.say(f"marked {display_path(path)}")
+    out.result({"marked": [display_path(p) for p in paths]})
+    return 0
+
+
+def cmd_style_bump(args: argparse.Namespace, out: Output) -> int:
+    project = _require_project()
+    version = bump_style(project, args.note)
+    stale = len(outdated(load_project(project.root)))
+    out.say(f"style is now v{version}; logged in STYLE.md. {stale} assets are flagged for review (lint W006, `pagan status`).")
+    out.result({"style_version": version, "outdated": stale})
+    return 0
+
+
+# --- pagan palette adjust ---------------------------------------------------------------------
+
+
+def cmd_palette_adjust(args: argparse.Namespace, out: Output) -> int:
+    from PIL import Image
+
+    project = _require_project()
+    palette = project.load_palette(args.palette)
+    if palette.path is None:
+        raise _usage_error("palette has no file")
+    keys = list(palette.colors)
+    if args.ramp:
+        unknown = [r for r in args.ramp if r not in palette.ramps]
+        if unknown:
+            raise _usage_error(f"unknown ramp(s) {', '.join(unknown)}; palette ramps: {', '.join(palette.ramps)}")
+        keys = [k for k in keys if any(k in palette.ramps[r] for r in args.ramp)]
+    if args.keys:
+        unknown = [k for k in args.keys if k not in palette.colors]
+        if unknown:
+            raise _usage_error(f"unknown key(s) {', '.join(unknown)}")
+        keys = [k for k in keys if k in args.keys]
+    adjustment = Adjustment(
+        lightness=args.lightness, contrast=args.contrast, saturation=args.saturation, hue=args.hue, warmth=args.warmth
+    )
+    if adjustment.is_identity():
+        raise _usage_error("nothing to change: pass --lightness, --contrast, --saturation, --hue and/or --warmth")
+    new_hexes = adjust_colors(palette, keys, adjustment)
+    target_name = args.out or palette.name or args.palette
+    if not NAME_RE.match(target_name):
+        raise _usage_error(f"invalid palette name {target_name!r}")
+    text = apply_palette_hexes(palette.path, new_hexes, new_name=args.out)
+    target = project.palette_path(target_name)
+
+    changes = {k: (palette.colors[k].hex, h) for k, h in new_hexes.items() if palette.colors[k].hex != h}
+    for key, (old, new) in changes.items():
+        out.say(f"  {key}: {old} -> {new}")
+    compare = project.preview_dir / "palettes" / f"{target_name}-adjust.png"
+    if not args.dry_run:
+        if args.out and target.exists() and not args.force:
+            raise _usage_error("palette already exists (pass --force to overwrite)", target)
+        target.write_text(text, encoding="utf-8")
+        adjusted = load_palette_file(target)
+        before, after = render_swatch(palette, f"{args.palette} (before)"), render_swatch(adjusted, f"{target_name} (after)")
+        both = Image.new("RGB", (max(before.width, after.width), before.height + after.height))
+        both.paste(before, (0, 0))
+        both.paste(after, (0, before.height))
+        compare.parent.mkdir(parents=True, exist_ok=True)
+        both.save(compare)
+        out.say(f"{'wrote' if args.out else 'updated'} {display_path(target)} ({len(changes)} colors changed); before/after: {display_path(compare)}")
+        if not args.out:
+            out.say("Every asset using this palette now uses the new colors; check with `pagan gallery`.")
+    else:
+        out.say(f"dry run: {len(changes)} colors would change")
+    out.result(
+        {
+            "palette": target_name,
+            "changes": {k: {"from": a, "to": b} for k, (a, b) in changes.items()},
+            "written": not args.dry_run,
+            "compare": None if args.dry_run else display_path(compare),
+        }
+    )
+    return 0
+
+
 # --- pagan palette show -----------------------------------------------------------------------
 
 
@@ -743,12 +882,45 @@ def build_parser() -> argparse.ArgumentParser:
     lint.add_argument("--warnings-as-errors", action="store_true", help="exit non-zero on warnings too")
     lint.set_defaults(handler=cmd_lint)
 
+    status = commands.add_parser("status", parents=[common], help="catalogue of every asset and what needs attention")
+    status.add_argument("project", nargs="?", help="project directory (default: the one containing the cwd)")
+    status.set_defaults(handler=cmd_status)
+
+    mark_cmd = commands.add_parser("mark", parents=[common], help="set assets' status and/or stamp the current style version")
+    mark_cmd.add_argument("assets", nargs="*", help="asset files or names")
+    mark_cmd.add_argument("--status", choices=["draft", "approved"], help="set status")
+    mark_cmd.add_argument("--current", action="store_true", help="set style_version to the project's current one")
+    mark_cmd.add_argument("--outdated", action="store_true", help="apply to every asset made under an older style")
+    mark_cmd.set_defaults(handler=cmd_mark)
+
+    style = commands.add_parser("style", help="style versioning")
+    style_cmds = style.add_subparsers(title="style commands", metavar="<subcommand>", required=True)
+    bump_cmd = style_cmds.add_parser("bump", parents=[common], help="record a style change; flags older assets for review")
+    bump_cmd.add_argument("note", help='what changed, e.g. "more shadows: ambient 0.2 -> 0.1"')
+    bump_cmd.set_defaults(handler=cmd_style_bump)
+
     palette = commands.add_parser("palette", help="palette tools")
     palette_cmds = palette.add_subparsers(title="palette commands", metavar="<subcommand>", required=True)
     show = palette_cmds.add_parser("show", parents=[common], help="render palettes as swatch images")
     show.add_argument("palettes", nargs="*", help="palette names or .pal.yaml paths (default: all in the project)")
     show.add_argument("--out", help="output PNG path (single palette only)")
     show.set_defaults(handler=cmd_palette_show)
+
+    adjust = palette_cmds.add_parser(
+        "adjust", parents=[common], help="shift a palette's look (darker, more contrast, pastel, warmer...)"
+    )
+    adjust.add_argument("palette", help="palette name")
+    adjust.add_argument("--lightness", type=float, default=0.0, help="add to lightness, e.g. -0.05 (darker) or 0.05")
+    adjust.add_argument("--contrast", type=float, default=1.0, help="spread lightness, e.g. 1.2 (more) or 0.8 (less)")
+    adjust.add_argument("--saturation", type=float, default=1.0, help="scale colorfulness, e.g. 0.6 (pastel/muted) or 1.2")
+    adjust.add_argument("--hue", type=float, default=0.0, help="rotate hue by degrees")
+    adjust.add_argument("--warmth", type=float, default=0.0, help="push towards warm (+) or cool (-), e.g. 0.02")
+    adjust.add_argument("--ramp", action="append", help="only colors in this ramp (repeatable)")
+    adjust.add_argument("--keys", nargs="+", help="only these color keys")
+    adjust.add_argument("--out", help="write a new palette with this name instead of editing in place")
+    adjust.add_argument("--force", action="store_true", help="overwrite --out if it exists")
+    adjust.add_argument("--dry-run", action="store_true", help="show the changes without writing")
+    adjust.set_defaults(handler=cmd_palette_adjust)
 
     return parser
 
