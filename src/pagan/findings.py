@@ -33,10 +33,12 @@ class Finding:
         return "error" if self.rule.startswith("E") else "warning"
 
     def format(self) -> str:
+        where = f" [{self.where}]" if self.where else ""
+        if self.path is None and self.line is None:
+            return f"{self.severity} {self.rule}{where}: {self.message}"
         location = display_path(self.path) if self.path is not None else "<input>"
         if self.line is not None:
             location += f":{self.line}"
-        where = f" [{self.where}]" if self.where else ""
         return f"{location}: {self.severity} {self.rule}{where}: {self.message}"
 
     def to_dict(self) -> dict[str, object]:
