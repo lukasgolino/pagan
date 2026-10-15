@@ -7,8 +7,10 @@ The text format mirrors what Godot 4.7's ResourceSaver writes (format=3, AtlasTe
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
@@ -115,6 +117,8 @@ def centered_offset(size: tuple[int, int], pivot: tuple[int, int]) -> tuple[floa
 class GodotCheck:
     ok: bool
     output: str
+    sprite_frames: int = 0
+    tilesets: int = 0
 
 
 def find_godot_binary() -> str | None:
@@ -129,27 +133,36 @@ def find_godot_binary() -> str | None:
 
 
 def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: int = 300) -> GodotCheck:
-    """Import the project, then load every generated resource in a headless Godot. Needs a Godot 4 binary."""
-    script = files("pagan").joinpath("templates", "godot_verify.gd")
-    with open(godot_root / ".pagan_verify.gd", "w", encoding="utf-8") as handle:
-        handle.write(script.read_text(encoding="utf-8"))
-    try:
-        imported = subprocess.run(
-            [godot, "--headless", "--path", str(godot_root), "--import"],
-            capture_output=True, text=True, timeout=timeout,
-        )  # fmt: skip
-        result = subprocess.run(
-            [godot, "--headless", "--path", str(godot_root), "-s", "res://.pagan_verify.gd", "--", manifest_res],
-            capture_output=True, text=True, timeout=timeout,
-        )  # fmt: skip
-    except FileNotFoundError:
-        return GodotCheck(ok=False, output=f"Godot binary not found: {godot} (set GODOT=/path/to/godot)")
-    except PermissionError:
-        return GodotCheck(ok=False, output=f"can't run {godot}: not executable")
-    except subprocess.TimeoutExpired:
-        return GodotCheck(ok=False, output=f"Godot didn't finish within {timeout}s")
-    finally:
-        for leftover in (godot_root / ".pagan_verify.gd", godot_root / ".pagan_verify.gd.uid"):
-            leftover.unlink(missing_ok=True)
-    output = (imported.stdout + imported.stderr + result.stdout + result.stderr).strip()
-    return GodotCheck(ok=result.returncode == 0 and "PAGAN_VERIFY_OK" in result.stdout, output=output)
+    """Import the project, then load every generated resource in a headless Godot. Needs a Godot 4 binary.
+
+    The check script runs from a temp folder (by absolute path), so nothing is written into the game.
+    """
+    script = files("pagan").joinpath("templates", "godot_verify.gd").read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory(prefix="pagan-verify-") as scratch:
+        script_path = Path(scratch) / "pagan_verify.gd"
+        script_path.write_text(script, encoding="utf-8")
+        try:
+            imported = subprocess.run(
+                [godot, "--headless", "--path", str(godot_root), "--import"],
+                capture_output=True, text=True, timeout=timeout,
+            )  # fmt: skip
+            import_output = (imported.stdout + imported.stderr).strip()
+            import_errors = [line for line in import_output.splitlines() if "ERROR" in line]
+            if imported.returncode != 0 or import_errors:
+                detail = "\n".join(import_errors[-20:]) or import_output[-2000:]
+                return GodotCheck(ok=False, output=f"Godot's import step failed (exit {imported.returncode}):\n{detail}")
+            result = subprocess.run(
+                [godot, "--headless", "--path", str(godot_root), "-s", str(script_path), "--", manifest_res],
+                capture_output=True, text=True, timeout=timeout,
+            )  # fmt: skip
+        except FileNotFoundError:
+            return GodotCheck(ok=False, output=f"Godot binary not found: {godot} (set GODOT=/path/to/godot)")
+        except PermissionError:
+            return GodotCheck(ok=False, output=f"can't run {godot}: not executable")
+        except subprocess.TimeoutExpired:
+            return GodotCheck(ok=False, output=f"Godot didn't finish within {timeout}s")
+    output = (result.stdout + result.stderr).strip()
+    ok = result.returncode == 0 and "PAGAN_VERIFY_OK" in result.stdout
+    match = re.search(r"PAGAN_VERIFY_OK (\d+) SpriteFrames, (\d+) TileSets", result.stdout)
+    counts = (int(match.group(1)), int(match.group(2))) if match else (0, 0)
+    return GodotCheck(ok=ok, output=output, sprite_frames=counts[0], tilesets=counts[1])

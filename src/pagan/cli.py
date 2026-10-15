@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from collections.abc import Callable, Sequence
 from importlib.resources import files
@@ -15,7 +16,8 @@ from pagan import __version__
 from pagan.asset import MODEL_SUFFIX, SPRITE_SUFFIX, TILESET_SUFFIX, Asset, load_asset_or_raise
 from pagan.findings import Finding, PaganError, display_path
 from pagan.build import build
-from pagan.exporters.godot import find_godot_binary, res_path, verify_with_godot
+from pagan.buildinfo import is_editable, version_string
+from pagan.exporters.godot import find_godot_binary, find_godot_project, res_path, verify_with_godot
 from pagan.importer import import_png, sprite_yaml
 from pagan.lint import lint_paths
 from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_style, catalogue, mark, outdated
@@ -23,7 +25,7 @@ from pagan.palette import NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.preview import PreviewOptions, gallery, write_previews
 from pagan.render import frame_image, save_png, sheet_image
-from pagan.settings import BY_KEY, describe, set_setting
+from pagan.settings import BY_KEY, describe, set_in_toml, set_setting
 from pagan.swatch import render_swatch
 
 
@@ -73,13 +75,32 @@ def cmd_init(args: argparse.Namespace, out: Output) -> int:
     if config_path.exists():
         raise _usage_error("a PAGAN project already exists here", config_path)
 
+    godot_root: Path | None = None
+    if args.godot is not None:
+        godot_root = Path(args.godot)
+        if not (godot_root / "project.godot").is_file():
+            raise _usage_error(f"--godot: no project.godot in {godot_root}")
+
     root.mkdir(parents=True, exist_ok=True)
     created: list[Path] = []
     skipped: list[Path] = []
 
     mode = "open" if args.open else "strict"
-    config_path.write_text(Template(_template("pagan.toml")).substitute(palette_mode=mode), encoding="utf-8")
+    config_text = Template(_template("pagan.toml")).substitute(palette_mode=mode)
+    if godot_root is not None:
+        output = Path(os.path.relpath((godot_root / "assets" / "generated").resolve(), root.resolve())).as_posix()
+        config_text = set_in_toml(config_text, "output_dir", output)
+        config_text = set_in_toml(config_text, "export", ["png", "godot"])
+    config_path.write_text(config_text, encoding="utf-8")
     created.append(config_path)
+
+    # Inside a Godot project, keep Godot from importing the sources and previews.
+    enclosing = find_godot_project(root)
+    if enclosing is not None:
+        gdignore = root / ".gdignore"
+        if not gdignore.exists():
+            gdignore.write_text("", encoding="utf-8")
+            created.append(gdignore)
 
     for name, content in (
         ("STYLE.md", _template("STYLE.md")),
@@ -106,12 +127,15 @@ def cmd_init(args: argparse.Namespace, out: Output) -> int:
         out.say(f"  created {display_path(path)}")
     for path in skipped:
         out.say(f"  kept existing {display_path(path)}")
+    if godot_root is not None:
+        out.say(f"Builds go to {display_path(godot_root / 'assets' / 'generated')} as PNG + Godot resources.")
     if mode == "strict":
-        out.say("Next: `pagan new palette <name>`, then set default_palette in pagan.toml.")
+        out.say("Next: `pagan new palette <name>`, then `pagan config set default_palette <name>`.")
     out.result(
         {
             "project": display_path(root),
             "palette_mode": mode,
+            "godot_project": display_path(godot_root) if godot_root is not None else None,
             "created": [display_path(p) for p in created],
             "skipped": [display_path(p) for p in skipped],
         }
@@ -213,6 +237,7 @@ def cmd_new_asset(args: argparse.Namespace, out: Output) -> int:
             "status: draft",
             f"style_version: {project.config.style_version}",
             "tags: []",
+            *(["# outline: auto adds a 1px border: keep the outermost rows and columns empty (E007)"] if args.outline else []),
             "frames:",
         ]
         frame_names = [f"idle_{i}" for i in range(count)] if count > 1 else ["main"]
@@ -518,7 +543,10 @@ def cmd_build(args: argparse.Namespace, out: Output) -> int:
         check = verify_with_godot(godot, result.godot_root, res_path(result.manifest, result.godot_root))
         verified = check.ok
         if check.ok:
-            out.say("  Godot: every generated resource loads")
+            if check.sprite_frames + check.tilesets == 0:
+                out.say("  Godot: nothing to check: the manifest has no Godot resources (no assets yet?)")
+            else:
+                out.say(f"  Godot: all {check.sprite_frames} SpriteFrames and {check.tilesets} TileSets load")
         else:
             if out.as_json:
                 out.failure([Finding("E000", "Godot failed to load generated resources:\n" + check.output[-3000:])])
@@ -634,6 +662,7 @@ def cmd_status(args: argparse.Namespace, out: Output) -> int:
                     "project": display_path(project.root),
                     "style_version": current,
                     "default_palette": project.config.default_palette,
+                    "pagan": version_string(),
                     "assets": [
                         {
                             "name": e.name, "kind": e.kind, "path": display_path(e.path), "description": e.description,
@@ -649,7 +678,9 @@ def cmd_status(args: argparse.Namespace, out: Output) -> int:
         )
         return 0
     palette = project.config.default_palette or ("open mode" if project.config.palette_mode == "open" else "none")
-    print(f"{display_path(project.root)}: {len(entries)} assets, palette {palette}, style v{current}")
+    print(f"{display_path(project.root)}: {len(entries)} assets, palette {palette}, style v{current}  [{version_string()}]")
+    if is_editable():
+        print("  note: PAGAN is an editable dev checkout; if this project pins a release, install that instead")
     for e in entries:
         size = f"{e.size[0]}x{e.size[1]}" if e.size else "?"
         flags = ", ".join(e.needs(current)) or "ok"
@@ -904,12 +935,13 @@ def build_parser() -> argparse.ArgumentParser:
         prog="pagan",
         description="PAGAN (Pixel Art Grammar And Notation): turn text pixel art into PNGs.",
     )
-    parser.add_argument("--version", action="version", version=f"pagan {__version__}")
+    parser.add_argument("--version", action="version", version=version_string())
     commands = parser.add_subparsers(title="commands", metavar="<command>")
 
     init = commands.add_parser("init", parents=[common], help="create a PAGAN project")
     init.add_argument("dir", nargs="?", default=".", help="project directory (default: current)")
     init.add_argument("--open", action="store_true", help="open palette mode: sprites may define inline palettes")
+    init.add_argument("--godot", metavar="DIR", help="Godot project dir: build into DIR/assets/generated with Godot resources")
     init.set_defaults(handler=cmd_init)
 
     new = commands.add_parser("new", help="scaffold a new source file")

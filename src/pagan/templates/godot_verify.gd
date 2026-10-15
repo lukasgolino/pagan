@@ -1,4 +1,4 @@
-# Written by `pagan build --verify-godot`: loads every resource PAGAN generated and checks it.
+# Run by `pagan build --verify-godot` (from a temp folder): loads every resource PAGAN generated and checks it.
 extends SceneTree
 
 func _init() -> void:
@@ -11,7 +11,8 @@ func _init() -> void:
 		quit(1)
 		return
 	var failures := 0
-	var checked := 0
+	var sprite_frames_checked := 0
+	var tilesets_checked := 0
 	for name in manifest["assets"]:
 		var entry: Dictionary = manifest["assets"][name]
 		var sheets: Array = [entry["sheet"]]
@@ -41,7 +42,7 @@ func _init() -> void:
 			if ts.tile_size != Vector2i(entry["size"][0], entry["size"][1]):
 				printerr("PAGAN_VERIFY_FAIL ", path, " tile size ", ts.tile_size)
 				failures += 1
-			checked += 1
+			tilesets_checked += 1
 		var frames_paths: Array = []
 		if entry.has("godot_sprite_frames"):
 			frames_paths.append(entry["godot_sprite_frames"])
@@ -68,10 +69,10 @@ func _init() -> void:
 					if t == null or t.get_width() != entry["size"][0] or t.get_height() != entry["size"][1]:
 						printerr("PAGAN_VERIFY_FAIL ", path, " ", anim, " frame ", i, " has the wrong size")
 						failures += 1
-			checked += 1
+			sprite_frames_checked += 1
 	if failures > 0:
 		printerr("PAGAN_VERIFY_FAIL ", failures, " problems")
 		quit(1)
 	else:
-		print("PAGAN_VERIFY_OK ", checked, " SpriteFrames checked")
+		print("PAGAN_VERIFY_OK ", sprite_frames_checked, " SpriteFrames, ", tilesets_checked, " TileSets checked")
 		quit(0)

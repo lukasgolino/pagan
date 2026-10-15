@@ -566,6 +566,75 @@ def _parse_animations(raw: Any, frames_known: set[str], line: int | None, error:
     return animations
 
 
+def _expand_mirrored_animations(
+    raw: Any,
+    frames: dict[str, Grid],
+    lines: dict[str, int | None],
+    derived_from: dict[str, str],
+    line: int | None,
+    error: ErrorFn,
+) -> Any:
+    """Turn `walk_right: { from: walk_left, flip: horizontal }` into generated frames + a plain animation.
+
+    Generated frames are named `<animation>_<i>`; fps and loop default to the source animation's.
+    """
+    if not isinstance(raw, dict):
+        return raw
+    expanded = dict(raw)
+    for name, spec in raw.items():
+        if not (isinstance(spec, dict) and "from" in spec):
+            continue
+        where = f"animations.{name}"
+        aline = _line(raw, name) or line
+        extra = [k for k in spec if k not in ("from", "flip", "shift", "fps", "loop")]
+        if extra:
+            error("E001", f"unknown field(s) {', '.join(map(str, extra))}; a mirrored animation takes from, flip, shift, fps, loop", aline, where)
+            expanded.pop(name)
+            continue
+        source = raw.get(spec["from"]) if isinstance(spec["from"], str) else None
+        if isinstance(source, list):
+            source = {"frames": source}
+        if not isinstance(source, dict) or "from" in source or not isinstance(source.get("frames"), list):
+            error("E004", f"{spec['from']!r} isn't an animation with frames to copy (mirrored animations can't chain)", aline, where)
+            expanded.pop(name)
+            continue
+        flip, shift = spec.get("flip", "none"), spec.get("shift", [0, 0])
+        if flip not in ("none", "horizontal", "vertical", "both") or not (
+            isinstance(shift, list) and len(shift) == 2 and all(isinstance(v, int) and not isinstance(v, bool) for v in shift)
+        ):
+            error("E010", "flip must be none/horizontal/vertical/both and shift [dx, dy]", aline, where)
+            expanded.pop(name)
+            continue
+        new_frames: list[str] = []
+        for index, frame in enumerate(source["frames"]):
+            if not isinstance(frame, str) or frame not in frames:
+                new_frames = []
+                break  # the source animation's own missing frame is reported for it
+            generated = f"{name}_{index}"
+            if generated in frames or generated in lines:
+                error("E001", f"generated frame {generated!r} clashes with an existing frame; rename one", aline, where)
+                new_frames = []
+                break
+            grid = _shift(_flip(frames[frame], flip), shift[0], shift[1])
+            if grid is None:
+                error("E010", f"shift {shift} pushes opaque pixels of {frame!r} off the canvas", aline, where)
+                new_frames = []
+                break
+            frames[generated] = grid
+            lines[generated] = aline
+            derived_from[generated] = frame
+            new_frames.append(generated)
+        if not new_frames:
+            expanded.pop(name)
+            continue
+        expanded[name] = {
+            "frames": new_frames,
+            "fps": spec.get("fps", source.get("fps", DEFAULT_FPS)),
+            "loop": spec.get("loop", source.get("loop", True)),
+        }
+    return expanded
+
+
 def _darkest(palette: Palette) -> str:
     def luminance(key: str) -> float:
         r, g, b = palette.colors[key].rgb
@@ -677,21 +746,31 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
 
     animations: dict[str, Animation] = {}
     if kind == "sprite":
-        animations = _parse_animations(data.get("animations"), set(frame_lines), _line(data, "animations"), error)
+        raw_animations = _expand_mirrored_animations(
+            data.get("animations"), base_frames, frame_lines, derived_from, _line(data, "animations"), error
+        )
+        animations = _parse_animations(raw_animations, set(frame_lines), _line(data, "animations"), error)
 
     frames = dict(base_frames)
     if outline and outline_color is not None:
+        clipped: set[str] = set()
+        authored_width = -(-width // 2) if mirror else width
         for frame_name, grid in base_frames.items():
             edge = _edge_pixel(grid)
             if edge is not None:
-                x, y = edge
-                error(
-                    "E007",
-                    "outline: auto would be clipped: an opaque pixel touches the canvas edge. "
-                    "Leave a 1px transparent border (or grow the canvas)",
-                    frame_lines.get(frame_name),
-                    f"{frames_field}.{frame_name} row {y + 1} col {x + 1}",
-                )
+                clipped.add(frame_name)
+                # Report each problem once: not again for frames derived from an already-reported one.
+                if derived_from.get(frame_name) not in clipped:
+                    x, y = edge
+                    if x >= authored_width:  # mirrored half: point at the column the author wrote
+                        x = width - 1 - x
+                    error(
+                        "E007",
+                        "outline: auto would be clipped: an opaque pixel touches the canvas edge. "
+                        "Leave a 1px transparent border (or grow the canvas)",
+                        frame_lines.get(frame_name),
+                        f"{frames_field}.{frame_name} row {y + 1} col {x + 1}",
+                    )
             frames[frame_name] = _outline(grid, outline_color)
 
     variants: dict[str, Variant] = {}

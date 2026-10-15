@@ -49,13 +49,16 @@ frames:
 animations:
   idle: { frames: [idle_0, idle_1], fps: 4, loop: true }
   blink: [idle_0, idle_1]                         # short form: fps 8, loop true
+  walk_right: { from: walk_left, flip: horizontal }   # mirrored animation: frames generated as walk_right_0..
 variants:                     # recolors with identical geometry, built as <name>.<variant>
   fire: { ramp_swap: { green: warm } }            # ramps must be the same length
   ice:  { key_swap: { "5": "a", "6": "b" } }
   night: { palette: dusk_night }                  # same keys, another palette (+ swaps if needed)
 ```
 
-Frame order in the file = order in the sprite sheet. Leave 1px transparent border with `outline: auto`.
+Frame order in the file = order in the sprite sheet (generated frames of mirrored animations come
+after the written ones). Leave a 1px transparent border with `outline: auto`. Findings give `row`/`col`
+1-based, counted in the grid as written (for `mirror: horizontal`, in the authored left half).
 
 ## Tileset - `tiles/<name>.tiles.yaml`
 

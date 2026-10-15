@@ -12,6 +12,22 @@ A new version (and tag) is cut for **any** change to:
 While on 0.x, a minor bump (0.1 -> 0.2) may change any of these; read the notes before upgrading.
 Patch bumps (0.1.0 -> 0.1.1) never change them.
 
+## Unreleased
+
+From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md) and the Age of Boom PAGAN log.
+
+- `pagan --version` names the exact build: `pagan 0.1.0 (v0.1.0, ce24ab4)` for a pinned git install,
+  `(editable checkout <git describe>)` for a dev checkout; `pagan status` shows it and warns on editable
+  installs. The manifest's `generator` is unchanged (output stays byte-reproducible per release).
+- `pagan init --godot <dir>` builds straight into `<dir>/assets/generated` with Godot resources; init writes
+  `.gdignore` when the art folder is inside a Godot project.
+- `pagan config set` accepts comma-separated lists (`png,godot`); errors show the TOML syntax.
+- `--verify-godot` runs its check script from a temp folder (nothing written into the game), fails on Godot
+  import errors, and reports how many SpriteFrames/TileSets it checked (and says so when there are none).
+- Mirrored animations: `walk_right: { from: walk_left, flip: horizontal }` generates the flipped frames.
+- E007 is reported once per problem (not again for derived frames), with authored columns for mirrored sprites.
+- Skill: install PAGAN the way the project pins it, never `pip install -e` unless developing PAGAN.
+
 ## 0.1.0 — 2026-10-15
 
 First release.

@@ -12,7 +12,10 @@ builds engine-ready assets (PNG sheets, manifest.json, Godot SpriteFrames). Full
 
 ## 0. Setup check
 
-1. `pagan --version`. If missing: `pip install -e <path to the PAGAN repo>` (into the project's venv).
+1. `pagan --version` (it shows the exact build, e.g. `pagan 0.1.0 (v0.1.0, ce24ab4)`). If missing, install
+   it **the way the project specifies** (its requirements file / pinned tag, e.g.
+   `pip install -r requirements.txt`). Never replace a pinned install with an editable checkout
+   (`pip install -e`) unless you are developing PAGAN itself; if unsure, stop and ask.
 2. Find the art project: `pagan status` (it says so if there's no `pagan.toml` here or above), or look for one
    (`find . -name pagan.toml -not -path '*/node_modules/*'`). That folder is the game's **art home**:
    - `BRIEF.md` - what the game is, its key assets, the wishlist, and a dated feedback log
@@ -69,7 +72,9 @@ Ask once, in ONE compact message, each question with a recommended default so th
 6. **Engine** - Godot 4 (default; give the path to the Godot project) or plain PNGs.
 
 Then:
-- `pagan init art` (inside the game repo; `--open` only for throwaway prototypes).
+- `pagan init art` inside the game repo (`--godot <godot project dir>` to build straight into it;
+  `--open` only for throwaway prototypes). Inside a Godot project, init writes `.gdignore` so Godot
+  doesn't import the art sources.
 - Palette: propose 2-3 palettes (16-32 colors, grouped into ramps dark -> light; one ramp per material:
   skin, wood, foliage, stone, metal, cloth...). Write them to `palettes/`, run `pagan palette show`,
   **look at the swatches**, show the owner the paths, let them pick or tweak. Set `default_palette`.

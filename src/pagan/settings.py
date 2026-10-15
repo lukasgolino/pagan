@@ -156,13 +156,22 @@ def set_setting(project: Project, key: str, raw_value: str) -> Change:
     if key not in BY_KEY:
         raise PaganError([Finding("E000", f"unknown setting {key!r}; see `pagan config show`")])
     value = parse_value(raw_value)
+    setting = BY_KEY[key]
+    if isinstance(setting.default, list) and isinstance(value, str):
+        # Lists can also be written comma-separated: png,godot  ->  ["png", "godot"]
+        value = [parse_value(part.strip()) for part in value.split(",") if part.strip()]
     text = project.config_path.read_text(encoding="utf-8")
     updated = set_in_toml(text, key, value)
     try:
         data = tomllib.loads(updated)
     except tomllib.TOMLDecodeError as exc:
         raise PaganError([Finding("E001", f"that value doesn't make valid TOML: {exc}", project.config_path)]) from None
-    new_config = parse_config(data, project.config_path)  # raises with a precise message if invalid
+    try:
+        new_config = parse_config(data, project.config_path)  # raises with a precise message if invalid
+    except PaganError as exc:
+        example = toml_value(setting.default if setting.default is not None else "name")
+        hint = f" (value syntax is TOML, e.g. pagan config set {key} '{example}')"
+        raise PaganError([Finding(f.rule, f.message + hint, f.path, f.line, f.where) for f in exc.findings]) from None
     if key == "default_palette" and value is not None and not project.palette_path(str(value)).is_file():
         known = ", ".join(project.palette_names()) or "none"
         raise PaganError([Finding("E005", f"no palette {value!r} (palettes: {known})", project.config_path)])
