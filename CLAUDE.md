@@ -58,7 +58,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - Commit messages (when asked): imperative subject line, e.g. `Add palette loading`.
 - Validation collects *all* findings in a file rather than stopping at the first, and every finding has a
   rule id, file, line where possible, a `where` path (e.g. `colors.4.hex`) and a message that says how to fix it.
-- Dependencies: Pillow, PyYAML; dev: pytest, mypy, types-PyYAML. Others only if genuinely needed — log why below.
+- Dependencies: Pillow, PyYAML, numpy; dev: pytest, mypy, types-PyYAML. Others only if genuinely needed — log why below.
 
 ## Decisions log
 
@@ -96,3 +96,4 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-14: Example Godot project: 480x270 viewport, integer scaling ×3 window, nearest filtering, pixel snapping. Base resolution is an open question for the owner.
 - 2026-10-14: Long-term asset management: a PAGAN project folder is the single home for a game's art (BRIEF.md = what's wanted + feedback log, STYLE.md = how it looks + versioned changelog, assets carry description/status/style_version). `pagan palette adjust` (OKLab lightness/contrast/saturation/hue/warmth) changes every asset at once; `pagan style bump` flags assets for review (W006) until `pagan mark --current`.
 - 2026-10-14: Source-file edits by PAGAN (`palette adjust`, `mark`, `style bump`) are line-level text edits, never YAML re-serialisation, so comments and layout survive.
+- 2026-10-15: numpy added (owner approved): the voxel renderer traces all rays in lockstep (same Amanatides-Woo algorithm and float operations as before, so output is byte-identical) and W007 is vectorised. Cold demo lint ~11s -> ~3s.

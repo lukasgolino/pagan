@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 from pagan.asset import ASSET_SUFFIXES, Asset, Grid, load_asset, opaque
 from pagan.findings import Finding, PaganError
 from pagan.palette import PALETTE_SUFFIX, TRANSPARENT, load_palette_file
@@ -223,20 +225,26 @@ def frame_change(a: Grid, b: Grid, max_shift: int = 2) -> tuple[float, tuple[int
 
     Counted over pixels opaque in either frame; a pure 1px bob therefore scores ~0.
     """
-    pa = {(x, y): c for y, row in enumerate(a) for x, c in enumerate(row) if c != TRANSPARENT}
-    pb = {(x, y): c for y, row in enumerate(b) for x, c in enumerate(row) if c != TRANSPARENT}
-    if not pa and not pb:
+    ga = np.array([[ord(c) for c in row] for row in a], dtype=np.int32)
+    gb = np.array([[ord(c) for c in row] for row in b], dtype=np.int32)
+    clear = ord(TRANSPARENT)
+    if not ((ga != clear).any() or (gb != clear).any()):
         return 0.0, (0, 0)
+    m = max_shift
+    pa = np.pad(ga, m, constant_values=clear)
+    pb = np.pad(gb, m, constant_values=clear)
+    height, width = pa.shape
     best = (2.0, (0, 0))
-    shifts = sorted(
-        ((dx, dy) for dx in range(-max_shift, max_shift + 1) for dy in range(-max_shift, max_shift + 1)),
-        key=lambda d: (abs(d[0]) + abs(d[1]), d),
-    )
+    shifts = sorted(((dx, dy) for dx in range(-m, m + 1) for dy in range(-m, m + 1)), key=lambda d: (abs(d[0]) + abs(d[1]), d))
     for dx, dy in shifts:  # smallest movements first, so ties keep the smaller move
-        moved = {(x - dx, y - dy): c for (x, y), c in pb.items()}  # b's pixel that lands on a's (x, y)
-        union = pa.keys() | moved.keys()
-        differ = sum(1 for p in union if pa.get(p) != moved.get(p))
-        score = differ / len(union)
+        # b's pixel at (x + dx, y + dy) is compared with a's pixel at (x, y)
+        moved = np.full_like(pb, clear)
+        ys, ye = max(0, -dy), min(height, height - dy)
+        xs, xe = max(0, -dx), min(width, width - dx)
+        moved[ys:ye, xs:xe] = pb[ys + dy : ye + dy, xs + dx : xe + dx]
+        union = (pa != clear) | (moved != clear)
+        total = int(union.sum())
+        score = int(((pa != moved) & union).sum()) / total if total else 0.0
         if score < best[0]:
             best = (score, (dx, dy))
             if score == 0:
