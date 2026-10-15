@@ -83,7 +83,8 @@ description: "..."
 size: [96, 96]                # frame size in pixels
 pivot: [48, 60]               # where `origin` lands in every frame
 origin: [35, 0, 0]            # model point on the pivot; default: centre of the bounds at the bottom
-directions: 8                 # 1 | 4 | 8 | 16 -> frames e, ne, n, nw, w, sw, s, se (16 adds ene, nne...)
+directions: 8                 # 1 | 4 | 8 | 16 | 32 -> frames e, ne, n, nw, w, sw, s, se (16 adds ene, nne...;
+                              #   32 are h00..h31: h00 = east, counter-clockwise in 11.25 degree steps)
 heading: 0                    # first heading in degrees; 1 direction defaults to 270 (facing the camera)
 outline: auto                 # default auto for models
 camera: { elevation: 42, scale: 1 }               # optional override of pagan.toml [camera]
@@ -99,6 +100,8 @@ parts:                        # applied in order; later parts overwrite earlier 
   - ellipsoid: { center: [0, 0, 4], radii: [3, 3, 4], material: body }
   - line: { from: [66, 0, 9], to: [79, 0, 15], radius: 0, material: mast }
   - sail: { at: [36, 0, 13], width: 22, height: 14, bulge: 2.4, brace: 30, material: sail, yard: mast }
+  - sail: { at: [17, 0, 14], width: 12, height: 13, rig: fore-aft, material: sail }   # luff at the mast, reaching aft
+  - triangle: { points: [[62, 0, 10], [70, 0, 10], [53, 0, 30]], material: sail }       # jibs, lateens, fins, gables
   - layers:                   # literal voxels: one grid per z level, bottom first
       at: [0, 3, 0]           # grid col -> +x, grid row -> -y (seen from above, front to the right)
       legend: { w: hull, d: deck }
@@ -133,7 +136,12 @@ about 2r+1 wide; `box` corners are inclusive (`from: [0,0,0], to: [0,0,0]` is on
 Pivot: from above at elevation e, the front of a round base sits about r·sin(e) pixels *below* the origin,
 so put the pivot a few pixels above the frame's bottom (E007 tells you if the outline would be clipped). Heading 0 shows the front pointing right ("e"), 90 away from the camera ("n"), 270 towards it.
 `top:` gives a shape's top layer another material; `rim:` adds a 1-voxel wall around its top edge.
-`box` is inclusive of both corners. Frames: `<heading>` (static) and `<anim>_<heading>_<i>`;
+`box` is inclusive of both corners. `hull` and `cylinder` are symmetric about their centre voxel, so their
+widths are odd: `beam: 10` gives 9 voxels (use 11 for 11). `sail` `at` is where the sail's bottom edge
+meets the mast: `rig: square` (default) hangs across the hull just forward of the mast (`brace` turns it
+about the mast); `rig: fore-aft` lies along the hull with its leading edge at the mast, reaching `width`
+voxels aft. `triangle` fills a flat triangle between three points (`thickness` 1-4 voxels) and shades with
+its exact normal. Frames: `<heading>` (static) and `<anim>_<heading>_<i>`;
 animations `<heading>` and `<anim>_<heading>` (1 direction: `main`, `<anim>_<i>`, `<anim>`).
 `pagan bake <model>` writes the rendered frames as an editable sprite.
 
@@ -197,7 +205,8 @@ wrap = 0.3                         # light wrapping around curves (softer shadin
 baked = true                       # false: flat colors for engine lighting (+ export "normals")
 
 [lint]
-max_ramps_per_sprite = 3           # W003
+max_ramps_per_sprite = 3            # W003 for sprites/tilesets
+max_ramps_per_model = 6             # W003 for 3D models           # W003
 max_frame_change = 0.4             # W007
 max_ramp_steps = 0                 # W008: most shades per ramp/material (0 = no limit)
 disable = []                       # warning ids only

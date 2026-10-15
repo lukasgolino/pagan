@@ -25,6 +25,7 @@ DIRECTION_NAMES = {
     4: ["e", "n", "w", "s"],
     8: ["e", "ne", "n", "nw", "w", "sw", "s", "se"],
     16: ["e", "ene", "ne", "nne", "n", "nnw", "nw", "wnw", "w", "wsw", "sw", "ssw", "s", "sse", "se", "ese"],
+    32: [f"h{i:02d}" for i in range(32)],  # h00 = east, counter-clockwise in 11.25 degree steps
 }
 
 

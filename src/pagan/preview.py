@@ -116,7 +116,10 @@ def contact_sheet(asset: Asset, options: PreviewOptions) -> Image.Image:
     if asset.kind == "model":
         # One row per heading: the static frame, then that heading's animation frames.
         headings = [a.name for a in asset.animations.values() if a.frames == (a.name,)]
-        for heading in headings:
+        animated = len(asset.animations) > len(headings)
+        if not animated:  # static model: all headings together, wrapping in rows
+            rows.append(("headings", [(h, upscale(frame_image(asset, h), scale, options)) for h in headings]))
+        for heading in headings if animated else []:
             names = [heading] + [f for a in asset.animations.values() if a.name.endswith(f"_{heading}") for f in a.frames]
             rows.append((f"heading {heading}", [(n, upscale(frame_image(asset, n), scale, options)) for n in names]))
         for variant_name in asset.variants:

@@ -17,7 +17,7 @@ KEY_CHARS = frozenset(string.digits + string.ascii_letters)
 PALETTE_SUFFIX = ".pal.yaml"
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
-_FIELDS = ("name", "colors", "ramps")
+_FIELDS = ("name", "description", "colors", "ramps")
 _COLOR_FIELDS = ("hex", "name")
 
 # error(rule, message, line, where)

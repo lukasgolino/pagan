@@ -67,3 +67,25 @@ From PAGAN_LOG.md (S5):
   left half. Row and column are 1-based (now documented in reference.md).
 - **Outline scaffold:** `pagan new sprite --outline` adds a comment: keep the outermost rows and columns
   empty.
+
+### PAGAN responses to the Age of Boom G1 log — 2026-10-15
+
+Fixed on `main` (unreleased):
+
+- **`pagan new model` in open mode** now works without a palette: it scaffolds a starter inline palette.
+  In strict mode the error says what to do: pass `--palette`, or run `pagan new palette` and then
+  `config set default_palette`.
+- **Palette `description:`** is now accepted.
+- **`config set default_palette`** now lists only the assets that follow the default, meaning those that
+  don't set `palette:` themselves.
+- **Static model previews** now show all headings in one grid that wraps at 8 per row. Animated models
+  still get one row per heading.
+- **Hull widths:** the reference now explains that `hull` and `cylinder` widths are odd (symmetric about
+  the centre voxel), so `beam: 10` gives 9 and you use 11 for 11.
+- **Sails:** `sail` takes `rig: fore-aft`, which puts the leading edge at the mast and reaches `width`
+  voxels aft (`brace` still trims it). There is a new `triangle` shape for jibs and lateen sails, with an
+  exact normal. The reference now describes `at` as "where the sail's bottom edge meets the mast".
+- **32 directions:** `directions: 32` works. The frames are `h00`..`h31`, with `h00` = east, going
+  counter-clockwise in 11.25° steps.
+- **W003 on models:** there is a new `lint.max_ramps_per_model` setting (default 6).
+  `lint.max_ramps_per_sprite` (3) now applies only to 2D sprites and tilesets.

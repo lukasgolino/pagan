@@ -40,6 +40,8 @@ baked = true                     # false: flat colors for engines with their own
 [lint]
 # W003: warn when a sprite uses colors from more than this many ramps.
 max_ramps_per_sprite = 3
+# W003 for 3D models, which mix more materials.
+max_ramps_per_model = 6
 # W007: warn when more than this share of pixels changes between consecutive animation frames,
 # even after allowing the whole sprite to move by up to 2px. Keeps animations free of jumps.
 max_frame_change = 0.4

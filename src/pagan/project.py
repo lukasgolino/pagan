@@ -24,6 +24,7 @@ PaletteMode = Literal["strict", "open"]
 @dataclass(frozen=True)
 class LintConfig:
     max_ramps_per_sprite: int = 3
+    max_ramps_per_model: int = 6  # models mix more materials (hull, sails, team colours...)
     max_frame_change: float = 0.4  # W007: share of pixels that may change between animation frames
     max_ramp_steps: int = 0  # W008: most keys an asset may use from one ramp (0 = no limit)
     disable: tuple[str, ...] = ()
@@ -193,7 +194,7 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
     if not isinstance(data, dict):
         error("[lint] must be a table", "lint")
         return defaults
-    allowed = ("max_ramps_per_sprite", "max_frame_change", "max_ramp_steps", "disable", "require_outline")
+    allowed = ("max_ramps_per_sprite", "max_ramps_per_model", "max_frame_change", "max_ramp_steps", "disable", "require_outline")
     for key in data:
         if key not in allowed:
             error(f"unknown lint setting {key!r}; allowed: {', '.join(allowed)}", f"lint.{key}")
@@ -202,6 +203,11 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
     if isinstance(max_ramps, bool) or not isinstance(max_ramps, int) or max_ramps < 1:
         error("max_ramps_per_sprite must be a positive integer", "lint.max_ramps_per_sprite")
         max_ramps = defaults.max_ramps_per_sprite
+
+    max_model_ramps = data.get("max_ramps_per_model", defaults.max_ramps_per_model)
+    if isinstance(max_model_ramps, bool) or not isinstance(max_model_ramps, int) or max_model_ramps < 1:
+        error("max_ramps_per_model must be a positive integer", "lint.max_ramps_per_model")
+        max_model_ramps = defaults.max_ramps_per_model
 
     max_change = data.get("max_frame_change", defaults.max_frame_change)
     if isinstance(max_change, bool) or not isinstance(max_change, int | float) or not 0 < max_change <= 1:
@@ -225,6 +231,7 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
 
     return LintConfig(
         max_ramps_per_sprite=max_ramps,
+        max_ramps_per_model=max_model_ramps,
         max_frame_change=float(max_change),
         max_ramp_steps=max_steps,
         disable=tuple(disable),

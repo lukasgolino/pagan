@@ -276,23 +276,41 @@ def cmd_new_model(args: argparse.Namespace, out: Output) -> int:
     project = _require_project()
     width, height = _parse_size_arg(args.size)
     palette_name = args.palette or project.config.default_palette
-    if palette_name is None:
-        raise _usage_error("no --palette given and pagan.toml has no default_palette")
-    palette = project.load_palette(palette_name)
-    if not palette.ramps:
-        raise _usage_error(f"palette {palette_name!r} has no ramps; models shade with ramps")
-    ramps = list(palette.ramps)
-    main_ramp, accent_ramp = ramps[0], ramps[min(1, len(ramps) - 1)]
-    if args.directions not in (1, 4, 8, 16):
-        raise _usage_error("--directions must be 1, 4, 8 or 16")
+    if palette_name is None and project.config.palette_mode != "open":
+        raise _usage_error(
+            "no --palette given and pagan.toml has no default_palette: pass --palette <name>, or create one with "
+            "`pagan new palette <name>` and `pagan config set default_palette <name>`"
+        )
+    if palette_name is not None:
+        palette = project.load_palette(palette_name)
+        if not palette.ramps:
+            raise _usage_error(f"palette {palette_name!r} has no ramps; models shade with ramps")
+        ramps = list(palette.ramps)
+        main_ramp, accent_ramp = ramps[0], ramps[min(1, len(ramps) - 1)]
+        palette_block = f"palette: {palette_name}"
+    else:  # open mode without a palette: a small inline one to start from
+        main_ramp, accent_ramp = "main", "accent"
+        palette_block = """palette:                          # inline palette (open mode); or name a palette file
+  colors:
+    "0": { hex: "#1a1c2c", name: ink }
+    "1": { hex: "#5d3b2c", name: wood_dark }
+    "2": { hex: "#8f5a36", name: wood }
+    "3": { hex: "#c2884a", name: wood_light }
+    "4": { hex: "#4e5d6c", name: metal_dark }
+    "5": { hex: "#8b9bab", name: metal }
+  ramps:
+    main: ["1", "2", "3"]
+    accent: ["4", "5"]"""
+    if args.directions not in (1, 4, 8, 16, 32):
+        raise _usage_error("--directions must be 1, 4, 8, 16 or 32")
     description = args.description or "TODO: what this is and what it should look like"
     text = f"""name: {name}
 description: {json.dumps(description)}
-palette: {palette_name}
+{palette_block}
 size: [{width}, {height}]
 pivot: [{width // 2}, {round(height * 0.62)}]     # where `origin` lands in each frame
 origin: [0, 0, 0]                 # model point (x forward, y left, z up) placed on the pivot
-directions: {args.directions}                     # 1, 4, 8 or 16 headings -> frames e, ne, n, ...
+directions: {args.directions}                     # 1, 4, 8, 16 or 32 headings -> frames e, ne, n, ... (32: h00..h31)
 outline: auto
 status: draft
 style_version: {project.config.style_version}
@@ -303,7 +321,7 @@ materials:
   body:   {{ ramp: {main_ramp} }}
   accent: {{ ramp: {accent_ramp} }}
 
-# Shapes: box, hull, cylinder, ellipsoid, line, sail, layers. Whole voxels; x forward, y left, z up.
+# Shapes: box, hull, cylinder, ellipsoid, line, sail, triangle, layers. Whole voxels; x forward, y left, z up.
 # Per part: `mirror: true` reflects across y = 0, `carve: true` removes voxels, `id:` names it for poses.
 parts:
   - box: {{ from: [-4, -3, 0], to: [4, 3, 5], material: body, top: accent }}
@@ -811,6 +829,17 @@ def cmd_config_get(args: argparse.Namespace, out: Output) -> int:
     return 0
 
 
+def _names_own_palette(path: Path) -> bool:
+    """Whether an asset file sets `palette:` itself (then the project default doesn't affect it)."""
+    from pagan.yamlio import YamlError, load_yaml
+
+    try:
+        data = load_yaml(path)
+    except YamlError:
+        return False
+    return isinstance(data, dict) and data.get("palette") is not None
+
+
 def cmd_config_set(args: argparse.Namespace, out: Output) -> int:
     from pagan.manage import catalogue
 
@@ -830,7 +859,8 @@ def cmd_config_set(args: argparse.Namespace, out: Output) -> int:
                 "(e.g. a new camera angle or light direction), `pagan style bump \"...\"` and redraw them."
             )
     elif change.refresh == "all":
-        out.say(f"  every asset using the default palette recolors on the next build ({len(entries)} assets).")
+        following = [e.name for e in entries if not _names_own_palette(e.path)]
+        out.say(f"  {len(following)} assets don't name a palette and follow the default: {', '.join(following) or 'none'}.")
     elif change.refresh == "build":
         out.say("  takes effect on the next `pagan build`.")
     if errors:
@@ -968,7 +998,7 @@ def build_parser() -> argparse.ArgumentParser:
     new_model.add_argument("name", help="model name, e.g. ship")
     new_model.add_argument("--size", default="64x64", help="frame size WIDTHxHEIGHT (default 64x64)")
     new_model.add_argument("--palette", help="palette name (default: the project's default_palette)")
-    new_model.add_argument("--directions", type=int, default=8, help="headings to render: 1, 4, 8 or 16 (default 8)")
+    new_model.add_argument("--directions", type=int, default=8, help="headings to render: 1, 4, 8, 16 or 32 (default 8)")
     new_model.add_argument("--description", help="what the asset is; kept in the file for future reference")
     new_model.set_defaults(handler=cmd_new_model)
 

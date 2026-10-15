@@ -137,7 +137,8 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
             if name not in used:
                 warn("W002", "frame isn't used by any animation", name)
 
-    limit = project.config.lint.max_ramps_per_sprite
+    lint_config = project.config.lint
+    limit = lint_config.max_ramps_per_model if asset.kind == "model" else lint_config.max_ramps_per_sprite
     ramps = _ramps_used(asset)
     if len(ramps) > limit:
         findings.append(

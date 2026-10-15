@@ -27,6 +27,13 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md) and the Age of Boom PAGAN
 - Mirrored animations: `walk_right: { from: walk_left, flip: horizontal }` generates the flipped frames.
 - E007 is reported once per problem (not again for derived frames), with authored columns for mirrored sprites.
 - Skill: install PAGAN the way the project pins it, never `pip install -e` unless developing PAGAN.
+- From the game's G1 log: palette files accept `description`; `pagan new model` works in open mode without
+  a palette (inline starter palette) and its strict-mode error says how to fix it; `config set
+  default_palette` lists only the assets that follow the default; static models preview as one heading
+  grid; new `lint.max_ramps_per_model` (default 6) for W003 on models.
+- Models: `directions: 32` (frames `h00`..`h31`); sails take `rig: fore-aft` (luff at the mast, reaching
+  aft); new `triangle` shape (jibs, lateens, fins, gables) with an exact normal. Docs: `sail` `at`,
+  odd hull/cylinder widths.
 
 ## 0.1.0 — 2026-10-15
 

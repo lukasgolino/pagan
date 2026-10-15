@@ -47,7 +47,7 @@ from pagan.voxel import (
 )
 
 RENDERER_VERSION = "3"  # bump when rendering changes, to invalidate caches
-PART_TYPES = ("box", "hull", "cylinder", "ellipsoid", "line", "sail", "layers")
+PART_TYPES = ("box", "hull", "cylinder", "ellipsoid", "line", "sail", "triangle", "layers")
 _MODEL_FIELDS = (
     "name", "description", "palette", "variants", "tags", "status", "style_version",
     "size", "pivot", "origin", "outline", "outline_color", "directions", "heading",
@@ -389,8 +389,12 @@ class _Builder:
         return cells
 
     def _sail(self, spec: dict[str, Any], line: int | None, where: str) -> dict[Cell, str] | None:
-        allowed = ("at", "width", "height", "bulge", "brace", "material", "yard")
+        allowed = ("at", "width", "height", "bulge", "brace", "rig", "material", "yard")
         if not self._check_fields(spec, allowed, line, where):
+            return None
+        rig = _get(spec, "rig", "square")
+        if rig not in ("square", "fore-aft"):
+            self.error("E013", "rig must be square (across the hull, hung forward of the mast) or fore-aft (along the hull, aft of the mast)", line, where)
             return None
         at = _ivec(_get(spec, "at"))
         width, height = _get(spec, "width"), _get(spec, "height")
@@ -398,14 +402,18 @@ class _Builder:
         material = self._material(spec, "material", line, where)
         yard = self._material(spec, "yard", line, where, required=False)
         if at is None or not (_num(width) and width > 0 and _num(height) and height > 0) or not _num(bulge) or not _num(brace):
-            self.error("E013", "sail needs at: [x, y, z_bottom] (the mast), width, height, and optional bulge, brace (degrees)", line, where)
+            self.error("E013", "sail needs at: [x, y, z] (the mast where the sail's bottom edge meets it), width, height, and optional bulge, brace (degrees), rig", line, where)
             return None
         if material is None or ("yard" in spec and yard is None):
             return None
         width, height, bulge = float(width), float(height), float(bulge)
-        angle = math.radians(brace)
+        fore_aft = rig == "fore-aft"
+        # Square sails span the hull's width; fore-and-aft sails lie along it, luff at the mast, reaching aft.
+        angle = math.radians(brace + (90 if fore_aft else 0))
         ca, sa = math.cos(angle), math.sin(angle)
         half = width / 2
+        centre = -half if fore_aft else 0.0
+        lift = 0.0 if fore_aft else 1.0
         rows = math.ceil(height)
         cells: dict[Cell, str] = {}
 
@@ -419,14 +427,14 @@ class _Builder:
 
         def bulge_at(u: float, row: float) -> float:
             fullness = math.sin(math.pi * (row + 0.5) / rows)
-            return bulge * (1 - (u / (half + 0.5)) ** 2) * fullness
+            return bulge * (1 - ((u - centre) / (half + 0.5)) ** 2) * fullness
 
         steps = max(1, math.ceil(width * 4))
         for row in range(rows):
             z = at[2] + row
             for i in range(steps + 1):
-                u = -half + width * i / steps
-                v = 1 + bulge_at(u, row)
+                u = centre - half + width * i / steps
+                v = lift + bulge_at(u, row)
                 # Exact normal of the curved cloth: the forward axis tilted by the bulge's slopes.
                 dv_du = (bulge_at(u + 0.1, row) - bulge_at(u - 0.1, row)) / 0.2
                 dv_dz = (bulge_at(u, row + 0.1) - bulge_at(u, row - 0.1)) / 0.2
@@ -436,10 +444,45 @@ class _Builder:
                 normal = (nv * ca + nu * sa, -nv * sa + nu * ca, nz)
                 put(u, v, z, material, normal)
                 put(u, v + 0.6, z, material, normal)  # two voxels thick: no gaps for rays to slip through
-        if yard is not None:
+        if yard is not None:  # square: the yard across the top; fore-and-aft: the gaff along the top
             for i in range(steps + 9):
-                u = -half - 1 + (width + 2) * i / (steps + 8)
+                u = centre - half - 1 + (width + 2) * i / (steps + 8)
                 put(u, 0, at[2] + rows, yard)
+        return cells
+
+    def _triangle(self, spec: dict[str, Any], line: int | None, where: str) -> dict[Cell, str] | None:
+        """A flat filled triangle (jibs, lateen sails, fins, roof gables), with an exact normal."""
+        if not self._check_fields(spec, ("points", "material", "thickness"), line, where):
+            return None
+        points = _get(spec, "points")
+        thickness = _get(spec, "thickness", 1)
+        material = self._material(spec, "material", line, where)
+        corners = [_vec(p) for p in points] if isinstance(points, list) and len(points) == 3 else None
+        if corners is None or any(c is None for c in corners) or not (isinstance(thickness, int) and 1 <= thickness <= 4):
+            self.error("E013", "triangle needs points: [[x,y,z], [x,y,z], [x,y,z]] and optional thickness 1-4", line, where)
+            return None
+        if material is None:
+            return None
+        a, b, c = (tuple(float(v) for v in p) for p in corners if p is not None)
+        ab = [b[i] - a[i] for i in range(3)]
+        ac = [c[i] - a[i] for i in range(3)]
+        n = (ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0])
+        length = math.sqrt(sum(v * v for v in n))
+        if length < 1e-9:
+            self.error("E013", "triangle points are in a line", line, where)
+            return None
+        normal = (n[0] / length, n[1] / length, n[2] / length)
+        steps = max(1, math.ceil(max(math.dist(a, b), math.dist(a, c), math.dist(b, c)) * 4))
+        cells: dict[Cell, str] = {}
+        for i in range(steps + 1):
+            for j in range(steps + 1 - i):
+                s_, t_ = i / steps, j / steps
+                p = [a[k] + ab[k] * s_ + ac[k] * t_ for k in range(3)]
+                for layer in range(thickness):
+                    q = [p[k] + normal[k] * (layer * 0.6) for k in range(3)]
+                    cell = (math.floor(q[0] + 0.5), math.floor(q[1] + 0.5), math.floor(q[2] + 0.5))
+                    cells[cell] = material
+                    self.pending_normals[cell] = normal
         return cells
 
     def _layers(self, spec: dict[str, Any], line: int | None, where: str) -> dict[Cell, str] | None:
@@ -511,6 +554,12 @@ def _estimated_cells(shape: str, spec: dict[str, Any]) -> float:
         return (length + 1) * (2 * size("radius", 0) + 1) ** 3
     if shape == "sail":
         return (size("width") + 9) * (size("height") + 1) * 4
+    if shape == "triangle":
+        pts = spec.get("points")
+        if isinstance(pts, list) and len(pts) == 3 and all(isinstance(p, list) and len(p) == 3 and all(_num(v) for v in p) for p in pts):
+            span = max(math.dist(p, q) for p in pts for q in pts)
+            return (span + 1) ** 2 * 4
+        return 1.0
     return 0.0  # layers: bounded by the text itself
 
 
@@ -649,7 +698,7 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
 
     directions = data.get("directions", 8)
     if isinstance(directions, bool) or not isinstance(directions, int) or directions not in DIRECTION_NAMES:
-        error("E013", "directions must be 1, 4, 8 or 16", _line(data, "directions"), "directions")
+        error("E013", "directions must be 1, 4, 8, 16 or 32", _line(data, "directions"), "directions")
         directions = 8
     heading = data.get("heading", 0 if directions > 1 else 270)
     if not _num(heading):
