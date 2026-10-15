@@ -39,7 +39,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("default_palette", None, "palette for assets that don't name one; switching it recolors all of them", "all"),
     Setting("output_dir", "build", "where `pagan build` writes final assets (e.g. a game engine's asset folder)", "build"),
     Setting("preview_dir", "previews", "scratch folder for previews", "none"),
-    Setting("export", ["png"], 'build outputs: "png" (sheets + manifest), "godot" (SpriteFrames .tres), "normals" (normal maps for 3D models)', "build"),
+    Setting("export", ["png"], 'extra build outputs: "godot" (SpriteFrames/TileSet .tres), "normals" (normal maps for 3D models); "png" sheets + manifest are always written', "build"),
     Setting("style_version", 1, "current style version; assets made under older ones get W006 (use `pagan style bump`)", "lint"),
     Setting("camera.elevation", 42.0, "3D camera angle above the horizon in degrees: 90 = straight down, ~40 = top-down 3/4, ~15 = side-on", "models"),
     Setting("camera.scale", 1.0, "pixels per voxel for 3D models", "models"),
@@ -83,9 +83,11 @@ def toml_value(value: Any) -> str:
 def parse_value(text: str) -> Any:
     """Parse a command-line value as TOML (`42`, `true`, `[1, 2]`, `"x"`); bare words become strings."""
     try:
-        return tomllib.loads(f"v = {text}")["v"]
+        value = tomllib.loads(f"v = {text}")["v"]
     except tomllib.TOMLDecodeError:
         return text
+    # Dates, times and inline tables aren't setting values: treat the text as a plain string.
+    return value if isinstance(value, bool | int | float | str | list) else text
 
 
 def _split_comment(line: str) -> tuple[str, str]:
@@ -104,42 +106,85 @@ def _split_comment(line: str) -> tuple[str, str]:
     return line, ""
 
 
-def set_in_toml(text: str, key: str, value: Any) -> str:
-    """Set a (possibly dotted) key in TOML text, keeping layout and comments."""
-    table, _, name = key.rpartition(".")
-    lines = text.split("\n")
-    current_table = ""
-    table_start: int | None = 0 if not table else None
-    table_end = len(lines)
+def _bracket_depth(code: str) -> int:
+    depth, quote = 0, None
+    for char in code:
+        if quote:
+            if char == quote:
+                quote = None
+        elif char in ('"', "'"):
+            quote = char
+        elif char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+    return depth
+
+
+def _sections(lines: list[str]) -> list[tuple[str, int, int]]:
+    """(table name, first line, end line) for the root ("") and every [table]."""
+    found: list[tuple[str, int, int]] = []
+    name, start = "", 0
     for i, line in enumerate(lines):
         header = re.match(r"^\s*\[([^\[\]]+)\]\s*(#.*)?$", line)
         if header:
-            if table and current_table == table and table_start is not None:
-                table_end = i
-                break
-            current_table = header.group(1).strip()
-            if current_table == table:
-                table_start = i + 1
-            elif not table:
-                table_end = i
-                break
-            continue
-        if current_table == table:
-            code, comment = _split_comment(line)
-            match = re.match(rf"^(\s*){re.escape(name)}(\s*=\s*)", code)
-            if match:
-                gap = code[len(code.rstrip()) :]  # keep the spacing before a trailing comment
-                lines[i] = f"{match.group(1)}{name}{match.group(2)}{toml_value(value)}{gap}{comment}"
+            found.append((name, start, i))
+            name, start = header.group(1).strip(), i + 1
+    found.append((name, start, len(lines)))
+    return found
+
+
+def set_in_toml(text: str, key: str, value: Any) -> str:
+    """Set a (possibly dotted) key in TOML text, keeping layout and comments.
+
+    Replaces an existing value (also one spread over several lines), else a commented-out
+    `# key = ...` template line, else adds the key at the end of its table (creating the table).
+    """
+    return _edit_toml(text, key, f"{key.rpartition('.')[2]} = {toml_value(value)}")
+
+
+def remove_from_toml(text: str, key: str) -> str:
+    """Comment out a key so its default applies again (the line stays as a template)."""
+    return _edit_toml(text, key, None)
+
+
+def _edit_toml(text: str, key: str, entry: str | None) -> str:
+    table, _, name = key.rpartition(".")
+    lines = text.split("\n")
+    section = next((sec for sec in _sections(lines) if sec[0] == table), None)
+    if section is not None:
+        _, first, end = section
+        for i in range(first, end):
+            code, comment = _split_comment(lines[i])
+            match = re.match(rf"^(\s*){re.escape(name)}\s*=", code)
+            if not match:
+                continue
+            last = i
+            while _bracket_depth("".join(_split_comment(l)[0] for l in lines[i : last + 1])) > 0 and last + 1 < end:
+                last += 1  # a value spread over several lines
+            if entry is None:
+                replacement = [f"{match.group(1)}# {name} = {code.split('=', 1)[1].strip()}"] if last == i else []
+                lines[i : last + 1] = replacement
+            else:
+                gap = code[len(code.rstrip()) :] if last == i else ""
+                lines[i : last + 1] = [f"{match.group(1)}{entry}{gap}{comment if last == i else ''}"]
+            return "\n".join(lines)
+        if entry is None:
+            return text
+        for i in range(first, end):  # a commented-out template line: `# default_palette = "my_palette"`
+            template = re.match(rf"^(\s*)#\s*{re.escape(name)}\s*=", lines[i])
+            if template:
+                lines[i] = f"{template.group(1)}{entry}"
                 return "\n".join(lines)
-    entry = f"{name} = {toml_value(value)}"
-    if table_start is None:  # table doesn't exist yet: append it
-        suffix = "" if text.endswith("\n") else "\n"
-        return f"{text}{suffix}\n[{table}]\n{entry}\n"
-    insert = table_end
-    while insert > table_start and not lines[insert - 1].strip():
-        insert -= 1
-    lines.insert(insert, entry)
-    return "\n".join(lines)
+        insert = end
+        while insert > first and (not lines[insert - 1].strip() or lines[insert - 1].lstrip().startswith("#")):
+            insert -= 1  # after the table's last setting, before trailing blanks/comments of the next table
+        lines.insert(insert, entry)
+        return "\n".join(lines)
+    if entry is None:
+        return text
+    suffix = "" if text.endswith("\n") else "\n"
+    return f"{text}{suffix}\n[{table}]\n{entry}\n"
 
 
 @dataclass
@@ -176,6 +221,19 @@ def set_setting(project: Project, key: str, raw_value: str) -> Change:
     if key == "default_palette" and value is not None and not project.palette_path(str(value)).is_file():
         known = ", ".join(project.palette_names()) or "none"
         raise PaganError([Finding("E005", f"no palette {value!r} (palettes: {known})", project.config_path)])
+    old = current_value(project.config, key)
+    project.config_path.write_text(updated, encoding="utf-8")
+    return Change(key, old, current_value(new_config, key), BY_KEY[key].refresh)
+
+
+def unset_setting(project: Project, key: str) -> Change:
+    """Return a setting to its default by commenting it out of pagan.toml."""
+    if project.config_path is None:
+        raise PaganError([Finding("E000", "no pagan.toml found; run `pagan init` first")])
+    if key not in BY_KEY:
+        raise PaganError([Finding("E000", f"unknown setting {key!r}; see `pagan config show`")])
+    updated = remove_from_toml(project.config_path.read_text(encoding="utf-8"), key)
+    new_config = parse_config(tomllib.loads(updated), project.config_path)
     old = current_value(project.config, key)
     project.config_path.write_text(updated, encoding="utf-8")
     return Change(key, old, current_value(new_config, key), BY_KEY[key].refresh)

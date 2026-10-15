@@ -50,7 +50,8 @@ animations:
   idle: { frames: [idle_0, idle_1], fps: 4, loop: true }
   blink: [idle_0, idle_1]                         # short form: fps 8, loop true
   walk_right: { from: walk_left, flip: horizontal }   # mirrored animation: frames generated as walk_right_0..
-variants:                     # recolors with identical geometry, built as <name>.<variant>
+variants:                     # recolors with identical geometry, built as <name>.<variant>; swaps apply
+                              # to the final pixels, so every key is remapped wherever it's used
   fire: { ramp_swap: { green: warm } }            # ramps must be the same length
   ice:  { key_swap: { "5": "a", "6": "b" } }
   night: { palette: dusk_night }                  # same keys, another palette (+ swaps if needed)
@@ -85,10 +86,12 @@ pivot: [48, 60]               # where `origin` lands in every frame
 origin: [35, 0, 0]            # model point on the pivot; default: centre of the bounds at the bottom
 directions: 8                 # 1 | 4 | 8 | 16 | 32 -> frames e, ne, n, nw, w, sw, s, se (16 adds ene, nne...;
                               #   32 are h00..h31: h00 = east, counter-clockwise in 11.25 degree steps)
-heading: 0                    # first heading in degrees; 1 direction defaults to 270 (facing the camera)
+heading: 0                    # first heading in degrees; 1 direction defaults to 270 (facing the camera).
+                              # Frames are named by where they actually face: heading 45 with 4 directions
+                              # gives ne, nw, sw, se; off-compass angles are named d010, d100, ...
 outline: auto                 # default auto for models
 camera: { elevation: 42, scale: 1 }               # optional override of pagan.toml [camera]
-light: { direction: [-0.5, 0.45, 0.75], ambient: 0.2, shadows: true }   # optional override
+light: { direction: [-0.5, 0.45, 0.75], ambient: 0.2, shadows: true }   # optional override of any [light] key
 materials:                    # shade with a palette ramp (dark -> light)
   hull: { keys: ["6", "7", "8", "9"] }
   sail: { ramp: earth, two_sided: true }          # two_sided: thin cloth/leaves lit from both sides
@@ -189,7 +192,7 @@ palette_mode = "strict"            # strict: palette files only | open: inline p
 default_palette = "dusk"
 output_dir = "../game/assets/generated"
 preview_dir = "previews"
-export = ["png", "godot"]          # + "normals" (3D normal maps); godot needs a project.godot above output_dir
+export = ["png", "godot"]          # PNG sheets + manifest always; + "godot" (.tres, needs project.godot above output_dir), "normals"
 style_version = 1
 
 [camera]                           # used by every model
@@ -219,19 +222,19 @@ require_outline = false            # E011
 |---|---|
 | `pagan init [dir] [--open]` | create a project |
 | `pagan new palette <name>` | starter palette |
-| `pagan new sprite <name> [--size 16x16] [--frames N] [--mirror] [--outline] [--palette P] [--description D]` | blank sprite |
+| `pagan new sprite <name> [--size 16x16] [--frames N] [--directions 1\|4\|8] [--mirror] [--outline] [--palette P] [--description D]` | blank sprite; `--directions 4` scaffolds down/up/left frames + a mirrored right animation |
 | `pagan new tiles <name> [--size] [--frames N]` | blank tileset |
 | `pagan new model <name> [--size 64x64] [--directions 8]` | starter model |
 | `pagan lint [paths] [--warnings-as-errors]` | errors + style warnings |
-| `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb]` | sheet.png, frames/, GIFs |
+| `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb]` | sheet.png (labelled), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale |
 | `pagan gallery` | every asset in one image |
 | `pagan render <asset...>` | native-size PNGs |
 | `pagan palette show [palettes]` | swatches |
 | `pagan palette adjust <pal> [--lightness d] [--contrast k] [--saturation k] [--hue deg] [--warmth d] [--ramp r] [--keys ...] [--out new] [--dry-run]` | change the look globally |
 | `pagan import <png> [--palette P \| --open] [--scale N] [--name] [--out]` | PNG -> sprite (snaps colors, report) |
-| `pagan bake <model> [--name]` | model -> editable sprite |
+| `pagan bake <model> [--name]` | model -> editable sprite (default name `<model>_baked`) |
 | `pagan status` | catalogue + what needs attention |
-| `pagan config show` / `get <key>` / `set <key> <value>` | project settings: value, default, meaning; validated edits |
+| `pagan config show` / `get <key>` / `set <key> <value>` / `unset <key>` | project settings: value, default, meaning; validated edits; unset = back to default |
 | `pagan mark <asset...> [--status approved] [--current] [--outdated]` | record reviews |
 | `pagan style bump "note"` | new style version; flags older assets (W006) |
 | `pagan build [--verify-godot]` | final assets + manifest (+ Godot .tres) |

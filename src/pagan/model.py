@@ -6,7 +6,6 @@ affects the pixels (the file, its materials, camera, light and the renderer vers
 
 from __future__ import annotations
 
-import dataclasses
 import hashlib
 import json
 import math
@@ -33,7 +32,7 @@ from pagan.asset import (
 )
 from pagan.findings import Finding, has_errors
 from pagan.palette import TRANSPARENT, Palette
-from pagan.project import Project
+from pagan.project import Project, parse_render
 from pagan.voxel import (
     DIRECTION_NAMES,
     Camera,
@@ -628,30 +627,14 @@ def _parse_poses(
 
 
 def _camera_and_light(project: Project, data: dict[str, Any], error: ErrorFn) -> tuple[Camera, Light]:
-    base_camera, base_light = project.config.camera, project.config.light
-    camera_raw, light_raw = data.get("camera", {}), data.get("light", {})
-    elevation, scale = base_camera.elevation, base_camera.scale
-    if not isinstance(camera_raw, dict):
-        error("E013", "camera must be { elevation: degrees, scale: pixels per voxel }", _line(data, "camera"), "camera")
-    else:
-        elevation = camera_raw.get("elevation", elevation)
-        scale = camera_raw.get("scale", scale)
-        if not (_num(elevation) and 10 <= elevation <= 90 and _num(scale) and 0.25 <= scale <= 16):
-            error("E013", "camera elevation must be 10-90 degrees and scale 0.25-16", _line(data, "camera"), "camera")
-            elevation, scale = base_camera.elevation, base_camera.scale
-    direction, ambient, shadows = base_light.direction, base_light.ambient, base_light.shadows
-    if not isinstance(light_raw, dict):
-        error("E013", "light must be { direction: [x, y, z], ambient: 0-1, shadows: bool }", _line(data, "light"), "light")
-    else:
-        vec = _vec(light_raw.get("direction", list(direction)))
-        ambient = light_raw.get("ambient", ambient)
-        shadows = light_raw.get("shadows", shadows)
-        if vec is None or not any(vec) or not (_num(ambient) and 0 <= ambient < 1) or not isinstance(shadows, bool):
-            error("E013", "light direction must be [x, y, z] (not all 0), ambient 0-1, shadows true/false", _line(data, "light"), "light")
-        else:
-            direction = (vec[0], vec[1], vec[2])
-    camera = Camera(float(elevation), float(scale))
-    return camera, dataclasses.replace(base_light, direction=direction, ambient=float(ambient), shadows=bool(shadows))
+    """A model may override any [camera]/[light] setting; the rest come from pagan.toml."""
+
+    def report(message: str, where: str) -> None:
+        error("E013", f"{message} (model override)", _line(data, where.split(".")[0]), where)
+
+    return parse_render(
+        data.get("camera", {}), data.get("light", {}), report, project.config.camera, project.config.light
+    )
 
 
 # --- entry point ------------------------------------------------------------------------------
@@ -737,8 +720,9 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
     poses = _parse_poses(
         data.get("animations"), _line(data, "animations"), set(model.groups.values()), error, model.hidden_by_default
     )
+    heading_names = {n for n, _ in heading_angles(directions, float(heading))} if _num(heading) else set()
     for anim_name in poses:
-        if anim_name in DIRECTION_NAMES.get(directions, []):
+        if anim_name in heading_names:
             error("E013", f"animation name {anim_name!r} is also a heading name; pick another", _line(data, "animations"), f"animations.{anim_name}")
 
     origin_raw = data.get("origin")

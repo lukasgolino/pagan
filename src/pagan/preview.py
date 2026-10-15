@@ -198,8 +198,30 @@ def animation_gif(asset: Asset, animation: str, options: PreviewOptions, path: P
 class PreviewResult:
     asset: str
     sheet: Path
+    montage: Path
     frames: list[Path]
     gifs: list[Path]
+    scale: int
+
+
+def montage(asset: Asset, options: PreviewOptions, per_row: int = 8) -> Image.Image:
+    """The main frames packed tightly on the background, no labels: how they'll look side by side in game.
+
+    Models: one frame per heading; sprites and tilesets: every frame.
+    """
+    scale = options.scale or auto_scale(asset.size)
+    if asset.kind == "model":
+        names = [a.name for a in asset.animations.values() if a.frames == (a.name,)]
+    else:
+        names = list(asset.frames)
+    width, height = asset.size[0] * scale, asset.size[1] * scale
+    columns = max(1, min(per_row, len(names)))
+    rows = -(-len(names) // columns)
+    out = _background((columns * width, rows * height), options.background, max(4, scale))
+    for i, name in enumerate(names):
+        frame = upscale(frame_image(asset, name), scale, PreviewOptions(scale=scale, grid=options.grid, background="none"))
+        out.alpha_composite(frame, ((i % columns) * width, (i // columns) * height))
+    return out
 
 
 def write_previews(asset: Asset, out_dir: Path, options: PreviewOptions) -> PreviewResult:
@@ -219,7 +241,9 @@ def write_previews(asset: Asset, out_dir: Path, options: PreviewOptions) -> Prev
         gifs.append(path)
     sheet = folder / "sheet.png"
     contact_sheet(asset, options).save(sheet)
-    return PreviewResult(asset=asset.name, sheet=sheet, frames=frames, gifs=gifs)
+    montage_path = folder / "montage.png"
+    montage(asset, options).save(montage_path)
+    return PreviewResult(asset=asset.name, sheet=sheet, montage=montage_path, frames=frames, gifs=gifs, scale=scale)
 
 
 def gallery(assets: list[Asset], options: PreviewOptions, title: str) -> Image.Image:

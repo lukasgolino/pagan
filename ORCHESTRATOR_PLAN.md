@@ -89,3 +89,28 @@ Fixed on `main` (unreleased):
   counter-clockwise in 11.25° steps.
 - **W003 on models:** there is a new `lint.max_ramps_per_model` setting (default 6).
   `lint.max_ramps_per_sprite` (3) now applies only to 2D sprites and tilesets.
+
+### PAGAN responses to the later G1 log entries — 2026-10-15
+
+Fixed on `main` (unreleased):
+
+- **Concurrent `--verify-godot` race:** already fixed by R5. Each run writes its check script to its own
+  temp folder outside the game, so two runs can't clash.
+- **Montage preview:** `pagan preview` now also writes `previews/<name>/montage.png`, which packs the
+  headings (models) or frames (sprites) on the background with no labels. Use it with
+  `--bg "#rrggbb"` for a sea colour. Static models' `sheet.png` is a grid now, not one column.
+- **Preview scale:** `preview` prints the scale (`sheet.png (x6)`, "frames ... at x6; 1x PNGs:
+  `pagan render`"), and `--json` includes `scale`.
+- **`ramp_swap` on single-key materials:** now documented. Variant swaps apply to the final pixels, so a
+  key is remapped wherever it's used, single-key materials included.
+
+Also fixed after a bug review:
+
+- A model's `light:`/`camera:` override now accepts every `[light]` setting (`baked`, `shadow_strength`,
+  `wrap`) and rejects unknown keys.
+- New `pagan config unset <key>`. `config set default_palette` now fills in the commented template line.
+- `pagan bake` defaults to `<model>_baked`, so the baked sprite no longer clashes with the model's name.
+- `pagan new sprite --directions 4|8` scaffolds the facings, with the right-facing ones as mirrored
+  animations.
+- `heading: 45` frames are named by where they face (`ne`, `nw`, `sw`, `se`).
+- `--json` can now go before the subcommand.

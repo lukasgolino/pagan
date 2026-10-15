@@ -172,7 +172,7 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         style_version = defaults.style_version
 
     lint = _parse_lint(data.get("lint", {}), error)
-    camera, light = _parse_render(data.get("camera", {}), data.get("light", {}), error)
+    camera, light = parse_render(data.get("camera", {}), data.get("light", {}), error)
 
     if findings:
         raise PaganError(findings)
@@ -243,8 +243,16 @@ def _number(value: Any) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
 
 
-def _parse_render(camera_raw: Any, light_raw: Any, error: Callable[[str, str], None]) -> tuple[Camera, Light]:
-    camera, light = Camera(), Light()
+def parse_render(
+    camera_raw: Any,
+    light_raw: Any,
+    error: Callable[[str, str], None],
+    base_camera: Camera | None = None,
+    base_light: Light | None = None,
+) -> tuple[Camera, Light]:
+    """Parse [camera]/[light] tables. Missing keys keep the base values (defaults, or the project's
+    settings when a model overrides some of them)."""
+    camera, light = base_camera or Camera(), base_light or Light()
     if not isinstance(camera_raw, dict):
         error("[camera] must be a table", "camera")
     else:

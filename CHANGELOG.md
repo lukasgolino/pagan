@@ -34,6 +34,15 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md) and the Age of Boom PAGAN
 - Models: `directions: 32` (frames `h00`..`h31`); sails take `rig: fore-aft` (luff at the mast, reaching
   aft); new `triangle` shape (jibs, lateens, fins, gables) with an exact normal. Docs: `sail` `at`,
   odd hull/cylinder widths.
+- Review round 3: a model's `camera:`/`light:` override accepts every `[light]` setting and rejects unknown
+  keys; `config set` replaces multi-line arrays, fills the commented `# default_palette` template line, and
+  reports dates/inline tables as errors; new `pagan config unset`; `pagan mark` never writes a broken file
+  (empty values handled, flow-style files refused); `--json` also works before the subcommand.
+- `bake` defaults to `<model>_baked` (no name clash); `config set` hints when `light.baked`/"normals" don't
+  match; model headings are named by where they face (`heading: 45` -> ne, nw, sw, se).
+- `pagan new sprite --directions 4|8` scaffolds the facings (right-hand ones as mirrored animations).
+- `pagan preview` writes `montage.png` (frames/headings packed on the background, no labels) and reports
+  its scale. Docs: "png" output is always on; variant swaps remap keys wherever they're used.
 
 ## 0.1.0 — 2026-10-15
 

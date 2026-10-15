@@ -25,7 +25,7 @@ from pagan.palette import NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.preview import PreviewOptions, gallery, write_previews
 from pagan.render import frame_image, save_png, sheet_image
-from pagan.settings import BY_KEY, describe, set_in_toml, set_setting
+from pagan.settings import BY_KEY, Change, describe, set_in_toml, set_setting, unset_setting
 from pagan.swatch import render_swatch
 
 
@@ -240,10 +240,28 @@ def cmd_new_asset(args: argparse.Namespace, out: Output) -> int:
             *(["# outline: auto adds a 1px border: keep the outermost rows and columns empty (E007)"] if args.outline else []),
             "frames:",
         ]
-        frame_names = [f"idle_{i}" for i in range(count)] if count > 1 else ["main"]
-        body = "\n".join(lines) + "\n" + "".join(f"  {f}: |\n{_blank(authored, height, '    ')}" for f in frame_names)
-        if count > 1:
-            body += f"animations:\n  idle: {{ frames: [{', '.join(frame_names)}], fps: 4, loop: true }}\n"
+        directions: int = args.directions
+        if directions not in (1, 4, 8):
+            raise _usage_error("--directions must be 1, 4 or 8 for sprites")
+        if directions == 1:
+            frame_names = [f"idle_{i}" for i in range(count)] if count > 1 else ["main"]
+            body = "\n".join(lines) + "\n" + "".join(f"  {f}: |\n{_blank(authored, height, '    ')}" for f in frame_names)
+            if count > 1:
+                body += f"animations:\n  idle: {{ frames: [{', '.join(frame_names)}], fps: 4, loop: true }}\n"
+        else:
+            # Draw the left-facing views; right-facing ones are mirrored animations (lit symmetrically:
+            # draw them separately instead if the light comes from one side).
+            drawn = ["down", "up", "left"] if directions == 4 else ["down", "down_left", "left", "up_left", "up"]
+            mirrored = {"right": "left"} if directions == 4 else {"down_right": "down_left", "right": "left", "up_right": "up_left"}
+            body = "\n".join(lines) + "\n"
+            for facing in drawn:
+                body += "".join(f"  idle_{facing}_{i}: |\n{_blank(authored, height, '    ')}" for i in range(count))
+            body += "animations:\n"
+            for facing in drawn:
+                names = ", ".join(f"idle_{facing}_{i}" for i in range(count))
+                body += f"  idle_{facing}: {{ frames: [{names}], fps: 4, loop: true }}\n"
+            for facing, source in mirrored.items():
+                body += f"  idle_{facing}: {{ from: idle_{source}, flip: horizontal }}\n"
         path = project.sprites_dir / f"{name}{SPRITE_SUFFIX}"
     else:
         lines += [
@@ -348,7 +366,7 @@ def cmd_bake(args: argparse.Namespace, out: Output) -> int:
     asset = load_asset_or_raise(resolve_asset_path(args.model, project), project)
     if asset.kind != "model":
         raise _usage_error(f"{asset.name} is a {asset.kind}, not a model")
-    name = args.name or asset.name
+    name = args.name or f"{asset.name}_baked"  # asset names must be unique: don't clash with the model
     if not NAME_RE.match(name):
         raise _usage_error(f"invalid name {name!r}")
     path = Path(args.out) if args.out else project.sprites_dir / f"{name}{SPRITE_SUFFIX}"
@@ -381,6 +399,8 @@ def cmd_bake(args: argparse.Namespace, out: Output) -> int:
     out.say(f"baked {asset.name} ({len(asset.frames)} frames) -> {display_path(path)}")
     if name == asset.name:
         out.say(f"Asset names must be unique: rename or remove {display_path(asset.path) if asset.path else 'the model'} if you keep the bake.")
+    else:
+        out.say(f"To replace the model with the sprite: delete {display_path(asset.path) if asset.path else 'the model'} and rename the sprite.")
     out.result({"created": display_path(path), "frames": len(asset.frames)})
     return 0
 
@@ -468,14 +488,20 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
     outputs: list[dict[str, Any]] = []
     for asset in assets:
         result = write_previews(asset, project.preview_dir, options)
-        out.say(f"{asset.name}: {display_path(result.sheet)}")
+        out.say(f"{asset.name}: {display_path(result.sheet)}  (x{result.scale})")
+        out.say(f"  montage (no labels, on the background): {display_path(result.montage)}")
         for gif in result.gifs:
             out.say(f"  animation: {display_path(gif)}")
-        out.say(f"  frames: {display_path(result.sheet.parent / 'frames')}/ ({len(result.frames)} PNGs)")
+        out.say(
+            f"  frames: {display_path(result.sheet.parent / 'frames')}/ ({len(result.frames)} PNGs at x{result.scale}; "
+            "1x PNGs: `pagan render`)"
+        )
         outputs.append(
             {
                 "asset": asset.name,
+                "scale": result.scale,
                 "sheet": display_path(result.sheet),
+                "montage": display_path(result.montage),
                 "gifs": [display_path(g) for g in result.gifs],
                 "frames": [display_path(f) for f in result.frames],
             }
@@ -841,10 +867,18 @@ def _names_own_palette(path: Path) -> bool:
 
 
 def cmd_config_set(args: argparse.Namespace, out: Output) -> int:
+    project = _require_project()
+    return _report_change(set_setting(project, args.key, args.value), project, out)
+
+
+def cmd_config_unset(args: argparse.Namespace, out: Output) -> int:
+    project = _require_project()
+    return _report_change(unset_setting(project, args.key), project, out)
+
+
+def _report_change(change: Change, project: Project, out: Output) -> int:
     from pagan.manage import catalogue
 
-    project = _require_project()
-    change = set_setting(project, args.key, args.value)
     updated = load_project(project.root)
     entries = catalogue(updated)
     models = [e.name for e in entries if e.kind == "model"]
@@ -863,8 +897,13 @@ def cmd_config_set(args: argparse.Namespace, out: Output) -> int:
         out.say(f"  {len(following)} assets don't name a palette and follow the default: {', '.join(following) or 'none'}.")
     elif change.refresh == "build":
         out.say("  takes effect on the next `pagan build`.")
+    light, exports = updated.config.light, updated.config.export
+    if change.key in ("light.baked", "export") and not light.baked and "normals" not in exports:
+        out.say('  light.baked is false: add "normals" to export so the engine can light the flat colors.')
+    if change.key in ("light.baked", "export") and light.baked and "normals" in exports:
+        out.say("  note: exporting normal maps with baked shading lights models twice in an engine; usually set light.baked false.")
     if errors:
-        out.say(f"  {errors} lint errors now (e.g. palette keys missing from the new palette): run `pagan lint`.")
+        out.say(f"  {errors} lint errors now: run `pagan lint` to see them.")
     out.result(
         {
             "key": change.key,
@@ -959,13 +998,15 @@ def cmd_palette_show(args: argparse.Namespace, out: Output) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--json", action="store_true", help="machine-readable JSON output")
+    # SUPPRESS: a subcommand's --json doesn't reset a --json given before the subcommand.
+    common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="machine-readable JSON output")
 
     parser = argparse.ArgumentParser(
         prog="pagan",
         description="PAGAN (Pixel Art Grammar And Notation): turn text pixel art into PNGs.",
     )
     parser.add_argument("--version", action="version", version=version_string())
+    parser.add_argument("--json", action="store_true", help="machine-readable JSON output (any command)")
     commands = parser.add_subparsers(title="commands", metavar="<command>")
 
     init = commands.add_parser("init", parents=[common], help="create a PAGAN project")
@@ -988,10 +1029,11 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_argument("--frames", type=int, default=1, help="number of blank frames/tiles (default 1)")
         sub.add_argument("--description", help="what the asset is; kept in the file for future reference")
         if kind == "sprite":
+            sub.add_argument("--directions", type=int, default=1, help="1, or 4/8 facings (down/up/left...; right mirrored)")
             sub.add_argument("--mirror", action="store_true", help="symmetric: author only the left half")
             sub.add_argument("--outline", action="store_true", help="outline: auto (1px outline added by PAGAN)")
         else:
-            sub.set_defaults(mirror=False, outline=False)
+            sub.set_defaults(mirror=False, outline=False, directions=1)
         sub.set_defaults(handler=cmd_new_asset, kind="sprite" if kind == "sprite" else "tileset")
 
     new_model = new_kinds.add_parser("model", parents=[common], help="scaffold a 3D voxel model")
@@ -1004,7 +1046,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     bake = commands.add_parser("bake", parents=[common], help="write a model's rendered frames as an editable sprite")
     bake.add_argument("model", help="model file or name")
-    bake.add_argument("--name", help="sprite name (default: the model's name)")
+    bake.add_argument("--name", help="sprite name (default: <model>_baked)")
     bake.add_argument("--out", help="output path (default: sprites/<name>.sprite.yaml)")
     bake.add_argument("--force", action="store_true", help="overwrite an existing file")
     bake.set_defaults(handler=cmd_bake)
@@ -1080,6 +1122,9 @@ def build_parser() -> argparse.ArgumentParser:
     config_set.add_argument("key", help="e.g. camera.elevation")
     config_set.add_argument("value", help='TOML value, e.g. 30, true, "tide", [-0.5, 0.45, 0.75]')
     config_set.set_defaults(handler=cmd_config_set)
+    config_unset = config_cmds.add_parser("unset", parents=[common], help="return a setting to its default")
+    config_unset.add_argument("key", help="e.g. default_palette")
+    config_unset.set_defaults(handler=cmd_config_unset)
 
     skill = commands.add_parser("skill", help="the Claude skill that teaches agents to use PAGAN")
     skill_cmds = skill.add_subparsers(title="skill commands", metavar="<subcommand>", required=True)

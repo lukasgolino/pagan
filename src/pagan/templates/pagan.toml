@@ -13,7 +13,7 @@ output_dir = "build"
 # Scratch output from `pagan render` / `pagan preview`. Keep it out of version control.
 preview_dir = "previews"
 
-# What `pagan build` produces: "png" (sprite sheets + manifest.json), "godot" (SpriteFrames .tres),
+# What `pagan build` produces: PNG sheets + manifest.json always ("png"); add "godot" (SpriteFrames/TileSet .tres),
 # "normals" (normal-map sheets for 3D models, for engine lighting).
 # Every setting here can also be viewed/changed with `pagan config show` / `pagan config set <key> <value>`.
 export = ["png"]

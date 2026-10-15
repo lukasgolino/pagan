@@ -368,6 +368,23 @@ def render_heading_full(
     return Rendered(tuple("".join(r) for r in keys_out), normals_out)
 
 
+def heading_name(angle: float, directions: int) -> str:
+    """Name a heading by the way it actually faces (0 = east, counter-clockwise)."""
+    angle %= 360
+    compass = DIRECTION_NAMES[16]
+    if directions == 32 and abs(angle / 11.25 - round(angle / 11.25)) < 1e-9:
+        return f"h{round(angle / 11.25) % 32:02d}"
+    if abs(angle / 22.5 - round(angle / 22.5)) < 1e-9:
+        return compass[round(angle / 22.5) % 16]
+    return f"d{round(angle) % 360:03d}"  # an off-compass angle, in whole degrees
+
+
 def heading_angles(directions: int, start: float = 0.0) -> list[tuple[str, float]]:
-    names = DIRECTION_NAMES[directions]
-    return [(name, (start + i * 360 / directions) % 360) for i, name in enumerate(names)]
+    """(frame name, angle) per heading. Names describe where each frame faces, even with an offset start."""
+    if directions == 1:
+        return [("main", start % 360)]
+    angles = [(start + i * 360 / directions) % 360 for i in range(directions)]
+    names = [heading_name(a, directions) for a in angles]
+    if len(set(names)) != len(names):  # rounding collided: fall back to indexes
+        names = [f"h{i:02d}" for i in range(directions)]
+    return list(zip(names, angles, strict=True))

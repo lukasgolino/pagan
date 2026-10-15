@@ -17,7 +17,7 @@ from pagan.findings import Finding, PaganError
 from pagan.lint import lint_paths, source_files
 from pagan.palette import Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project
-from pagan.yamlio import LineMap, load_yaml
+from pagan.yamlio import LineMap, YamlError, load_yaml, parse_yaml
 
 
 # --- catalogue --------------------------------------------------------------------------------
@@ -170,21 +170,36 @@ def _apply_edits(text: str, edits: list[tuple[int, int, int, str]]) -> str:
 
 
 def set_top_level_field(path: Path, field: str, value: str) -> None:
-    """Set `field: value` at the top level of a YAML source file, keeping everything else as written."""
+    """Set `field: value` at the top level of a YAML source file, keeping everything else as written.
+
+    The edited text is parsed again before it's written; if the edit wouldn't give a valid file with
+    the field set, nothing is changed and an error explains why.
+    """
     text = path.read_text(encoding="utf-8")
     data = load_yaml(path)
     if not isinstance(data, LineMap):
         raise PaganError([Finding("E001", "not a mapping; can't edit", path)])
+    if text.lstrip().startswith("{"):
+        raise PaganError([Finding("E001", f"can't edit {field!r} in a flow-style ({{...}}) file; write it as block YAML", path)])
     if field in data:
         span = data.value_spans.get(field)
         if span is None:
             raise PaganError([Finding("E001", f"can't edit {field!r}: write it as a one-line value", path, data.line_of(field))])
-        text = _apply_edits(text, [(span[0], span[1], span[2], value)])
+        line, start_col, end_col = span
+        current = text.split("\n")[line - 1]
+        needs_space = start_col == end_col and not current[:start_col].endswith(" ")
+        text = _apply_edits(text, [(line, start_col, end_col, (" " if needs_space else "") + value)])
     else:
         lines = text.split("\n")
         after = data.line_of("name") if "name" in data else 0
         lines.insert(after or 0, f"{field}: {value}")
         text = "\n".join(lines)
+    try:
+        check = parse_yaml(text)
+    except YamlError as exc:
+        raise PaganError([Finding("E001", f"editing {field!r} would break the file ({exc.message}); nothing changed", path)]) from None
+    if not isinstance(check, dict) or str(check.get(field)) != value:
+        raise PaganError([Finding("E001", f"couldn't set {field!r} safely; nothing changed", path)])
     path.write_text(text, encoding="utf-8")
 
 
