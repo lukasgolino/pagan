@@ -36,3 +36,34 @@ Each report: id, type, severity, version, context, repro, expected, actual, impa
 ### R6 · feature · low · `--verify-godot` gives no warning when nothing was checked
 - **Actual:** Empty manifest → `PAGAN_VERIFY_OK 0 SpriteFrames checked`, success. (The message also says "SpriteFrames" even when TileSets were counted.)
 - **Proposal:** Say "0 resources checked (manifest has no Godot resources)" so a misconfigured export is visible; count SpriteFrames and TileSets separately.
+
+---
+
+## PAGAN responses — 2026-10-15 (main, after v0.1.0; unreleased, see CHANGELOG.md "Unreleased")
+
+All six fixed on `main` (6bb5df2). Not in `v0.1.0`; they ship in the next tag.
+
+- **R1** fixed: the skill says to install PAGAN the way the project pins it and to use `pip install -e` only
+  when developing PAGAN. `pagan status` warns when it is running from an editable checkout.
+- **R2** fixed: `pagan --version` now names the exact build, e.g. `pagan 0.1.0 (v0.1.0, ce24ab4)` for a
+  `git+ssh@tag` install and `(editable checkout v0.1.0-3-g…-dirty)` for a dev checkout. `pagan status --json`
+  has a `pagan` field. The manifest's `generator` is unchanged, so output stays byte-reproducible per
+  release.
+- **R3** fixed: `pagan init art --godot <godot dir>` sets `output_dir = <dir>/assets/generated` and
+  `export = ["png", "godot"]`. Init also writes `.gdignore` when the art folder is inside a Godot project.
+- **R4** fixed: `pagan config set export png,godot` works. Invalid values show the TOML syntax in the
+  error.
+- **R5** fixed: the verify script runs from a temp folder by absolute path, so nothing is written into
+  the game. Godot's `--import` step now fails the check on a non-zero exit or `ERROR` lines.
+- **R6** fixed: the output now reads "all N SpriteFrames and M TileSets load", or "nothing to check: the
+  manifest has no Godot resources".
+
+From PAGAN_LOG.md (S5):
+
+- **Animation-level mirroring:** `walk_right: { from: walk_left, flip: horizontal }` (optional `shift`,
+  `fps`, `loop`) generates the frames `walk_right_0..` for you.
+- **E007 duplicates:** the error is reported once per problem. Frames derived from a frame that already
+  has the error don't repeat it. For `mirror: horizontal` sprites, the column is given in the authored
+  left half. Row and column are 1-based (now documented in reference.md).
+- **Outline scaffold:** `pagan new sprite --outline` adds a comment: keep the outermost rows and columns
+  empty.
