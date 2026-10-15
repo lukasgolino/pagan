@@ -38,6 +38,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `model.py` `.model.yaml` parsing (materials, primitives, poses) -> Asset, with a render cache in `.pagan-cache/`;
   - `build.py` `pagan build` (sheets, manifest.json, stale cleanup); `exporters/godot.py` SpriteFrames .tres + headless verify;
   - `manage.py` long-term management: catalogue (`pagan status`), palette adjust, `mark`, `style bump` (text edits keep comments);
+  - `settings.py` registry of every pagan.toml setting (default, meaning, what it refreshes) + safe `pagan config set` edits;
   - `swatch.py` palette swatch images; `templates/` files copied by `pagan init`.
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
@@ -97,3 +98,6 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-14: Long-term asset management: a PAGAN project folder is the single home for a game's art (BRIEF.md = what's wanted + feedback log, STYLE.md = how it looks + versioned changelog, assets carry description/status/style_version). `pagan palette adjust` (OKLab lightness/contrast/saturation/hue/warmth) changes every asset at once; `pagan style bump` flags assets for review (W006) until `pagan mark --current`.
 - 2026-10-14: Source-file edits by PAGAN (`palette adjust`, `mark`, `style bump`) are line-level text edits, never YAML re-serialisation, so comments and layout survive.
 - 2026-10-15: numpy added (owner approved): the voxel renderer traces all rays in lockstep (same Amanatides-Woo algorithm and float operations as before, so output is byte-identical) and W007 is vectorised. Cold demo lint ~11s -> ~3s.
+- 2026-10-15: PAGAN's role (owner): a sprite service driven by an orchestrator agent; engine-agnostic, `manifest.json` is the contract; Godot export is a convenience.
+- 2026-10-15: Every look setting is configurable and saved (`pagan config show/get/set`, registry in settings.py). `config set` validates the whole resulting config before writing and reports what refreshes (models re-render; hand-drawn 2D assets listed for review).
+- 2026-10-15: Engine lighting: `[light] baked = false` renders models with each material's middle step (flat albedo); `export` "normals" writes `<name>.normal.png` (OpenGL convention: x right, y up, z to viewer) and the Godot .tres wraps the sheet in a CanvasTexture with the normal map. Verified loading in Godot 4.7.2.

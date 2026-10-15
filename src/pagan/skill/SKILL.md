@@ -1,6 +1,6 @@
 ---
 name: pagan
-description: Make and maintain pixel-art game assets with PAGAN (Pixel Art Grammar And Notation) - sprites, characters, enemies, items, tiles, icons, 3D ships/vehicles/buildings rendered in 4/8/16 directions, animations - and change a game's art style over time (darker, more contrast, pastel, more shadows, new palette). Use whenever the user asks for game art, a sprite, an asset, a tileset, rotations/headings, an animation, or a look change, or mentions pagan / pagan.toml.
+description: Make and maintain pixel-art game assets with PAGAN (Pixel Art Grammar And Notation) - sprites, characters, enemies, items, tiles, icons, 3D ships/vehicles/buildings rendered in 4/8/16 directions, animations - and change a game's art style over time (camera angle, light direction, darker, more contrast, pastel, more shadows, new palette). Use whenever a user or an orchestrating agent asks for game art, a sprite, an asset, a tileset, rotations/headings, an animation, or a look change, or mentions pagan / pagan.toml.
 ---
 
 # PAGAN: making game art as text
@@ -23,6 +23,38 @@ builds engine-ready assets (PNG sheets, manifest.json, Godot SpriteFrames). Full
    They are your memory between sessions: the chosen palette, sizes, perspective, references and
    every decision the owner made live there, not in your head.
 4. No `pagan.toml` yet -> do **First-time setup** (section 1) before drawing anything.
+
+## 0b. Who you're working for
+
+You may be talking to a human, or (often) to an **orchestrator agent** that is building the game and
+comes to you for art. Either way:
+- Batch questions into ONE message, each with your recommended default, and say you'll use the defaults
+  if there's no answer. Never block: an orchestrator may answer later or not at all.
+- Report results so a program can use them: the asset name, its files (`pagan build --json` /
+  `manifest.json` entries: sheet, frame rects, animations, pivot), the preview sheet path, and any
+  decision you made. `manifest.json` in the output dir is the contract with the game (any engine).
+- Godot export (`.tres`) is a convenience when the game uses Godot; PAGAN is engine-agnostic.
+
+## 0c. Project settings are configurable, saved and shared
+
+The project's look lives in `pagan.toml`, not in individual assets. **Run `pagan config show`** to see every
+setting, its current value, its default and what it means. Every one can change at any time:
+
+| Setting | Default | Change it when the owner says... |
+|---|---|---|
+| `camera.elevation` | 42 (top-down 3/4) | "the angle is too high/low", "more top-down", "more side-on" |
+| `light.direction` | [-0.5, 0.45, 0.75] (top-left) | "light from the right", "sun overhead" |
+| `light.ambient` / `light.shadow_strength` | 0.2 / 0.65 | "darker shadows", "softer shadows" |
+| `light.baked` + `export` "normals" | true / off | "the game has its own lighting" (flat colors + normal maps) |
+| `default_palette` | (chosen at setup) | "try a different palette" |
+| `camera.scale` | 1 | "everything 3D should be bigger/smaller" |
+
+`pagan config set <key> <value>` validates and saves the change (invalid values are rejected; nothing is
+written). It then tells you what refreshes: **3D models re-render automatically** on the next `pagan
+build`/`preview`; palette changes recolor every asset; **hand-drawn 2D sprites don't change**, so if they
+must match a new angle or light, `pagan style bump "..."` and redraw them (section 4). Log the change in
+BRIEF.md's feedback log. Use the defaults until someone asks for something else, and say which defaults
+you used.
 
 ## 1. First-time setup (a new game)
 
@@ -58,8 +90,11 @@ directions, which animations. Start with ONE asset and get it approved before ma
   consistent automatically and share the project light. Animate with poses (parts move by whole voxels).
 - **2D sprite** (`pagan new sprite`) for icons, UI, items, front/side-view characters, effects, and
   anything flat. Also for **small props that need one view** (a 16px barrel, crate, potion): at 1 voxel
-  per pixel a tiny model has too few voxels to read, so hand-draw it (or `pagan bake` a model and touch it up). Use `mirror: horizontal` for symmetric subjects, derived frames (`from`/`flip`/`shift`)
-  to avoid redrawing.
+  per pixel a tiny model has too few voxels to read, so hand-draw it (or `pagan bake` a model and touch it up).
+- **Shortcuts only when they don't cost quality:** `mirror: horizontal` and derived frames
+  (`from`/`flip`/`shift`) save time, but mirroring lights both sides the same, which is wrong when the light
+  comes from one side. Use them for front-facing symmetric subjects or where the difference can't be seen;
+  never trade a worse sprite for less work.
 - **Tileset** (`pagan new tiles`) for terrain; tiles must be seamless.
 
 **The loop** (cap at ~4 rounds, then show the owner what you have):
@@ -109,8 +144,10 @@ asset updates at once** and stays consistent:
 | "more vivid" | `--saturation 1.2` |
 | "warmer" / "cooler" | `--warmth 0.02` / `--warmth -0.02` |
 | "only the greens darker" | add `--ramp <ramp>` (or `--keys ...`) |
-| "more / softer shadows" | 3D: lower `[light] ambient` (e.g. 0.2 -> 0.1), keep `shadows = true`; 2D: needs redrawing (below) |
-| "light from the right" | 3D: change `[light] direction`; 2D: redraw (below) |
+| "more / softer shadows" | `pagan config set light.ambient 0.1` (3D re-renders); 2D: needs redrawing (below) |
+| "light from the right" | `pagan config set light.direction "[0.5, 0.45, 0.75]"`; 2D: redraw (below) |
+| "lower / higher camera angle" | `pagan config set camera.elevation 30` (3D re-renders); 2D: redraw (below) |
+| "our engine does the lighting" | `pagan config set light.baked false` and add "normals" to `export` |
 | "try a different palette" | `--out <new>` to make a copy, or a new palette with the SAME keys, then switch `default_palette` (grids reference keys, so assets carry over) |
 
 Always use `--dry-run` or the before/after swatch it writes, then `pagan gallery` to check the whole

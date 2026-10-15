@@ -178,7 +178,7 @@ palette_mode = "strict"            # strict: palette files only | open: inline p
 default_palette = "dusk"
 output_dir = "../game/assets/generated"
 preview_dir = "previews"
-export = ["png", "godot"]          # godot needs output_dir inside a Godot project (project.godot)
+export = ["png", "godot"]          # + "normals" (3D normal maps); godot needs a project.godot above output_dir
 style_version = 1
 
 [camera]                           # used by every model
@@ -189,6 +189,9 @@ scale = 1                          # pixels per voxel
 direction = [-0.5, 0.45, 0.75]     # towards the light: x right, y up-screen, z up
 ambient = 0.2                      # unlit brightness; lower = darker shadows
 shadows = true
+shadow_strength = 0.65             # how dark cast shadows are
+wrap = 0.3                         # light wrapping around curves (softer shading)
+baked = true                       # false: flat colors for engine lighting (+ export "normals")
 
 [lint]
 max_ramps_per_sprite = 3           # W003
@@ -216,6 +219,7 @@ require_outline = false            # E011
 | `pagan import <png> [--palette P \| --open] [--scale N] [--name] [--out]` | PNG -> sprite (snaps colors, report) |
 | `pagan bake <model> [--name]` | model -> editable sprite |
 | `pagan status` | catalogue + what needs attention |
+| `pagan config show` / `get <key>` / `set <key> <value>` | project settings: value, default, meaning; validated edits |
 | `pagan mark <asset...> [--status approved] [--current] [--outdated]` | record reviews |
 | `pagan style bump "note"` | new style version; flags older assets (W006) |
 | `pagan build [--verify-godot]` | final assets + manifest (+ Godot .tres) |
@@ -231,6 +235,12 @@ E013 model problem.
 Warnings: W001 orphan pixel, W002 unused frame, W003 too many ramps, W004 empty frame, W005 visible area
 jumps between frames, W006 made under an older style version, W007 too much change between frames,
 W008 too many shades from one ramp (sprites) / in one material (models), when `max_ramp_steps` is set.
+
+## Build output (any engine)
+
+`manifest.json` in `output_dir` describes everything: per asset its kind, sheet, frame rects, animations
+(frames, fps, loop), pivot, `godot_offset`, headings (models), variants, and `normal_sheet` (when "normals"
+is exported: RGB = normal * 0.5 + 0.5, x right, y up, z towards the viewer).
 
 ## Godot
 

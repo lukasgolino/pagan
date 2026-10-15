@@ -76,6 +76,8 @@ class Asset:
     tags: tuple[str, ...] = ()
     status: str = "draft"
     style_version: int = 1
+    # 3D models only: renders screen-space normal maps per frame on demand (H x W x 3 arrays)
+    normal_maps: Callable[[], dict[str, Any]] | None = field(default=None, compare=False, repr=False)
 
 
 def asset_kind(path: Path) -> Kind | None:

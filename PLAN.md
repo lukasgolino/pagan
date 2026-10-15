@@ -475,13 +475,26 @@ The owner will steer from there. Keep momentum, keep things small, and show resu
 
 ---
 
+## 11b. Owner answers (2026-10-15)
+
+- Camera angle, light, palette and the like must be **configurable and saved**, with clearly defined
+  defaults; an orchestrator agent may change them mid-project ("the angle is too high") and every asset
+  must refresh. -> `pagan config show/get/set`, 3D models re-render automatically, 2D assets get flagged.
+- Mirroring only where it doesn't make the result worse. Games may want their own lighting -> `light.baked
+  = false` + normal maps (`export` "normals").
+- PAGAN is a sprite service driven by an orchestrator agent; engine-agnostic (`manifest.json` is the
+  contract). Godot export is a convenience, not the focus.
+- numpy approved (renderer vectorised).
+- PyPI: yes, later, shipping the skill (it's already package data). Check the `pagan` name first.
+
 ## 12. Future (not scheduled — don't start unless the owner asks)
 
 These are wanted eventually, but are well beyond v1. (The Claude skill is Milestone 6; basic CI starts in Milestone 0.)
 
 - **Documentation** — proper user docs beyond the README: install, the PAGAN notation reference,
   `pagan.toml` reference, lint rule reference, exporter docs, worked examples.
-- **Release automation** — version tagging, changelog, PyPI publish via GitHub Actions (ask before publishing anything).
+- **PyPI release** (owner wants it, later) — publish `pagan` (or `pagan-art` if taken) with the skill
+  included (`pagan skill install`); version tagging, changelog, publish via GitHub Actions. Ask before publishing.
   Regular CI is *not* future work; it starts in Milestone 0 (see §10).
 - **Website** — a project site (e.g. GitHub Pages) hosting the docs and a gallery of example art.
 

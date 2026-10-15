@@ -23,6 +23,7 @@ from pagan.palette import NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.preview import PreviewOptions, gallery, write_previews
 from pagan.render import frame_image, save_png, sheet_image
+from pagan.settings import BY_KEY, describe, set_setting
 from pagan.swatch import render_swatch
 
 
@@ -752,6 +753,71 @@ def cmd_palette_adjust(args: argparse.Namespace, out: Output) -> int:
     return 0
 
 
+# --- pagan config ---------------------------------------------------------------------------
+
+
+def cmd_config_show(args: argparse.Namespace, out: Output) -> int:
+    project = _require_project()
+    rows = describe(project.config)
+    if out.as_json:
+        print(json.dumps({"ok": True, "config": display_path(project.config_path or project.root), "settings": rows}, indent=2))
+        return 0
+    print(f"{display_path(project.config_path or project.root)}  (change with `pagan config set <key> <value>`)")
+    for row in rows:
+        marker = " " if row["is_default"] else "*"
+        print(f"{marker} {row['key']:<26} = {json.dumps(row['value']):<22} {row['meaning']}")
+    print("* = changed from the default. 'models' settings re-render every 3D model on the next build/preview.")
+    return 0
+
+
+def cmd_config_get(args: argparse.Namespace, out: Output) -> int:
+    project = _require_project()
+    if args.key not in BY_KEY:
+        raise _usage_error(f"unknown setting {args.key!r}; see `pagan config show`")
+    row = next(r for r in describe(project.config) if r["key"] == args.key)
+    out.say(json.dumps(row["value"]))
+    out.result(row)
+    return 0
+
+
+def cmd_config_set(args: argparse.Namespace, out: Output) -> int:
+    from pagan.manage import catalogue
+
+    project = _require_project()
+    change = set_setting(project, args.key, args.value)
+    updated = load_project(project.root)
+    entries = catalogue(updated)
+    models = [e.name for e in entries if e.kind == "model"]
+    hand_drawn = [e.name for e in entries if e.kind != "model"]
+    errors = sum(e.errors for e in entries)
+    out.say(f"{change.key}: {json.dumps(change.old)} -> {json.dumps(change.new)}  (saved in {CONFIG_NAME})")
+    if change.refresh == "models":
+        out.say(f"  {len(models)} 3D models will re-render with this on the next `pagan build` / `pagan preview`.")
+        if hand_drawn:
+            out.say(
+                f"  {len(hand_drawn)} 2D sprites/tiles are hand-drawn and won't change; if they must match "
+                "(e.g. a new camera angle or light direction), `pagan style bump \"...\"` and redraw them."
+            )
+    elif change.refresh == "all":
+        out.say(f"  every asset using the default palette recolors on the next build ({len(entries)} assets).")
+    elif change.refresh == "build":
+        out.say("  takes effect on the next `pagan build`.")
+    if errors:
+        out.say(f"  {errors} lint errors now (e.g. palette keys missing from the new palette): run `pagan lint`.")
+    out.result(
+        {
+            "key": change.key,
+            "old": change.old,
+            "new": change.new,
+            "refreshes": change.refresh,
+            "models": models,
+            "hand_drawn": hand_drawn,
+            "errors": errors,
+        }
+    )
+    return 0
+
+
 # --- pagan skill install ----------------------------------------------------------------------
 
 SKILL_FILES = ("SKILL.md", "reference.md")
@@ -940,6 +1006,18 @@ def build_parser() -> argparse.ArgumentParser:
     bump_cmd = style_cmds.add_parser("bump", parents=[common], help="record a style change; flags older assets for review")
     bump_cmd.add_argument("note", help='what changed, e.g. "more shadows: ambient 0.2 -> 0.1"')
     bump_cmd.set_defaults(handler=cmd_style_bump)
+
+    config = commands.add_parser("config", help="project settings (camera, light, palette, ...): show, get, set")
+    config_cmds = config.add_subparsers(title="config commands", metavar="<subcommand>", required=True)
+    config_show = config_cmds.add_parser("show", parents=[common], help="every setting: value, default, meaning")
+    config_show.set_defaults(handler=cmd_config_show)
+    config_get = config_cmds.add_parser("get", parents=[common], help="one setting's value")
+    config_get.add_argument("key", help="e.g. camera.elevation")
+    config_get.set_defaults(handler=cmd_config_get)
+    config_set = config_cmds.add_parser("set", parents=[common], help="change a setting (validated, saved in pagan.toml)")
+    config_set.add_argument("key", help="e.g. camera.elevation")
+    config_set.add_argument("value", help='TOML value, e.g. 30, true, "tide", [-0.5, 0.45, 0.75]')
+    config_set.set_defaults(handler=cmd_config_set)
 
     skill = commands.add_parser("skill", help="the Claude skill that teaches agents to use PAGAN")
     skill_cmds = skill.add_subparsers(title="skill commands", metavar="<subcommand>", required=True)

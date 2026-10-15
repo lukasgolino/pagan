@@ -6,12 +6,15 @@ affects the pixels (the file, its materials, camera, light and the renderer vers
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import math
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from pagan.asset import (
     MODEL_SUFFIX,
@@ -31,7 +34,17 @@ from pagan.asset import (
 from pagan.findings import Finding, has_errors
 from pagan.palette import TRANSPARENT, Palette
 from pagan.project import Project
-from pagan.voxel import DIRECTION_NAMES, Camera, Cell, Light, Material, VoxelModel, heading_angles, render_heading
+from pagan.voxel import (
+    DIRECTION_NAMES,
+    Camera,
+    Cell,
+    Light,
+    Material,
+    VoxelModel,
+    heading_angles,
+    render_heading,
+    render_heading_full,
+)
 
 RENDERER_VERSION = "3"  # bump when rendering changes, to invalidate caches
 PART_TYPES = ("box", "hull", "cylinder", "ellipsoid", "line", "sail", "layers")
@@ -588,7 +601,8 @@ def _camera_and_light(project: Project, data: dict[str, Any], error: ErrorFn) ->
             error("E013", "light direction must be [x, y, z] (not all 0), ambient 0-1, shadows true/false", _line(data, "light"), "light")
         else:
             direction = (vec[0], vec[1], vec[2])
-    return Camera(float(elevation), float(scale)), Light(direction, float(ambient), bool(shadows))
+    camera = Camera(float(elevation), float(scale))
+    return camera, dataclasses.replace(base_light, direction=direction, ambient=float(ambient), shadows=bool(shadows))
 
 
 # --- entry point ------------------------------------------------------------------------------
@@ -740,6 +754,23 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
     if has_errors(findings):
         return None, findings
     model_line = _line(data, "parts")
+
+    def normal_maps() -> dict[str, Any]:
+        """Screen-space normals per frame (rendered on demand, e.g. for the "normals" exporter)."""
+        out: dict[str, Any] = {}
+        posed_models: dict[tuple[Any, ...], VoxelModel] = {}
+        for frame_name, angle, offsets, hidden in jobs:
+            pose_key = (tuple(sorted(offsets.items())), tuple(sorted(hidden)))
+            posed = posed_models.setdefault(pose_key, model.posed(offsets, hidden))
+            rendered = render_heading_full(
+                posed, materials, heading=angle, size=size, origin=origin, pivot=pivot, camera=camera, light=light
+            )
+            normals = rendered.normals.copy()
+            outlined = (normals == 0).all(axis=2) & np.array([[c != "." for c in row] for row in frames[frame_name]])
+            normals[outlined] = (0.0, 0.0, 1.0)  # outline pixels face the viewer
+            out[frame_name] = normals
+        return out
+
     return (
         Asset(
             kind="model",
@@ -756,6 +787,7 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
             pivot=pivot,
             outline=outline,
             outline_color=outline_color,
+            normal_maps=normal_maps,
             **meta,
         ),
         findings,
@@ -790,8 +822,10 @@ def _cached_render(
         except (OSError, ValueError):
             pass  # unreadable or malformed cache: render again
     frames: dict[str, Grid] = {}
+    posed_models: dict[tuple[Any, ...], VoxelModel] = {}
     for frame_name, angle, offsets, hidden in jobs:
-        posed = model.posed(offsets, hidden)
+        pose_key = (tuple(sorted(offsets.items())), tuple(sorted(hidden)))
+        posed = posed_models.setdefault(pose_key, model.posed(offsets, hidden))
         frames[frame_name] = render_heading(
             posed, materials, heading=angle, size=size, origin=origin, pivot=pivot, camera=camera, light=light
         )

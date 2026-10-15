@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import tomllib
 from collections.abc import Callable
@@ -15,7 +16,7 @@ from pagan.voxel import Camera, Light
 
 CONFIG_NAME = "pagan.toml"
 PALETTE_MODES = ("strict", "open")
-EXPORTERS = ("png", "godot")
+EXPORTERS = ("png", "godot", "normals")
 
 PaletteMode = Literal["strict", "open"]
 
@@ -232,7 +233,7 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
 
 
 def _number(value: Any) -> bool:
-    return isinstance(value, int | float) and not isinstance(value, bool)
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def _parse_render(camera_raw: Any, light_raw: Any, error: Callable[[str, str], None]) -> tuple[Camera, Light]:
@@ -254,18 +255,35 @@ def _parse_render(camera_raw: Any, light_raw: Any, error: Callable[[str, str], N
     if not isinstance(light_raw, dict):
         error("[light] must be a table", "light")
     else:
+        allowed = ("direction", "ambient", "shadows", "shadow_strength", "wrap", "baked")
         for key in light_raw:
-            if key not in ("direction", "ambient", "shadows"):
-                error(f"unknown light setting {key!r}; allowed: direction, ambient, shadows", f"light.{key}")
+            if key not in allowed:
+                error(f"unknown light setting {key!r}; allowed: {', '.join(allowed)}", f"light.{key}")
         direction = light_raw.get("direction", list(light.direction))
         ambient = light_raw.get("ambient", light.ambient)
         shadows = light_raw.get("shadows", light.shadows)
+        strength = light_raw.get("shadow_strength", light.shadow_strength)
+        wrap = light_raw.get("wrap", light.wrap)
+        baked = light_raw.get("baked", light.baked)
         if not (isinstance(direction, list) and len(direction) == 3 and all(_number(v) for v in direction) and any(direction)):
             error("light.direction must be [x, y, z] pointing towards the light (x right, y up-screen, z up)", "light.direction")
         elif not (_number(ambient) and 0 <= ambient < 1):
             error("light.ambient must be between 0 and 1", "light.ambient")
         elif not isinstance(shadows, bool):
             error("light.shadows must be true or false", "light.shadows")
+        elif not (_number(strength) and 0 <= strength <= 1):
+            error("light.shadow_strength must be between 0 and 1", "light.shadow_strength")
+        elif not (_number(wrap) and 0 <= wrap <= 1):
+            error("light.wrap must be between 0 and 1", "light.wrap")
+        elif not isinstance(baked, bool):
+            error("light.baked must be true or false", "light.baked")
         else:
-            light = Light((float(direction[0]), float(direction[1]), float(direction[2])), float(ambient), shadows)
+            light = Light(
+                direction=(float(direction[0]), float(direction[1]), float(direction[2])),
+                ambient=float(ambient),
+                shadows=shadows,
+                wrap=float(wrap),
+                baked=baked,
+                shadow_strength=float(strength),
+            )
     return camera, light

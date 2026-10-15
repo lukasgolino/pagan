@@ -11,6 +11,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+from PIL import Image
+
 from pagan import __version__
 from pagan.asset import Animation, Asset
 from pagan.exporters.godot import centered_offset, find_godot_project, res_path, sprite_frames_tres
@@ -92,6 +95,11 @@ def build(project: Project) -> BuildResult:
         folder = out / ("tiles" if asset.kind == "tileset" else "sprites")
         rects = frame_rects(asset)
         animations = _animations_for(asset) if asset.kind != "tileset" else []
+        normal_sheet: Path | None = None
+        if "normals" in exporters and asset.normal_maps is not None:
+            normal_sheet = folder / f"{asset.name}.normal.png"
+            _write(normal_sheet, _png_bytes(_normal_sheet(asset, rects), scratch), result)
+            produced.add(normal_sheet.resolve())
 
         def emit(variant: str | None) -> dict[str, Any]:
             stem = asset.name if variant is None else f"{asset.name}.{variant}"
@@ -101,7 +109,8 @@ def build(project: Project) -> BuildResult:
             info: dict[str, Any] = {"sheet": _ref(sheet, out, godot_root)}
             if godot_root is not None and asset.kind != "tileset":
                 tres = folder / f"{stem}.tres"
-                text = sprite_frames_tres(res_path(sheet, godot_root), rects, animations)
+                normal_res = res_path(normal_sheet, godot_root) if normal_sheet is not None else None
+                text = sprite_frames_tres(res_path(sheet, godot_root), rects, animations, normal_res)
                 _write(tres, text.encode("utf-8"), result)
                 produced.add(tres.resolve())
                 info["godot_sprite_frames"] = res_path(tres, godot_root)
@@ -128,6 +137,8 @@ def build(project: Project) -> BuildResult:
             }
         if asset.kind == "model":
             entry["headings"] = [a.name for a in asset.animations.values() if a.frames == (a.name,)]
+        if normal_sheet is not None:
+            entry["normal_sheet"] = _ref(normal_sheet, out, godot_root)
         entry["variants"] = {v: emit(v) for v in asset.variants}
         entries[asset.name] = entry
 
@@ -148,6 +159,22 @@ def build(project: Project) -> BuildResult:
             imported = stale.with_name(stale.name + ".import")  # Godot's sidecar for the removed file
             imported.unlink(missing_ok=True)
     return result
+
+
+def _normal_sheet(asset: Asset, rects: dict[str, tuple[int, int, int, int]]) -> Image.Image:
+    """Normal maps laid out like the sprite sheet: RGB = normal * 0.5 + 0.5 (x right, y up, z to viewer)."""
+    assert asset.normal_maps is not None
+    maps = asset.normal_maps()
+    width = max(x + w for x, _, w, _ in rects.values())
+    height = max(y + h for _, y, _, h in rects.values())
+    sheet = np.zeros((height, width, 4), dtype=np.uint8)
+    for name, (x, y, w, h) in rects.items():
+        rgb = np.clip(np.rint((maps[name] * 0.5 + 0.5) * 255), 0, 255).astype(np.uint8)
+        alpha = np.array([[0 if c == "." else 255 for c in row] for row in asset.frames[name]], dtype=np.uint8)
+        sheet[y : y + h, x : x + w, :3] = rgb
+        sheet[y : y + h, x : x + w, 3] = alpha
+        sheet[y : y + h, x : x + w, :3][alpha == 0] = (128, 128, 255)
+    return Image.fromarray(sheet, "RGBA")
 
 
 def _ref(path: Path, out: Path, godot_root: Path | None) -> str:

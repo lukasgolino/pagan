@@ -38,14 +38,30 @@ def sprite_frames_tres(
     sheet_res: str,
     rects: dict[str, tuple[int, int, int, int]],
     animations: list[Animation],
+    normal_res: str | None = None,
 ) -> str:
-    """SpriteFrames resource text: one AtlasTexture per frame, shared by every animation using it."""
+    """SpriteFrames resource text: one AtlasTexture per frame, shared by every animation using it.
+
+    With `normal_res`, frames come from a CanvasTexture pairing the sheet with its normal map, so
+    Godot's 2D lights shade the sprite.
+    """
     frame_ids = {name: f"AtlasTexture_{i}" for i, name in enumerate(rects)}
-    lines = ['[gd_resource type="SpriteFrames" format=3]', "", f'[ext_resource type="Texture2D" path={_string(sheet_res)} id="1_sheet"]', ""]
+    lines = ['[gd_resource type="SpriteFrames" format=3]', "", f'[ext_resource type="Texture2D" path={_string(sheet_res)} id="1_sheet"]']
+    atlas = 'ExtResource("1_sheet")'
+    if normal_res is not None:
+        lines += [
+            f'[ext_resource type="Texture2D" path={_string(normal_res)} id="2_normal"]',
+            "",
+            '[sub_resource type="CanvasTexture" id="CanvasTexture_sheet"]',
+            'diffuse_texture = ExtResource("1_sheet")',
+            'normal_texture = ExtResource("2_normal")',
+        ]
+        atlas = 'SubResource("CanvasTexture_sheet")'
+    lines.append("")
     for name, (x, y, w, h) in rects.items():
         lines += [
             f'[sub_resource type="AtlasTexture" id="{frame_ids[name]}"]',
-            'atlas = ExtResource("1_sheet")',
+            f"atlas = {atlas}",
             f"region = Rect2({x}, {y}, {w}, {h})",
             "",
         ]
