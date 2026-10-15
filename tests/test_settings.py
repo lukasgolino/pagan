@@ -105,5 +105,7 @@ def test_normals_export(tmp_path: Path) -> None:
     manifest = json.loads((game / "gen" / "manifest.json").read_text())
     assert manifest["assets"]["crate"]["normal_sheet"] == "res://gen/sprites/crate.normal.png"
     # Top faces point up the screen and towards the viewer: green and blue above 128 on the lid.
-    r, g, b, a = normals.getpixel((16, 13))
+    pixel = normals.getpixel((16, 13))
+    assert isinstance(pixel, tuple)
+    r, g, b, a = pixel
     assert a == 255 and g > 128 and b > 128
