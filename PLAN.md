@@ -152,7 +152,7 @@ Naming conventions:
 | `pagan import <png> [--palette P] [--scale auto] [--out file.sprite.yaml]` | Convert an existing PNG into a sprite source file: detect/undo upscaling; with `--palette`, snap every pixel to the nearest palette color (perceptual distance, OKLab or CIELAB) and report how much changed; without it (open mode), extract the image's colors into an inline palette. |
 
 "Later" (not v1, don't build unless asked): `--watch` mode, exporters for engines other than Godot,
-Godot `TileSet` `.tres` generation, autotile/terrain rules, layer composition, a shape-drawing DSL,
+autotile/terrain rules, layer composition, a shape-drawing DSL,
 palette-swap batch export for whole sets, an MCP server wrapper around the CLI.
 
 ---
@@ -486,6 +486,8 @@ The owner will steer from there. Keep momentum, keep things small, and show resu
   contract). Godot export is a convenience, not the focus.
 - numpy approved (renderer vectorised).
 - PyPI: yes, later, shipping the skill (it's already package data). Check the `pagan` name first.
+- External review (2026-10-15): character size is the requester's choice; tag v0.1.0 + CHANGELOG;
+  document pivots (manifest `godot_offset`); generate Godot TileSet `.tres` (done).
 
 ## 12. Future (not scheduled — don't start unless the owner asks)
 

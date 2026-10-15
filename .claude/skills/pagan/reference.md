@@ -239,13 +239,15 @@ W008 too many shades from one ramp (sprites) / in one material (models), when `m
 ## Build output (any engine)
 
 `manifest.json` in `output_dir` describes everything: per asset its kind, sheet, frame rects, animations
-(frames, fps, loop), pivot, `godot_offset`, headings (models), variants, and `normal_sheet` (when "normals"
-is exported: RGB = normal * 0.5 + 0.5, x right, y up, z towards the viewer).
+(frames, fps, loop), pivot, `godot_offset`, headings (models), tiles (`name -> [column, row]` for
+tilesets), variants, and `normal_sheet` (when "normals" is exported: RGB = normal * 0.5 + 0.5, x right,
+y up, z towards the viewer). Pivots aren't stored in engine resources: apply them in the game.
 
 ## Godot
 
 `pagan build` writes `sprites/<name>.png` + `<name>.tres` (SpriteFrames, one animation per PAGAN
-animation; sprites without animations get one per frame) and `tiles/<name>.png`, plus `manifest.json`
-with frame rects, pivots and `godot_offset` (use as `AnimatedSprite2D.offset` with `centered = true`).
+animation; sprites without animations get one per frame), `tiles/<name>.png` + `<name>.tres` (TileSet:
+one atlas source, every tile created; add terrains/physics in the editor), plus `manifest.json`.
+Apply the pivot in code: `sprite.centered = true; sprite.offset = Vector2(godot_offset[0], godot_offset[1])`.
 Project settings for crisp pixels: Default Texture Filter = Nearest, stretch mode `viewport`, scale mode
 `integer`, snap 2D transforms to pixel.

@@ -25,10 +25,10 @@ func _process(_delta: float) -> bool:
 			if not child.is_playing() or child.sprite_frames == null:
 				printerr("CHECK_FAIL sprite not playing at ", child.position)
 				problems += 1
-		elif child is Sprite2D:
+		elif child is TileMapLayer:
 			shown += 1
-			if child.texture == null:
-				printerr("CHECK_FAIL tileset without texture")
+			if child.tile_set == null or child.get_used_cells().is_empty():
+				printerr("CHECK_FAIL tileset layer is empty")
 				problems += 1
 	if shown != expected:
 		printerr("CHECK_FAIL showed ", shown, " assets, manifest has ", expected)

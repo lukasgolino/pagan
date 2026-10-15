@@ -59,6 +59,8 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - Commit messages (when asked): imperative subject line, e.g. `Add palette loading`.
 - Validation collects *all* findings in a file rather than stopping at the first, and every finding has a
   rule id, file, line where possible, a `where` path (e.g. `colors.4.hex`) and a message that says how to fix it.
+- Versioning: bump `version` in pyproject.toml, add a CHANGELOG.md entry and tag `vX.Y.Z` for ANY change to the
+  notation, pagan.toml settings, manifest/exporter output or rendered pixels (game repos pin tags). Ask before pushing tags.
 - Dependencies: Pillow, PyYAML, numpy; dev: pytest, mypy, types-PyYAML. Others only if genuinely needed — log why below.
 
 ## Decisions log
@@ -101,3 +103,6 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-15: PAGAN's role (owner): a sprite service driven by an orchestrator agent; engine-agnostic, `manifest.json` is the contract; Godot export is a convenience.
 - 2026-10-15: Every look setting is configurable and saved (`pagan config show/get/set`, registry in settings.py). `config set` validates the whole resulting config before writing and reports what refreshes (models re-render; hand-drawn 2D assets listed for review).
 - 2026-10-15: Engine lighting: `[light] baked = false` renders models with each material's middle step (flat albedo); `export` "normals" writes `<name>.normal.png` (OpenGL convention: x right, y up, z to viewer) and the Godot .tres wraps the sheet in a CanvasTexture with the normal map. Verified loading in Godot 4.7.2.
+- 2026-10-15: Godot TileSet `.tres` per tileset (format copied from Godot 4.7.2's ResourceSaver; one atlas source, every tile created, tile_size written explicitly); manifest gets `tiles: name -> [column, row]`. Pivots stay in the manifest (`godot_offset`), documented for game code.
+- 2026-10-15: Sizes are the requester's choice (owner): skill explains the detail trade-off and the two ways up (camera.scale for chunkier, more voxels for detail).
+- 2026-10-15: Release v0.1.0 tagged locally (owner approved); CHANGELOG.md defines what forces a version bump.

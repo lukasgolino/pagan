@@ -16,7 +16,7 @@ from PIL import Image
 
 from pagan import __version__
 from pagan.asset import Animation, Asset
-from pagan.exporters.godot import centered_offset, find_godot_project, res_path, sprite_frames_tres
+from pagan.exporters.godot import centered_offset, find_godot_project, res_path, sprite_frames_tres, tileset_tres
 from pagan.findings import Finding
 from pagan.lint import LintResult, lint_paths
 from pagan.project import Project
@@ -107,13 +107,18 @@ def build(project: Project) -> BuildResult:
             _write(sheet, _png_bytes(sheet_image(asset, variant), scratch), result)
             produced.add(sheet.resolve())
             info: dict[str, Any] = {"sheet": _ref(sheet, out, godot_root)}
-            if godot_root is not None and asset.kind != "tileset":
+            if godot_root is not None:
                 tres = folder / f"{stem}.tres"
-                normal_res = res_path(normal_sheet, godot_root) if normal_sheet is not None else None
-                text = sprite_frames_tres(res_path(sheet, godot_root), rects, animations, normal_res)
+                if asset.kind == "tileset":
+                    coords = [(x // asset.size[0], y // asset.size[1]) for x, y, _, _ in rects.values()]
+                    text = tileset_tres(res_path(sheet, godot_root), asset.size, coords)
+                    info["godot_tileset"] = res_path(tres, godot_root)
+                else:
+                    normal_res = res_path(normal_sheet, godot_root) if normal_sheet is not None else None
+                    text = sprite_frames_tres(res_path(sheet, godot_root), rects, animations, normal_res)
+                    info["godot_sprite_frames"] = res_path(tres, godot_root)
                 _write(tres, text.encode("utf-8"), result)
                 produced.add(tres.resolve())
-                info["godot_sprite_frames"] = res_path(tres, godot_root)
             return info
 
         entry: dict[str, Any] = {
@@ -129,6 +134,7 @@ def build(project: Project) -> BuildResult:
         }
         if asset.kind == "tileset":
             entry["columns"] = asset.columns
+            entry["tiles"] = {name: [x // asset.size[0], y // asset.size[1]] for name, (x, y, _, _) in rects.items()}
         else:
             entry["pivot"] = list(asset.pivot)
             entry["godot_offset"] = list(centered_offset(asset.size, asset.pivot))

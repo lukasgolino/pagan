@@ -50,10 +50,13 @@ func _display_size(entry: Dictionary) -> Vector2i:
 
 func _make_node(entry: Dictionary) -> Node2D:
 	if entry["kind"] == "tileset":
-		var atlas := Sprite2D.new()
-		atlas.texture = load(entry["sheet"])
-		atlas.centered = false
-		return atlas
+		# Paint each tile once with the generated TileSet, in the atlas layout.
+		var layer := TileMapLayer.new()
+		layer.tile_set = load(entry["godot_tileset"])
+		for tile_name in entry["tiles"]:
+			var coords: Array = entry["tiles"][tile_name]
+			layer.set_cell(Vector2i(coords[0], coords[1]), 0, Vector2i(coords[0], coords[1]))
+		return layer
 	var sprite := AnimatedSprite2D.new()
 	sprite.sprite_frames = load(entry["godot_sprite_frames"])
 	sprite.centered = false  # the grid layout places top-left corners; games use centered + godot_offset

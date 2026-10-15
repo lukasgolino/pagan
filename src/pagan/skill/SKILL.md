@@ -84,6 +84,13 @@ Then:
 questions, with your defaults: what it looks like (colors, key features), size, 2D or 3D, how many
 directions, which animations. Start with ONE asset and get it approved before making related ones.
 
+**Size is the requester's choice.** PAGAN makes any size (sprites/tiles up to 1024x1024; models any frame
+size). Small means less detail; that's the deal, so say so if a request is small for what it describes
+(e.g. "a 16px knight with a visible crest" won't read). To go bigger:
+- the same model, chunkier: raise `camera: { scale: 2 }` in the model and double `size`/`pivot`;
+- more detail: model it with more voxels at scale 1. For characters keep real depth and chunky parts
+  (torso 4-6 voxels deep, limbs 2-3 voxels thick, head ~1/3 of the height), or the side views turn into sticks.
+
 **2D or 3D?**
 - **3D model** (`pagan new model`) for anything that needs several headings or rotations (ships,
   vehicles, top-down characters that turn), props seen at angles, buildings. Headings come out
@@ -112,6 +119,16 @@ directions, which animations. Start with ONE asset and get it approved before ma
    with the choices and open questions, and move on.
 7. On approval: `pagan mark <name> --status approved`, add it to BRIEF.md "Done" (and log feedback),
    `pagan build` (add `--verify-godot` if GODOT is set).
+8. **Report back** what the game side needs to use it (from `manifest.json`): the sheet / `.tres` paths,
+   animation names, frame size, and:
+   - **Pivot:** resources can't carry it. In Godot set `centered = true` and
+     `offset = Vector2(godot_offset[0], godot_offset[1])` on the AnimatedSprite2D/Sprite2D (manifest value);
+     elsewhere, draw the frame with its `pivot` pixel at the object's position.
+   - **3D models:** one animation per heading (`e`, `ne`, ...) plus `<anim>_<heading>`; the game picks
+     the heading from its movement direction.
+   - **Tilesets:** a Godot `TileSet` `.tres` (`godot_tileset`) with every tile in atlas source 0 at the
+     coordinates in the manifest's `tiles` (`name -> [column, row]`); no terrains/collision yet, set those
+     up in the editor if needed.
 
 **Trying alternatives:** asset names must be unique across sprites, tiles and models, so give
 experiments their own names (`barrel_a`, `barrel_b`, or `pagan bake <model> --name <other>`), compare them

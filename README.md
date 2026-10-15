@@ -48,6 +48,24 @@ See `examples/demo/` for an example project (palettes, a potion, a slime, meadow
 8-heading 3D ship) and `examples/godot/` for the Godot project it builds into: open it in Godot 4.7 and
 press Play.
 
+## Using the output in a game
+
+`pagan build` writes PNG sheets and `manifest.json` (frame rects, animations, pivots, tile coordinates)
+for any engine. With `export = ["png", "godot"]` it also writes Godot 4 resources:
+
+- **Sprites and 3D models:** `<name>.tres` SpriteFrames. Godot resources can't hold the pivot, so apply
+  it on the node, using the asset's `godot_offset` from the manifest:
+
+  ```gdscript
+  $AnimatedSprite2D.sprite_frames = load("res://assets/generated/sprites/ship.tres")
+  $AnimatedSprite2D.centered = true
+  $AnimatedSprite2D.offset = Vector2(0.0, -12.0)   # manifest: assets.ship.godot_offset
+  $AnimatedSprite2D.play("sail_ne")                 # 3D models: one animation per heading
+  ```
+
+- **Tilesets:** `tiles/<name>.tres` is a TileSet with every tile in atlas source 0; the manifest's `tiles`
+  gives each tile name's atlas coordinates. Terrains, collision and other tile data are set up in Godot.
+
 ## Using PAGAN with Claude
 
 PAGAN ships a Claude skill that teaches an agent the whole workflow: setting up a game's art folder,

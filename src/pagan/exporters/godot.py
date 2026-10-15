@@ -82,6 +82,27 @@ def sprite_frames_tres(
     return "\n".join(lines)
 
 
+def tileset_tres(atlas_res: str, tile_size: tuple[int, int], coords: list[tuple[int, int]]) -> str:
+    """TileSet resource text: one TileSetAtlasSource over the atlas, a tile at every (column, row)."""
+    width, height = tile_size
+    lines = [
+        '[gd_resource type="TileSet" format=3]',
+        "",
+        f'[ext_resource type="Texture2D" path={_string(atlas_res)} id="1_atlas"]',
+        "",
+        '[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_0"]',
+        'texture = ExtResource("1_atlas")',
+        f"texture_region_size = Vector2i({width}, {height})",
+        *(f"{col}:{row}/0 = 0" for col, row in coords),
+        "",
+        "[resource]",
+        f"tile_size = Vector2i({width}, {height})",
+        'sources/0 = SubResource("TileSetAtlasSource_0")',
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def centered_offset(size: tuple[int, int], pivot: tuple[int, int]) -> tuple[float, float]:
     """`offset` for an AnimatedSprite2D/Sprite2D with centered = true, putting the pivot on the node origin."""
     return (size[0] / 2 - pivot[0], size[1] / 2 - pivot[1])

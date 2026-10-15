@@ -108,7 +108,13 @@ def test_godot_export_writes_sprite_frames(proj: Project) -> None:
     manifest = json.loads((project.output_dir / "manifest.json").read_text())
     assert manifest["assets"]["bug"]["godot_sprite_frames"] == "res://assets/generated/sprites/bug.tres"
     assert manifest["assets"]["bug"]["variants"]["ripe"]["godot_sprite_frames"] == "res://assets/generated/sprites/bug.ripe.tres"
-    assert not (project.output_dir / "tiles" / "turf.tres").exists()  # tilesets get atlas + manifest only
+    tileset = (project.output_dir / "tiles" / "turf.tres").read_text()
+    assert tileset.startswith('[gd_resource type="TileSet" format=3]')
+    assert "tile_size = Vector2i(4, 4)" in tileset and "texture_region_size = Vector2i(4, 4)" in tileset
+    assert "0:0/0 = 0\n1:0/0 = 0\n0:1/0 = 0" in tileset  # columns: 2
+    turf = manifest["assets"]["turf"]
+    assert turf["godot_tileset"] == "res://assets/generated/tiles/turf.tres"
+    assert turf["tiles"] == {"plain": [0, 0], "flower": [1, 0], "plain_flip": [0, 1]}
 
 
 def test_sprite_frames_text() -> None:

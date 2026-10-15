@@ -22,6 +22,26 @@ func _init() -> void:
 			if tex == null or not (tex is Texture2D):
 				printerr("PAGAN_VERIFY_FAIL texture ", sheet)
 				failures += 1
+		var tileset_paths: Array = []
+		if entry.has("godot_tileset"):
+			tileset_paths.append(entry["godot_tileset"])
+		for v in entry.get("variants", {}):
+			if entry["variants"][v].has("godot_tileset"):
+				tileset_paths.append(entry["variants"][v]["godot_tileset"])
+		for path in tileset_paths:
+			var ts = load(path)
+			if ts == null or not (ts is TileSet) or ts.get_source_count() != 1:
+				printerr("PAGAN_VERIFY_FAIL tileset ", path)
+				failures += 1
+				continue
+			var source = ts.get_source(ts.get_source_id(0))
+			if source.get_tiles_count() != entry["tiles"].size():
+				printerr("PAGAN_VERIFY_FAIL ", path, " has ", source.get_tiles_count(), " tiles, expected ", entry["tiles"].size())
+				failures += 1
+			if ts.tile_size != Vector2i(entry["size"][0], entry["size"][1]):
+				printerr("PAGAN_VERIFY_FAIL ", path, " tile size ", ts.tile_size)
+				failures += 1
+			checked += 1
 		var frames_paths: Array = []
 		if entry.has("godot_sprite_frames"):
 			frames_paths.append(entry["godot_sprite_frames"])
