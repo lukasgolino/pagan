@@ -114,3 +114,62 @@ Also fixed after a bug review:
   animations.
 - `heading: 45` frames are named by where they face (`ne`, `nw`, `sw`, `se`).
 - `--json` can now go before the subcommand.
+
+## Age of Boom, G2–G3 art (effects, 5 ship models, tiles, damage states) — 2026-10-16, pagan v0.1.0 (ce24ab4)
+
+Context: 13 effect sprites, 5 warship/merchant models with 16 headings and team variants, a Match-Corners island
+tileset, and damaged/wrecked per-heading pose states. The artist agent ended up writing its own generators
+(`art/tools/*_gen.py` in the game repo) for most of it. That is the main signal behind these reports: several
+generators copy PAGAN internals and will drift silently.
+
+### R7 · feature · high · Per-asset (and per-tile) lint suppression
+W007/W005 fire on every expanding burst effect by design (61 warnings across fire/smoke/splash/etc.), and W004 fires on
+the fully transparent tiles that a complete Match-Corners set requires (`shore_0000`). The only lever is the global
+`lint.disable`, which would also hide real jitter on characters. Want `lint: { disable: [W007, W005] }` on a sprite/tileset
+(and per tile), or relaxed defaults for assets tagged `effect`. `pagan build` should also print warnings per rule
+("51 lint warnings: W007×40, W005×11"), not only the total.
+
+### R8 · feature · high · Animated tiles
+Tilesets have no frames/animations, and the Godot TileSet export writes no `animation_columns`/`animation_frames_count`.
+Godot supports animated atlas tiles natively. Animated water therefore had to be a separate 128x128 sprite that the
+game tiles and cycles. Want per-tile animations, laid out contiguously and exported as Godot atlas tile animations.
+
+### R9 · feature · medium · Model poses can't rotate (no listing/tilt)
+Poses translate parts by whole voxels only. Sinking ships need to list (roll ~10–20°) and capsizing needs a pitch.
+Want pose-level `roll`/`pitch` (degrees) on the whole model and ideally on parts (a falling mast).
+
+### R10 · bug · medium · Hidden parts silently remove overlapping visible voxels
+A voxel belongs to one part, so a `hidden: true` part that overlaps visible voxels removes them from the normal
+frames with no warning. Seen on `merchant`: a hidden scorch decal ate rim voxels, and only the artist's own pixel
+diff caught it. Want: (a) a lint warning when a hidden part claims visible voxels; (b) `show` acting as an overlay,
+or per-pose `carve`, so damage (holes, torn sails) can be added and removed without the shifted-copy workaround;
+(c) optionally a check that adding animations left the base heading frames pixel-identical.
+
+### R11 · feature · medium · Richer ship primitives (generators copy internals)
+- `sail` has no per-cell material, so patched sails needed `_sail`'s placement maths copied into a script.
+- There is no way to place gun ports or decals on the tapered `hull` side; the hull-width formula was copied.
+Want a `ports:`/decal option on `hull` (count, row height, material) and a per-cell `pattern`/material on `sail`.
+
+### R12 · feature · medium · 2D effect and terrain helpers
+- Sprites are literal grids only. Effects need circle/ellipse/ring shapes, dither-fade and particle scatter; the
+  artist wrote a procedural generator.
+- Tilesets need corner/Wang transition generation between two ramps, plus a composed-scene preview, because the 3x3
+  self-tiling preview can't show seams between different tiles.
+
+### R13 · feature · low · `pagan fit <model>`
+Sizing a frame to fit all 16 headings is trial and error, because E007 reports only the first clipped pixel. Want a
+command that renders every heading and pose and suggests the minimal `size` and `pivot` (keeping the origin pinned).
+
+### R14 · bug · low · W001 on model frames is mislabelled
+`models/brig.model.yaml:42: warning W001 [tiles.n row 18 col 19]: orphan pixel`: the label says `tiles.` for a model
+frame, and line 42 is an unrelated part. The orphans were yard-arm tips seen end-on (the yard extends 1 voxel past
+the cloth), which can't be fixed per pixel. Use `frames.n` with no source line, and consider skipping W001 on 3D renders.
+
+### R15 · heads-up · medium · Upcoming load from Age of Boom: player colours and ship "characters"
+Not a bug; planning notice. (1) Multiplayer needs 4 player colours per ship class: today a colour is a palette
+variant (`sloop.variants.red`). Four per class works but each variant multiplies 16-heading renders × damage poses.
+(2) Later, ships become distinct "characters" with abilities (boost, bow chasers, mortar, mines, smoke screen, ram
+prow, harpoon …). Each must be identifiable at a glance: different silhouettes (variants that add/remove parts, not
+only recolour), character palettes on top of player colours (palette layering: team ramp + character ramp), and a
+per-character set of ability effects. Worth checking that models can share a base hull with part overrides and that
+variants can compose (character × player colour) rather than enumerate.
