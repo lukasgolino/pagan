@@ -1,7 +1,7 @@
 # Changelog
 
 PAGAN follows [semantic versioning](https://semver.org/). Game projects should pin a release tag
-(e.g. `pip install "git+ssh://git@github.com/lukasgolino/PAGAN.git@v0.2.0"`).
+(e.g. `pip install "git+ssh://git@github.com/lukasgolino/PAGAN.git@v0.3.0"`).
 
 A new version (and tag) is cut for **any** change to:
 - the notation (palette, sprite, tileset or model files),
@@ -12,12 +12,13 @@ A new version (and tag) is cut for **any** change to:
 While on 0.x, a minor bump (0.1 -> 0.2) may change any of these; read the notes before upgrading.
 Patch bumps (0.1.0 -> 0.1.1) never change them.
 
-## Unreleased (planned 0.3.0)
+## 0.3.0 — 2026-10-16
 
 From orchestrator reports R7-R14 (ORCHESTRATOR_PLAN.md, Age of Boom G2-G3).
 
 ### Upgrading from 0.2.0
 
+- `manifest.json` `generator` becomes `"pagan 0.3.0"`: expect every manifest to change once.
 - **Hidden parts are overlays now.** A `hidden: true` part never changes the normal frames, and when a
   pose shows it, it's drawn over everything. Before, a hidden part that overlapped visible voxels cut
   them out of the normal frames, and visible parts placed later cut holes in it. Affected models render

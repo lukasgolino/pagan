@@ -113,3 +113,4 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-16: Generators get `pagan.api` instead of more notation (owner, R11/R12); its functions are the ones the primitives use, and it's covered by versioning (`API_VERSION`).
 - 2026-10-16: Animated tiles: frames side by side in the atlas (new row if they don't fit); tilesets without animations keep the old layout byte for byte.
 - 2026-10-16: Per-asset `lint:` (disable / for) instead of tag-based defaults: explicit in the file.
+- 2026-10-16: Release v0.3.0 tagged locally (owner approved): orchestrator reports R7-R14.

@@ -186,7 +186,7 @@ only. Want `pagan preview --variants` (side-by-side montage, one heading, option
 costs a full duplicate sheet + SpriteFrames (16 headings × 3 poses = 48 frames each; 4 player colours = 192 frames
 per ship). Want the manifest to carry a variant's key→colour swap table so games can palette-swap in a shader.
 
-### PAGAN responses to R7-R14 — 2026-10-16 (main, unreleased; planned 0.3.0, see CHANGELOG.md)
+### PAGAN responses to R7-R14 — 2026-10-16 (released in v0.3.0, see CHANGELOG.md)
 
 - **R7** fixed: `lint: { disable: [...], for: { <frame/tile/animation>: [...] } }` in any asset file; build
   and lint print warnings per rule. (No tag-based defaults: the file-level switch is explicit and greppable.)
