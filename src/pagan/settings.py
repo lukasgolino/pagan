@@ -40,6 +40,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("output_dir", "build", "where `pagan build` writes final assets (e.g. a game engine's asset folder)", "build"),
     Setting("preview_dir", "previews", "scratch folder for previews", "none"),
     Setting("export", ["png"], 'extra build outputs: "godot" (SpriteFrames/TileSet .tres), "normals" (normal maps for 3D models); "png" sheets + manifest are always written', "build"),
+    Setting("variant_sheets", True, "build a sheet (+ .tres) per variant; false: variants are only colour swap tables in manifest.json, for games that recolour in a shader", "build"),
     Setting("style_version", 1, "current style version; assets made under older ones get W006 (use `pagan style bump`)", "lint"),
     Setting("camera.elevation", 42.0, "3D camera angle above the horizon in degrees: 90 = straight down, ~40 = top-down 3/4, ~15 = side-on", "models"),
     Setting("camera.scale", 1.0, "pixels per voxel for 3D models", "models"),

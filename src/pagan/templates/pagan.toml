@@ -18,6 +18,10 @@ preview_dir = "previews"
 # Every setting here can also be viewed/changed with `pagan config show` / `pagan config set <key> <value>`.
 export = ["png"]
 
+# Variants (recolours) get their own sheet (+ .tres). Set false when the game recolours in a shader
+# from each variant's "swap" table (base colour -> variant colour) in manifest.json.
+variant_sheets = true
+
 # Bump this when STYLE.md changes in a way that means existing art should be revisited (e.g. "more
 # shadows"). Assets record the style_version they were made under; older ones get lint warning W006.
 # Palette color changes don't need a bump: every asset picks them up automatically.

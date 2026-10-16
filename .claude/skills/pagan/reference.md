@@ -19,12 +19,17 @@ sprites, tiles and models.
 
 ```yaml
 name: dusk
-colors:                       # key = ONE character: 0-9 a-z A-Z ("." is transparent)
+colors:                       # key = ONE letter or digit ("." is transparent)
   "0": { hex: "#140c1c", name: ink }
   "1": "#442434"              # short form: just the hex
+  "α": "#2f6b9a"              # past 0-9 a-z A-Z: any other single Unicode letter
 ramps:                        # dark -> light; one ramp per material
   warm: ["1", "2", "3", "4"]
 ```
+
+Keys: use 0-9, a-z, A-Z first (62), then Latin-1 letters (à-ÿ, À-Þ, ß) and Greek letters that don't look
+like Latin ones (α-ω, Γ Δ Θ Λ Ξ Π Σ Φ Ψ Ω); any single Unicode letter or digit is accepted. Quote keys in
+the palette file. Files are UTF-8; an accent typed as a separate combining mark is merged (NFC).
 
 ## Sprite - `sprites/<name>.sprite.yaml`
 
@@ -245,6 +250,7 @@ default_palette = "dusk"
 output_dir = "../game/assets/generated"
 preview_dir = "previews"
 export = ["png", "godot"]          # PNG sheets + manifest always; + "godot" (.tres, needs project.godot above output_dir), "normals"
+variant_sheets = true              # false: no sheet/.tres per variant, only its swap table in the manifest
 style_version = 1
 
 [camera]                           # used by every model
@@ -278,7 +284,7 @@ require_outline = false            # E011
 | `pagan new tiles <name> [--size] [--frames N]` | blank tileset |
 | `pagan new model <name> [--size 64x64] [--directions 8]` | starter model |
 | `pagan lint [paths] [--warnings-as-errors]` | errors + style warnings |
-| `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb] [--scene FILE]` | sheet.png (labelled), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale; `--scene` (tilesets): scene.png from a layout file (rows of tile names, `.` = empty) |
+| `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb] [--scene FILE]` | sheet.png (labelled), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale; variants.png + variants_1x.png (base and every variant side by side) when the asset has variants; `--scene` (tilesets): scene.png from a layout file (rows of tile names, `.` = empty) |
 | `pagan gallery` | every asset in one image |
 | `pagan render <asset...>` | native-size PNGs |
 | `pagan palette show [palettes]` | swatches |
@@ -311,7 +317,10 @@ W001 isn't checked on 3D models (a rendered orphan can't be fixed pixel by pixel
 `manifest.json` in `output_dir` describes everything: per asset its kind, sheet, frame rects, animations
 (frames, fps, loop), pivot, `godot_offset`, headings (models), tiles (`name -> [column, row]` for
 tilesets; an animated tile is listed by its animation name at its first frame's cell, and the tileset
-gets `animations`), variants, and `normal_sheet` (when "normals" is exported: RGB = normal * 0.5 + 0.5, x right,
+gets `animations`), variants (each with its sheet/.tres unless `variant_sheets = false`, plus `swap`:
+base colour -> variant colour as "#rrggbb" for every colour it changes, and `swap_exact`: false when two
+keys share a base colour but not a variant colour, so a shader swap would be wrong; with
+`variant_sheets = false` that's error E006), and `normal_sheet` (when "normals" is exported: RGB = normal * 0.5 + 0.5, x right,
 y up, z towards the viewer). Pivots aren't stored in engine resources: apply them in the game.
 
 ## Godot

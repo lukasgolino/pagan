@@ -39,6 +39,7 @@ class Config:
     preview_dir: str = "previews"
     export: tuple[str, ...] = ("png",)
     style_version: int = 1
+    variant_sheets: bool = True  # False: variants are only swap tables in the manifest (recolour in a shader)
     lint: LintConfig = field(default_factory=LintConfig)
     camera: Camera = field(default_factory=Camera)
     light: Light = field(default_factory=Light)
@@ -137,7 +138,8 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
 
     defaults = Config()
     allowed = (
-        "palette_mode", "default_palette", "output_dir", "preview_dir", "export", "style_version", "lint", "camera", "light",
+        "palette_mode", "default_palette", "output_dir", "preview_dir", "export", "style_version", "variant_sheets", "lint",
+        "camera", "light",
     )  # fmt: skip
     for key in data:
         if key not in allowed:
@@ -171,6 +173,11 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         error("style_version must be a positive integer", "style_version")
         style_version = defaults.style_version
 
+    variant_sheets = data.get("variant_sheets", defaults.variant_sheets)
+    if not isinstance(variant_sheets, bool):
+        error("variant_sheets must be true or false", "variant_sheets")
+        variant_sheets = defaults.variant_sheets
+
     lint = _parse_lint(data.get("lint", {}), error)
     camera, light = parse_render(data.get("camera", {}), data.get("light", {}), error)
 
@@ -183,6 +190,7 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         preview_dir=dirs["preview_dir"],
         export=tuple(export),
         style_version=style_version,
+        variant_sheets=variant_sheets,
         lint=lint,
         camera=camera,
         light=light,

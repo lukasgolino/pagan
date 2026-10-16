@@ -1,4 +1,8 @@
-"""Palettes: the colors a sprite may use, keyed by single characters, grouped into shading ramps."""
+"""Palettes: the colors a sprite may use, keyed by single characters, grouped into shading ramps.
+
+A key is any one Unicode letter or digit, so a palette isn't limited to 0-9a-zA-Z. KEY_ORDER is the
+recommended order to take keys in: ASCII first, then letters that don't look like ASCII ones.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +17,16 @@ from pagan.findings import Finding, PaganError, has_errors
 from pagan.yamlio import LineMap, YamlError, load_yaml
 
 TRANSPARENT = "."
-KEY_CHARS = frozenset(string.digits + string.ascii_letters)
+# Latin-1 letters, then Greek letters that can't be mistaken for Latin ones (no Α/A, ο/o, ...).
+_LATIN1 = "àáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿßÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ"
+_GREEK = "αβγδεζηθλμξπρσςτφχψωΓΔΘΛΞΠΣΦΨΩ"
+KEY_ORDER = string.digits + string.ascii_lowercase + string.ascii_uppercase + _LATIN1 + _GREEK
+KEY_HELP = "one letter or digit: 0-9, a-z, A-Z, then any other single Unicode letter (à-ÿ, À-Þ, ß, α-ω, Γ, Δ, ...)"
+
+
+def is_key(text: str) -> bool:
+    """A valid palette key: one Unicode letter or digit (never "." or whitespace)."""
+    return len(text) == 1 and text.isalnum()
 PALETTE_SUFFIX = ".pal.yaml"
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -108,8 +121,8 @@ def parse_palette(
             if key == TRANSPARENT:
                 error("E005", "'.' is reserved for transparent and can't be a palette color", line, where)
                 continue
-            if key is None or len(key) != 1 or key not in KEY_CHARS:
-                error("E005", f"color key {raw_key!r} must be one character: 0-9, a-z or A-Z", line, where)
+            if key is None or not is_key(key):
+                error("E005", f"color key {raw_key!r} must be {KEY_HELP}", line, where)
                 continue
             if key in colors:
                 error("E005", f"duplicate color key {key!r}", line, where)

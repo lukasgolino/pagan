@@ -7,16 +7,15 @@ color (perceptual OKLab distance) or, in open mode, extract the image's own colo
 from __future__ import annotations
 
 import math
-import string
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from PIL import Image
 
 from pagan.color import RGB, distance, rgb_to_hex, rgb_to_oklab
-from pagan.palette import Palette
+from pagan.palette import KEY_ORDER, Palette
 
-KEYS = string.digits + string.ascii_lowercase + string.ascii_uppercase
+KEYS = KEY_ORDER
 
 
 @dataclass

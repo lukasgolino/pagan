@@ -114,3 +114,5 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-16: Animated tiles: frames side by side in the atlas (new row if they don't fit); tilesets without animations keep the old layout byte for byte.
 - 2026-10-16: Per-asset `lint:` (disable / for) instead of tag-based defaults: explicit in the file.
 - 2026-10-16: Release v0.3.0 tagged locally (owner approved): orchestrator reports R7-R14.
+- 2026-10-16: Palette keys are any single Unicode letter/digit (owner, R16); KEY_ORDER recommends ASCII, then Latin-1, then non-Latin-looking Greek. Sources are NFC-normalized on load.
+- 2026-10-16: Variants carry a hex->hex `swap` table in the manifest; `variant_sheets = false` (owner: setting, default on) skips variant sheets and makes non-exact swaps an error.

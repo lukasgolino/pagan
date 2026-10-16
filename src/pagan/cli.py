@@ -21,7 +21,7 @@ from pagan.exporters.godot import find_godot_binary, find_godot_project, res_pat
 from pagan.importer import import_png, sprite_yaml
 from pagan.lint import lint_paths
 from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_style, catalogue, mark, outdated
-from pagan.palette import NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
+from pagan.palette import KEY_ORDER, NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.preview import PreviewOptions, gallery, write_previews
 from pagan.render import frame_image, save_png, sheet_image
@@ -492,6 +492,8 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
         out.say(f"  montage (no labels, on the background): {display_path(result.montage)}")
         for gif in result.gifs:
             out.say(f"  animation: {display_path(gif)}")
+        if result.variants is not None and result.variants_1x is not None:
+            out.say(f"  variants side by side: {display_path(result.variants)} (1x: {display_path(result.variants_1x)})")
         out.say(
             f"  frames: {display_path(result.sheet.parent / 'frames')}/ ({len(result.frames)} PNGs at x{result.scale}; "
             "1x PNGs: `pagan render`)"
@@ -509,6 +511,8 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
                 "gifs": [display_path(g) for g in result.gifs],
                 "frames": [display_path(f) for f in result.frames],
                 **({"scene": display_path(scene)} if scene is not None else {}),
+                **({"variants": display_path(result.variants)} if result.variants is not None else {}),
+                **({"variants_1x": display_path(result.variants_1x)} if result.variants_1x is not None else {}),
             }
         )
     if findings:
@@ -712,8 +716,8 @@ def cmd_import(args: argparse.Namespace, out: Output) -> int:
         raise _usage_error(f"invalid name {name!r}: pass --name")
     if args.scale is not None and args.scale < 1:
         raise _usage_error("--scale must be at least 1")
-    if not 1 <= args.max_colors <= 62:
-        raise _usage_error("--max-colors must be 1-62 (palette keys are single characters)")
+    if not 1 <= args.max_colors <= len(KEY_ORDER):
+        raise _usage_error(f"--max-colors must be 1-{len(KEY_ORDER)}")
     if not 0 <= args.alpha_threshold <= 255:
         raise _usage_error("--alpha-threshold must be 0-255")
     rows, inline, report = import_png(
@@ -1143,7 +1147,7 @@ def build_parser() -> argparse.ArgumentParser:
     imp.add_argument("--open", action="store_true", help="keep the image's own colors as an inline palette")
     imp.add_argument("--scale", type=int, help="upscale factor to undo (default: detect)")
     imp.add_argument("--alpha-threshold", type=int, default=128, help="alpha below this is transparent (default 128)")
-    imp.add_argument("--max-colors", type=int, default=32, help="open mode: reduce to at most this many colors (max 62)")
+    imp.add_argument("--max-colors", type=int, default=32, help="open mode: reduce to at most this many colors")
     imp.add_argument("--name", help="asset name (default: from the file name)")
     imp.add_argument("--out", help="output path (default: sprites/<name>.sprite.yaml)")
     imp.add_argument("--force", action="store_true", help="overwrite an existing file")

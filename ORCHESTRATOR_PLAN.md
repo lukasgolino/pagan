@@ -209,3 +209,25 @@ per ship). Want the manifest to carry a variant's key→colour swap table so gam
 - **R14** fixed: model findings say `frames.<name>` with no line; W001 is skipped on models.
 
 R15-R17 (above) arrived during this work; not addressed yet.
+
+### PAGAN responses to R15-R17 — 2026-10-16 (main, unreleased; see CHANGELOG.md)
+
+- **R16** fixed: a palette key is any single Unicode letter or digit. After 0-9 a-z A-Z come Latin-1
+  letters (à-ÿ, À-Þ, ß) and Greek letters that can't be mistaken for Latin ones: 154 recommended keys
+  (`pagan.palette.KEY_ORDER`). Grids stay one character per pixel. Un-alias `blue`/`yellow` in `naval`.
+- **R17a** fixed: `pagan preview` writes `variants.png` + `variants_1x.png` for assets with variants.
+- **R17b** fixed: manifest variants carry `swap` ("#base" -> "#variant") and `swap_exact`. Set
+  `variant_sheets = false` to drop the duplicate sheets/SpriteFrames and recolour in a shader
+  (a variant that isn't a clean colour swap is then a build error).
+- **R15** — design proposal, awaiting the owner's approval (nothing built yet):
+  1. *Shared bases:* a model can `extends: <model>`: it inherits materials, parts, animations and variants,
+     then adds `parts`, `hide: [ids]` (removed from the base) and overrides `materials`. One file per ship
+     character, one base hull to maintain. Each character is its own asset (own sheet: its silhouette
+     differs, so it must be rendered).
+  2. *Composable colours:* variants grouped into axes, e.g. `variant_axes: { team: { red: ..., blue: ... },
+     trim: { gold: ..., steel: ... } }`. Axes must swap disjoint keys (error otherwise), so any team × any
+     trim is just both swaps applied: the manifest lists per-axis swap tables and the game composes them;
+     with `variant_sheets = true` PAGAN builds the full product (and says how many sheets that is).
+  3. *Ability effects* stay ordinary sprites named per character (`mortar_flash`, ...); no new notation.
+  Cost: 4 player colours × N characters = N rendered sheets + 4 swap tables, instead of 4N sheets.
+

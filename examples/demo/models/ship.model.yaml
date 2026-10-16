@@ -50,3 +50,6 @@ animations:
       - { pennant: { offset: [0, 1, 0] }, fore_pennant: { offset: [0, 1, 0] } }
       - {}
       - { pennant: { offset: [0, -1, 0] }, fore_pennant: { offset: [0, -1, 0] } }
+
+variants:
+  blue: { key_swap: { "l": "i", "m": "j", "n": "k" } }   # team colour: rose flag -> sky blue

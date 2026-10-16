@@ -29,6 +29,20 @@ def _font(size: int) -> Font:
     return ImageFont.load_default(size=size)
 
 
+_GLYPH_FONTS = ("DejaVuSans.ttf", "Arial Unicode.ttf", "arialuni.ttf", "segoeui.ttf", "Arial.ttf", "arial.ttf")
+
+
+def _key_font(size: int) -> Font:
+    """A font with Greek and Latin-1 glyphs for palette keys (Pillow's default lacks Greek), if the system
+    has one. Swatches are previews, so the fallback only affects how they look."""
+    for name in _GLYPH_FONTS:
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
+    return _font(size)
+
+
 def _contrast(color: Color) -> tuple[int, int, int]:
     r, g, b = color.rgb
     luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
@@ -57,7 +71,7 @@ def render_swatch(palette: Palette, title: str | None = None) -> Image.Image:
 
     image = Image.new("RGB", (width, height), BACKGROUND)
     draw = ImageDraw.Draw(image)
-    title_font, label_font, key_font = _font(18), _font(12), _font(16)
+    title_font, label_font, key_font = _font(18), _font(12), _key_font(16)
 
     name = title or palette.name or "inline palette"
     summary = f"{len(colors)} colors, {len(palette.ramps)} ramps"

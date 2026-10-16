@@ -1241,7 +1241,18 @@
         "vehicle",
         "ship"
       ],
-      "variants": {}
+      "variants": {
+        "blue": {
+          "godot_sprite_frames": "res://assets/generated/sprites/ship.blue.tres",
+          "sheet": "res://assets/generated/sprites/ship.blue.png",
+          "swap": {
+            "#8c2f3f": "#39486a",
+            "#c95a5a": "#5f7f99",
+            "#f0a08a": "#9dbbc4"
+          },
+          "swap_exact": true
+        }
+      }
     },
     "slime": {
       "animations": {
@@ -1393,6 +1404,8 @@
     "sprites/potion.tres",
     "sprites/sailor.png",
     "sprites/sailor.tres",
+    "sprites/ship.blue.png",
+    "sprites/ship.blue.tres",
     "sprites/ship.png",
     "sprites/ship.tres",
     "sprites/slime.png",

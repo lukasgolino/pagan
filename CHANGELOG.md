@@ -12,6 +12,29 @@ A new version (and tag) is cut for **any** change to:
 While on 0.x, a minor bump (0.1 -> 0.2) may change any of these; read the notes before upgrading.
 Patch bumps (0.1.0 -> 0.1.1) never change them.
 
+## Unreleased
+
+From orchestrator reports R16-R17 (ORCHESTRATOR_PLAN.md).
+
+### Upgrading from 0.3.0
+
+- Every manifest entry for a variant gains `swap` and `swap_exact` (see below); sheets and `.tres`
+  files are unchanged.
+- Source files are NFC-normalized when read (only matters for accents typed as combining marks).
+
+### Changes
+
+- Palette keys can be any single Unicode letter or digit (R16): after 0-9 a-z A-Z, use Latin-1
+  (à-ÿ, À-Þ, ß) and Greek letters. `pagan import --open` can extract up to 154 colours. Swatches draw
+  the keys with a system font that has the glyphs (DejaVu Sans, Arial...) when there is one.
+- Variant swap tables (R17b): each variant in `manifest.json` has `swap` (base "#rrggbb" -> variant
+  "#rrggbb" for every colour it changes) and `swap_exact`. New setting `variant_sheets` (default true):
+  false skips the per-variant sheets and `.tres` files for games that recolour in a shader; a variant
+  that can't be expressed as a colour swap is then an error (E006).
+- `pagan preview` writes `variants.png` (base + every variant, labelled) and `variants_1x.png` when an
+  asset has variants (R17a).
+- Demo: the ship has a `blue` team variant.
+
 ## 0.3.0 — 2026-10-16
 
 From orchestrator reports R7-R14 (ORCHESTRATOR_PLAN.md, Age of Boom G2-G3).

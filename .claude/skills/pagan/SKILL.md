@@ -163,7 +163,12 @@ in `pagan gallery`, then delete the losers and keep the winner under the real na
   row and W007. Typical frame counts: idle 2-4, walk 4-6, attack 3-5.
 - **"Make an enemy / another character"**: new asset in the same style - same palette, outline, light,
   proportions; compare side by side with `pagan gallery`. Variants (`variants:` ramp_swap/key_swap/
-  palette) are the cheap way to make recolored versions (elite enemy, night version).
+  palette) are the cheap way to make recolored versions (elite enemy, night version, team colours);
+  `pagan preview` writes variants.png to compare them. Many variants of big models multiply sheet sizes:
+  if the game can recolour in a shader, set `variant_sheets = false` and point it at each variant's
+  `swap` table in manifest.json.
+- **Out of palette keys** (62 ASCII letters/digits used): keep going with Unicode letters (à, é, ß, α, Ω...);
+  see reference.md. Don't alias existing keys or copy the palette.
 
 ## 4. Changing the look over time
 

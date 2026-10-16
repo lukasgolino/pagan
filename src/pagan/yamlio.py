@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -81,7 +82,11 @@ _Loader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _constru
 
 
 def parse_yaml(text: str) -> Any:
-    """Parse YAML text. Mappings come back as LineMap. Raises YamlError."""
+    """Parse YAML text. Mappings come back as LineMap. Raises YamlError.
+
+    Text is NFC-normalized first, so "é" typed as e + combining accent is the same one-character key.
+    """
+    text = unicodedata.normalize("NFC", text)
     try:
         return yaml.load(text, Loader=_Loader)  # noqa: S506 - _Loader is a SafeLoader
     except yaml.MarkedYAMLError as exc:

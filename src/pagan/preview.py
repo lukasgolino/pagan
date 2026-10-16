@@ -202,6 +202,32 @@ class PreviewResult:
     frames: list[Path]
     gifs: list[Path]
     scale: int
+    variants: Path | None = None  # base + every variant side by side (only when the asset has variants)
+    variants_1x: Path | None = None
+
+
+def representative_frame(asset: Asset) -> str:
+    """The frame that stands for the asset: a model's first heading, else the first frame."""
+    return next(iter(asset.frames))
+
+
+def variants_image(asset: Asset, options: PreviewOptions) -> Image.Image:
+    """The same frame in the base colours and every variant, labelled, at the preview scale."""
+    scale = options.scale or auto_scale(asset.size)
+    frame = representative_frame(asset)
+    cells = [(name or "base", upscale(frame_image(asset, frame, name), scale, options)) for name in (None, *asset.variants)]
+    return _labelled_grid(f"{asset.name} variants  x{scale}", f"frame {frame}", [("", cells)])
+
+
+def variants_strip(asset: Asset, gap: int = 1) -> Image.Image:
+    """The same comparison at 1x on a transparent background (how they'll look in game)."""
+    frame = representative_frame(asset)
+    names = (None, *asset.variants)
+    width, height = asset.size
+    strip = Image.new("RGBA", (len(names) * (width + gap) - gap, height), (0, 0, 0, 0))
+    for i, name in enumerate(names):
+        strip.alpha_composite(frame_image(asset, frame, name), (i * (width + gap), 0))
+    return strip
 
 
 def montage(asset: Asset, options: PreviewOptions, per_row: int = 8) -> Image.Image:
@@ -243,7 +269,13 @@ def write_previews(asset: Asset, out_dir: Path, options: PreviewOptions) -> Prev
     contact_sheet(asset, options).save(sheet)
     montage_path = folder / "montage.png"
     montage(asset, options).save(montage_path)
-    return PreviewResult(asset=asset.name, sheet=sheet, montage=montage_path, frames=frames, gifs=gifs, scale=scale)
+    result = PreviewResult(asset=asset.name, sheet=sheet, montage=montage_path, frames=frames, gifs=gifs, scale=scale)
+    if asset.variants:
+        result.variants = folder / "variants.png"
+        variants_image(asset, options).save(result.variants)
+        result.variants_1x = folder / "variants_1x.png"
+        variants_strip(asset).save(result.variants_1x)
+    return result
 
 
 def gallery(assets: list[Asset], options: PreviewOptions, title: str) -> Image.Image:
