@@ -1,7 +1,7 @@
 # Changelog
 
 PAGAN follows [semantic versioning](https://semver.org/). Game projects should pin a release tag
-(e.g. `pip install "git+https://github.com/lukasgolino/pagan.git@v0.1.0"`).
+(e.g. `pip install "git+ssh://git@github.com/lukasgolino/PAGAN.git@v0.2.0"`).
 
 A new version (and tag) is cut for **any** change to:
 - the notation (palette, sprite, tileset or model files),
@@ -12,9 +12,23 @@ A new version (and tag) is cut for **any** change to:
 While on 0.x, a minor bump (0.1 -> 0.2) may change any of these; read the notes before upgrading.
 Patch bumps (0.1.0 -> 0.1.1) never change them.
 
-## Unreleased
+## 0.2.0 — 2026-10-15
 
-From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md) and the Age of Boom PAGAN log.
+From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN log, and review round 3.
+
+### Upgrading from 0.1.0
+
+- `manifest.json` `generator` becomes `"pagan 0.2.0"`: expect every manifest to change once on the
+  first build. Sheets and `.tres` files are unchanged for the same sources.
+- Models with a non-zero `heading` get frames and animations named by where they face (`heading: 45`,
+  4 directions: `ne, nw, sw, se` instead of `e, n, w, s`). Models with `heading: 0` and 1-direction
+  models (`main`) are unchanged.
+- W003 for 3D models now uses `lint.max_ramps_per_model` (default 6) instead of
+  `max_ramps_per_sprite` (3), so some model warnings go away.
+- `pagan bake` without `--name` now writes `<model>_baked`, not `<model>`.
+- A model's `light:`/`camera:` override with unknown keys is now an error (E013); it used to be ignored.
+
+### Changes
 
 - `pagan --version` names the exact build: `pagan 0.1.0 (v0.1.0, ce24ab4)` for a pinned git install,
   `(editable checkout <git describe>)` for a dev checkout; `pagan status` shows it and warns on editable

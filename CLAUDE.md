@@ -106,3 +106,4 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-15: Godot TileSet `.tres` per tileset (format copied from Godot 4.7.2's ResourceSaver; one atlas source, every tile created, tile_size written explicitly); manifest gets `tiles: name -> [column, row]`. Pivots stay in the manifest (`godot_offset`), documented for game code.
 - 2026-10-15: Sizes are the requester's choice (owner): skill explains the detail trade-off and the two ways up (camera.scale for chunkier, more voxels for detail).
 - 2026-10-15: Release v0.1.0 tagged locally (owner approved); CHANGELOG.md defines what forces a version bump.
+- 2026-10-15: Release v0.2.0 tagged locally (owner approved): orchestrator reports R1-R6, Age of Boom log fixes, review round 3.
