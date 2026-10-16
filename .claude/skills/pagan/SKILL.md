@@ -167,6 +167,10 @@ in `pagan gallery`, then delete the losers and keep the winner under the real na
   `pagan preview` writes variants.png to compare them. Many variants of big models multiply sheet sizes:
   if the game can recolour in a shader, set `variant_sheets = false` and point it at each variant's
   `swap` table in manifest.json.
+- **A family of related assets** (character classes, unit types, building tiers): put the shared body in a
+  `template: true` model and `extends:` it per member (add parts, `remove: [ids]`, override materials),
+  so a fix to the base reaches all of them. **Colours that combine** (player colour × rank, team × armour
+  tint): `variant_axes`, not one variant per combination.
 - **Out of palette keys** (62 ASCII letters/digits used): keep going with Unicode letters (à, é, ß, α, Ω...);
   see reference.md. Don't alias existing keys or copy the palette.
 

@@ -60,6 +60,10 @@ variants:                     # recolors with identical geometry, built as <name
   fire: { ramp_swap: { green: warm } }            # ramps must be the same length
   ice:  { key_swap: { "5": "a", "6": "b" } }
   night: { palette: dusk_night }                  # same keys, another palette (+ swaps if needed)
+variant_axes:                 # recolours that combine (any asset kind): one option per axis
+  team: { red: { ramp_swap: { cloth: red } }, blue: { ramp_swap: { cloth: blue } } }
+  rank: { none: {}, elite: { key_swap: { "4": "a" } } }   # {} = leave this axis as it is
+                              # axes must recolour different keys; builds red+none, red+elite, blue+none...
 lint:                         # optional: warnings off for this asset only (any asset kind)
   disable: [W005, W007]       # e.g. expanding bursts change shape by design
   for: { idle_1: [W001] }     # ...or only for some frames/tiles/animations
@@ -175,6 +179,13 @@ voxels aft. `triangle` fills a flat triangle between three points (`thickness` 1
 its exact normal. Frames: `<heading>` (static) and `<anim>_<heading>_<i>`;
 animations `<heading>` and `<anim>_<heading>` (1 direction: `main`, `<anim>_<i>`, `<anim>`).
 `pagan bake <model>` writes the rendered frames as an editable sprite.
+
+**Shared bases.** `template: true` marks a model that's only a base: linted and previewable, never built.
+Another model starts from it with `extends: <base>`: it inherits everything except name, description,
+tags, status, style_version, lint and template; `materials`, `animations`, `variants` and `variant_axes`
+merge by name (this file wins); `parts` are the base's, minus ids listed in `remove: [ids]`, then this
+file's. E.g. one `knight_base` body, then `knight_axe` / `knight_bow` that swap the weapon part and a
+material. Each extending model is its own asset with its own sheet.
 
 Hidden parts are overlays: they never change the normal frames, and a shown one is drawn over
 everything (a hidden `carve` part cuts instead). A visible `carve` part removes voxels from everything
@@ -320,7 +331,9 @@ tilesets; an animated tile is listed by its animation name at its first frame's 
 gets `animations`), variants (each with its sheet/.tres unless `variant_sheets = false`, plus `swap`:
 base colour -> variant colour as "#rrggbb" for every colour it changes, and `swap_exact`: false when two
 keys share a base colour but not a variant colour, so a shader swap would be wrong; with
-`variant_sheets = false` that's error E006), and `normal_sheet` (when "normals" is exported: RGB = normal * 0.5 + 0.5, x right,
+`variant_sheets = false` that's error E006), `variant_axes` (per axis, per option: `swap`, `swap_exact`;
+apply one option's swap per axis together - with `variant_sheets = false` the combinations aren't listed
+in `variants`, the game composes them), and `normal_sheet` (when "normals" is exported: RGB = normal * 0.5 + 0.5, x right,
 y up, z towards the viewer). Pivots aren't stored in engine resources: apply them in the game.
 
 ## Godot

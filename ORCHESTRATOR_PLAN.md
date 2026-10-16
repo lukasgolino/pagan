@@ -219,7 +219,9 @@ R15-R17 (above) arrived during this work; not addressed yet.
 - **R17b** fixed: manifest variants carry `swap` ("#base" -> "#variant") and `swap_exact`. Set
   `variant_sheets = false` to drop the duplicate sheets/SpriteFrames and recolour in a shader
   (a variant that isn't a clean colour swap is then a build error).
-- **R15** — design proposal, awaiting the owner's approval (nothing built yet):
+- **R15** — approved by the owner and built (below). Names are generic, not ship-specific:
+  `extends`/`remove`/`template` for models; `variant_axes` for any asset; manifest `variant_axes`.
+  Original proposal:
   1. *Shared bases:* a model can `extends: <model>`: it inherits materials, parts, animations and variants,
      then adds `parts`, `hide: [ids]` (removed from the base) and overrides `materials`. One file per ship
      character, one base hull to maintain. Each character is its own asset (own sheet: its silhouette

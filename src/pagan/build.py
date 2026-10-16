@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image
 
 from pagan import __version__
-from pagan.asset import Animation, Asset
+from pagan.asset import Animation, Asset, Variant
 from pagan.exporters.godot import (
     AtlasTile,
     centered_offset,
@@ -99,7 +99,7 @@ def build(project: Project) -> BuildResult:
     entries: dict[str, Any] = {}
     produced: set[Path] = set()
 
-    for asset in sorted(lint.assets, key=lambda a: a.name):
+    for asset in sorted((a for a in lint.assets if not a.template), key=lambda a: a.name):
         folder = out / ("tiles" if asset.kind == "tileset" else "sprites")
         rects = frame_rects(asset)
         animations = _animations_for(asset) if asset.kind != "tileset" else []
@@ -157,23 +157,32 @@ def build(project: Project) -> BuildResult:
         if normal_sheet is not None:
             entry["normal_sheet"] = _ref(normal_sheet, out, godot_root)
         variants: dict[str, Any] = {}
-        for v in asset.variants:
-            swap, exact = variant_swap(asset, v)
+        axis_options = {f"{axis}.{name}": v for axis, options in asset.variant_axes.items() for name, v in options.items()}
+        for v in [*asset.variants, *axis_options]:
+            variant = asset.variants[v] if v in asset.variants else axis_options[v]
+            swap, exact = variant_swap(asset, variant)
             if not exact and not project.config.variant_sheets:
                 result.errors.append(
                     Finding(
                         "E006",
-                        f"variant {v!r} can't be a colour swap: keys that share a colour in the base palette get "
+                        f"variant {variant.name!r} can't be a colour swap: keys that share a colour in the base palette get "
                         "different colours in the variant. Give those keys distinct colours, or set "
                         "variant_sheets = true",
                         asset.path,
                         None,
-                        f"variants.{v}",
+                        f"variant_axes.{v}" if v in axis_options else f"variants.{v}",
                     )
                 )
+            if v in axis_options or ("+" in v and not project.config.variant_sheets):
+                continue  # axis options are listed per axis; without sheets the game composes them
             info = emit(v) if project.config.variant_sheets else {}
             variants[v] = {**info, "swap": swap, "swap_exact": exact}
         entry["variants"] = variants
+        if asset.variant_axes:
+            entry["variant_axes"] = {
+                axis: {name: dict(zip(("swap", "swap_exact"), variant_swap(asset, v), strict=True)) for name, v in options.items()}
+                for axis, options in asset.variant_axes.items()
+            }
         entries[asset.name] = entry
 
     if result.errors:
@@ -197,10 +206,9 @@ def build(project: Project) -> BuildResult:
     return result
 
 
-def variant_swap(asset: Asset, variant: str) -> tuple[dict[str, str], bool]:
+def variant_swap(asset: Asset, v: Variant) -> tuple[dict[str, str], bool]:
     """Base colour -> variant colour ("#rrggbb") for every colour the asset uses that the variant changes,
     and whether that's exact: False when two keys share a base colour but differ in the variant."""
-    v = asset.variants[variant]
     used = sorted({c for grid in asset.frames.values() for row in grid for c in row if c != TRANSPARENT})
     targets: dict[str, set[str]] = {}
     for key in used:

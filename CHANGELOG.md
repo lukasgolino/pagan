@@ -34,6 +34,12 @@ From orchestrator reports R16-R17 (ORCHESTRATOR_PLAN.md).
 - `pagan preview` writes `variants.png` (base + every variant, labelled) and `variants_1x.png` when an
   asset has variants (R17a).
 - Demo: the ship has a `blue` team variant.
+- Shared bases (R15): a model can `extends: <model>` (inherit, `remove: [ids]` base parts, add parts,
+  override materials/animations/variants by name); `template: true` marks a base that is linted but never
+  built. Editing a base re-renders everything that extends it.
+- Combinable recolours (R15): `variant_axes: { axis: { option: recolour | {} } }` on any asset. Axes must
+  recolour different keys; every combination becomes a variant named `<option>+<option>` (built as sheets
+  when `variant_sheets = true`), and the manifest gets per-axis swap tables (`variant_axes`).
 
 ## 0.3.0 — 2026-10-16
 

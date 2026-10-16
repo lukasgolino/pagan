@@ -32,7 +32,7 @@ Kind = Literal["sprite", "tileset", "model"]
 Grid = tuple[str, ...]  # rows of palette keys, "." = transparent
 ErrorFn = Callable[[str, str, int | None, str | None], None]
 
-_COMMON_FIELDS = ("name", "description", "palette", "variants", "tags", "status", "style_version", "lint")
+_COMMON_FIELDS = ("name", "description", "palette", "variants", "variant_axes", "tags", "status", "style_version", "lint")
 WARNING_ID_RE = re.compile(r"^W\d{3}$")
 _SPRITE_FIELDS = (*_COMMON_FIELDS, "size", "pivot", "mirror", "outline", "outline_color", "frames", "animations")
 _TILESET_FIELDS = (*_COMMON_FIELDS, "tile_size", "columns", "tiles", "animations")
@@ -80,6 +80,9 @@ class Asset:
     # `lint:` in the file: warnings off for the whole asset, and per frame/tile/animation name
     lint_disable: frozenset[str] = frozenset()
     lint_disable_for: dict[str, frozenset[str]] = field(default_factory=dict)
+    template: bool = False  # models: only a base for `extends`; linted, never built
+    # `variant_axes`: axis -> option -> recolour; every combination is also in `variants` as "<a>+<b>"
+    variant_axes: dict[str, dict[str, Variant]] = field(default_factory=dict)
     # 3D models only: renders screen-space normal maps per frame on demand (H x W x 3 arrays)
     normal_maps: Callable[[], dict[str, Any]] | None = field(default=None, compare=False, repr=False)
 
@@ -576,6 +579,85 @@ def _parse_variants(
     return variants
 
 
+MAX_VARIANT_COMBINATIONS = 256
+
+
+def _parse_variant_axes(
+    raw: Any, palette: Palette, project: Project, line: int | None, used_keys: set[str], plain: dict[str, Variant], error: ErrorFn
+) -> tuple[dict[str, dict[str, Variant]], dict[str, Variant]]:
+    """`variant_axes: { team: { red: {ramp_swap: ...}, blue: ... }, trim: { gold: ..., steel: ... } }`.
+
+    Independent recolours that combine: axes must change disjoint keys, so any choice per axis is just
+    every chosen swap applied together. Returns (axes, combinations named "red+gold" in axis order).
+    """
+    import itertools
+
+    if raw is None:
+        return {}, {}
+    if not isinstance(raw, dict) or not raw:
+        error("E006", "variant_axes must map an axis name to { option: recolour, ... }", line, "variant_axes")
+        return {}, {}
+    axes: dict[str, dict[str, Variant]] = {}
+    changed_by: dict[str, str] = {}  # key -> the axis that changes it
+    ok = True
+    for axis, options in raw.items():
+        aline = _line(raw, axis) or line
+        where = f"variant_axes.{axis}"
+        if not isinstance(axis, str) or not NAME_RE.match(axis):
+            error("E006", "axis names must be lowercase letters, digits, '_' or '-'", aline, where)
+            ok = False
+            continue
+        if not isinstance(options, dict) or not options:
+            error("E006", "an axis maps option names to recolours, e.g. { red: { ramp_swap: { team: red } } }", aline, where)
+            ok = False
+            continue
+        if any(isinstance(spec, dict) and "palette" in spec for spec in options.values()):
+            error("E006", "axis options recolour with ramp_swap/key_swap only (a whole palette can't combine with other axes)", aline, where)
+            ok = False
+            continue
+        def axis_error(rule: str, message: str, ln: int | None, w: str | None, where: str = where) -> None:
+            error(rule, message, ln, f"{where}.{(w or '').partition('.')[2]}".rstrip("."))
+
+        recolours = {k: v for k, v in options.items() if v not in ({}, None)}  # {} = this axis left as is
+        parsed = _parse_variants(recolours, palette, project, aline, used_keys, axis_error) if recolours else {}
+        if len(parsed) != len(recolours):
+            ok = False
+            continue
+        variants = {
+            str(k): parsed[k] if k in parsed else Variant(name=str(k), keys={}, palette=palette) for k in options
+        }
+        bad = [k for k in variants if not NAME_RE.match(k)]
+        if bad:
+            error("E006", f"option names must be lowercase letters, digits, '_' or '-': {', '.join(bad)}", aline, where)
+            ok = False
+            continue
+        for variant in variants.values():
+            for key, target in variant.keys.items():
+                if target != key and changed_by.setdefault(key, axis) != axis:
+                    error("E006", f"axes {changed_by[key]!r} and {axis!r} both recolour key {key!r}; axes must change different keys so they combine", aline, where)
+                    ok = False
+        axes[axis] = variants
+    if not ok:
+        return {}, {}
+    count = 1
+    for options in axes.values():
+        count *= len(options)
+    if count > MAX_VARIANT_COMBINATIONS:
+        error("E006", f"variant_axes make {count} combinations (limit {MAX_VARIANT_COMBINATIONS})", line, "variant_axes")
+        return {}, {}
+    combos: dict[str, Variant] = {}
+    for choice in itertools.product(*(options.values() for options in axes.values())):
+        name = "+".join(v.name for v in choice)
+        keys: dict[str, str] = {}
+        for v in choice:
+            keys.update({k: t for k, t in v.keys.items() if t != k})
+        if name in plain:
+            error("E006", f"variant {name!r} is defined in variants and made by variant_axes; rename one", line, "variant_axes")
+            return {}, {}
+        combos[name] = Variant(name=name, keys=keys, palette=palette)
+    return axes, combos
+
+
 def _parse_animations(raw: Any, frames_known: set[str], line: int | None, error: ErrorFn) -> dict[str, Animation]:
     animations: dict[str, Animation] = {}
     if raw is None:
@@ -889,9 +971,12 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             frames[frame_name] = _outline(grid, outline_color)
 
     variants: dict[str, Variant] = {}
+    variant_axes: dict[str, dict[str, Variant]] = {}
     if palette is not None:
         used = {c for grid in frames.values() for row in grid for c in row if c != TRANSPARENT}
         variants = _parse_variants(data.get("variants"), palette, project, _line(data, "variants"), used, error)
+        variant_axes, combos = _parse_variant_axes(data.get("variant_axes"), palette, project, _line(data, "variant_axes"), used, variants, error)
+        variants.update(combos)
 
     if has_errors(findings) or palette is None:
         return None, findings
@@ -915,6 +1000,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             outline_color=outline_color,
             lint_disable=lint_disable,
             lint_disable_for=lint_disable_for,
+            variant_axes=variant_axes,
             **meta,
         ),
         findings,

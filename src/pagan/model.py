@@ -29,12 +29,14 @@ from pagan.asset import (
     _parse_lint,
     _parse_metadata,
     _parse_size,
+    _parse_variant_axes,
     _parse_variants,
     _resolve_palette,
 )
 from pagan.findings import Finding, has_errors
 from pagan.palette import TRANSPARENT, Palette
 from pagan.project import Project, parse_render
+from pagan.yamlio import LineMap, YamlError, load_yaml
 from pagan.voxel import (
     DIRECTION_NAMES,
     Camera,
@@ -55,8 +57,13 @@ PART_TYPES = ("box", "hull", "cylinder", "ellipsoid", "line", "sail", "triangle"
 _MODEL_FIELDS = (
     "name", "description", "palette", "variants", "tags", "status", "style_version",
     "size", "pivot", "origin", "outline", "outline_color", "directions", "heading",
-    "camera", "light", "materials", "parts", "animations", "lint",
+    "camera", "light", "materials", "parts", "animations", "lint", "variant_axes",
+    "extends", "remove", "template",
 )  # fmt: skip
+# Not inherited through `extends`: what the asset is, and how it's built/reviewed.
+_OWN_FIELDS = ("name", "description", "tags", "status", "style_version", "lint", "template", "extends", "remove")
+_MERGED_FIELDS = ("materials", "animations", "variants", "variant_axes")  # merged by name, the extending file wins
+MAX_EXTENDS_DEPTH = 8
 
 ErrorFn = Callable[[str, str, int | None, str | None], None]
 
@@ -889,12 +896,90 @@ def _render_jobs(
     return out
 
 
+def resolve_extends(
+    data: Any, path: Path | None, project: Project, error: ErrorFn, seen: tuple[str, ...] = ()
+) -> tuple[Any, list[str]]:
+    """Merge `extends: <base model>` into the file's data. Returns (merged data, the base files' texts).
+
+    The base's fields are inherited except its identity/review fields (_OWN_FIELDS); materials,
+    animations and variants merge by name (this file wins); parts are the base's, minus those whose id
+    is in `remove`, followed by this file's.
+    """
+    if not isinstance(data, dict) or "extends" not in data:
+        if isinstance(data, dict) and "remove" in data:
+            error("E013", "remove lists base part ids to drop; it needs extends: <base model>", _line(data, "remove"), "remove")
+        return data, []
+    base_name = data["extends"]
+    line = _line(data, "extends")
+    if not isinstance(base_name, str) or not NAME_RE.match(base_name):
+        error("E013", "extends must be the name of another model in models/", line, "extends")
+        return data, []
+    if base_name in seen or len(seen) >= MAX_EXTENDS_DEPTH:
+        error("E013", f"extends forms a cycle or is too deep: {' -> '.join((*seen, base_name))}", line, "extends")
+        return data, []
+    base_path = project.models_dir / f"{base_name}{MODEL_SUFFIX}"
+    try:
+        base_text = base_path.read_text(encoding="utf-8")
+        base = load_yaml(base_path)
+    except (OSError, YamlError) as exc:
+        reason = exc.message if isinstance(exc, YamlError) else "no such file"
+        error("E013", f"extends: can't read base model {base_name!r} ({base_path.name}): {reason}", line, "extends")
+        return data, []
+    if not isinstance(base, dict):
+        error("E013", f"extends: base model {base_name!r} isn't a mapping", line, "extends")
+        return data, []
+    own_name = data.get("name") if isinstance(data.get("name"), str) else (path.name if path else "?")
+    base, texts = resolve_extends(base, base_path, project, error, (*seen, str(own_name)))
+
+    remove = data.get("remove", [])
+    base_parts = base.get("parts", []) if isinstance(base.get("parts", []), list) else []
+    base_ids = {p.get("id") for p in base_parts if isinstance(p, dict)}
+    if not isinstance(remove, list) or not all(isinstance(r, str) for r in remove):
+        error("E013", "remove must list part ids of the base model", _line(data, "remove"), "remove")
+        remove = []
+    for part_id in remove:
+        if part_id not in base_ids:
+            known = ", ".join(sorted(i for i in base_ids if isinstance(i, str))) or "none"
+            error("E013", f"remove: the base model has no part id {part_id!r} (ids: {known})", _line(data, "remove"), "remove")
+
+    merged = LineMap()
+    merged.line = data.line if isinstance(data, LineMap) else None
+    for key, value in base.items():
+        if key not in _OWN_FIELDS:
+            merged[key] = value
+    for key, value in data.items():
+        if key in _MERGED_FIELDS and isinstance(value, dict) and isinstance(merged.get(key), dict):
+            combined = LineMap()
+            combined.line = value.line if isinstance(value, LineMap) else None
+            combined.update(merged[key])
+            combined.update(value)
+            if isinstance(value, LineMap):
+                combined.key_lines.update(value.key_lines)
+            value = combined
+        elif key == "parts":
+            continue
+        merged[key] = value
+        if isinstance(data, LineMap) and key in data.key_lines:
+            merged.key_lines[key] = data.key_lines[key]
+    own_parts = data.get("parts", [])
+    kept = [p for p in base_parts if not (isinstance(p, dict) and p.get("id") in remove)]
+    merged["parts"] = kept + (own_parts if isinstance(own_parts, list) else [own_parts])
+    if isinstance(data, LineMap) and "parts" in data.key_lines:
+        merged.key_lines["parts"] = data.key_lines["parts"]
+    return merged, [*texts, base_text]
+
+
 def parse_model(data: Any, path: Path | None, project: Project, source_text: str = "") -> tuple[Asset | None, list[Finding]]:
     findings: list[Finding] = []
 
     def error(rule: str, message: str, line: int | None, where: str | None = None) -> None:
         findings.append(Finding(rule, message, path, line, where))
 
+    template = data.get("template", False) if isinstance(data, dict) else False
+    if not isinstance(template, bool):
+        error("E013", "template must be true (a base for `extends`, not built itself) or false", _line(data, "template"), "template")
+    data, base_texts = resolve_extends(data, path, project, error)
+    source_text = "\n---\n".join([*base_texts, source_text])
     setup = _setup(data, path, project, error, findings)
     if setup is None:
         return None, findings
@@ -928,6 +1013,8 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
 
     used = {c for grid in frames.values() for row in grid for c in row if c != TRANSPARENT}
     variants = _parse_variants(data.get("variants"), setup.palette, project, _line(data, "variants"), used, error)
+    variant_axes, combos = _parse_variant_axes(data.get("variant_axes"), setup.palette, project, _line(data, "variant_axes"), used, variants, error)
+    variants.update(combos)
     lint_targets: dict[str, tuple[str, ...]] = {name: (name,) for name in [*frames, *setup.animations]}
     for pose_name in setup.pose_names:  # `damaged` covers damaged_<heading> and its frames
         covered = [a for a in setup.animations if a == pose_name or a.startswith(f"{pose_name}_")]
@@ -965,6 +1052,8 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
             normal_maps=normal_maps,
             lint_disable=lint_disable,
             lint_disable_for=lint_disable_for,
+            template=template is True,
+            variant_axes=variant_axes,
             **setup.meta,
         ),
         findings,
@@ -986,8 +1075,6 @@ class Fit:
 
 def fit_model(path: Path, project: Project, margin: int = 0) -> tuple[Fit | None, list[Finding]]:
     """Render every frame on a canvas big enough for anything, and measure what's actually drawn."""
-    from pagan.yamlio import YamlError, load_yaml
-
     findings: list[Finding] = []
 
     def error(rule: str, message: str, line: int | None, where: str | None = None) -> None:
@@ -997,6 +1084,7 @@ def fit_model(path: Path, project: Project, margin: int = 0) -> tuple[Fit | None
         data = load_yaml(path)
     except YamlError as exc:
         return None, [Finding("E001", exc.message, path, exc.line)]
+    data, _ = resolve_extends(data, path, project, error)
     setup = _setup(data, path, project, error, findings)
     if setup is None:
         return None, findings
