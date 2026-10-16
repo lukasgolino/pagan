@@ -1,7 +1,7 @@
 # Changelog
 
 PAGAN follows [semantic versioning](https://semver.org/). Game projects should pin a release tag
-(e.g. `pip install "git+ssh://git@github.com/lukasgolino/PAGAN.git@v0.3.0"`).
+(e.g. `pip install "git+ssh://git@github.com/lukasgolino/PAGAN.git@v0.4.0"`).
 
 A new version (and tag) is cut for **any** change to:
 - the notation (palette, sprite, tileset or model files),
@@ -12,12 +12,13 @@ A new version (and tag) is cut for **any** change to:
 While on 0.x, a minor bump (0.1 -> 0.2) may change any of these; read the notes before upgrading.
 Patch bumps (0.1.0 -> 0.1.1) never change them.
 
-## Unreleased
+## 0.4.0 — 2026-10-16
 
-From orchestrator reports R16-R17 (ORCHESTRATOR_PLAN.md).
+From orchestrator reports R15-R17 (ORCHESTRATOR_PLAN.md).
 
 ### Upgrading from 0.3.0
 
+- `manifest.json` `generator` becomes `"pagan 0.4.0"`: expect every manifest to change once.
 - Every manifest entry for a variant gains `swap` and `swap_exact` (see below); sheets and `.tres`
   files are unchanged.
 - Source files are NFC-normalized when read (only matters for accents typed as combining marks).

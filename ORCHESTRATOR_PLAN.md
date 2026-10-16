@@ -210,7 +210,7 @@ per ship). Want the manifest to carry a variant's key→colour swap table so gam
 
 R15-R17 (above) arrived during this work; not addressed yet.
 
-### PAGAN responses to R15-R17 — 2026-10-16 (main, unreleased; see CHANGELOG.md)
+### PAGAN responses to R15-R17 — 2026-10-16 (released in v0.4.0, see CHANGELOG.md)
 
 - **R16** fixed: a palette key is any single Unicode letter or digit. After 0-9 a-z A-Z come Latin-1
   letters (à-ÿ, À-Þ, ß) and Greek letters that can't be mistaken for Latin ones: 154 recommended keys

@@ -118,3 +118,4 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-16: Variants carry a hex->hex `swap` table in the manifest; `variant_sheets = false` (owner: setting, default on) skips variant sheets and makes non-exact swaps an error.
 - 2026-10-16: PAGAN stays general-purpose (owner): features from one game's reports get generic names and docs examples; no game-specific notation.
 - 2026-10-16: R15: models `extends` a `template: true` base (own-identity fields not inherited; materials/animations/variants merge by name; `remove` drops base part ids). `variant_axes` combinations are variants named `a+b` ("+" can't occur in names, so no clashes); axes must change disjoint keys.
+- 2026-10-16: Release v0.4.0 tagged locally (owner approved): orchestrator reports R15-R17.
