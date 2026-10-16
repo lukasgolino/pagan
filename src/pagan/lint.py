@@ -67,6 +67,8 @@ def lint_paths(project: Project, paths: list[Path] | None = None) -> LintResult:
         asset, asset_findings = load_asset(path, project)
         # A broken palette file that is itself being linted is reported once, from the palette.
         kept = [f for f in asset_findings if f.path is None or f.path.resolve() not in linted or f.path == path]
+        if asset is not None:  # warnings raised while parsing (W008, W009) obey the asset's `lint: disable` too
+            kept = [f for f in kept if not (f.severity == "warning" and f.rule in asset.lint_disable)]
         findings.extend(kept)
         if asset is None and not any(f.severity == "error" for f in kept):
             findings.append(Finding("E005", "this file's palette is invalid; run `pagan lint` on palettes/", path))
@@ -101,14 +103,19 @@ def _dedupe(findings: list[Finding]) -> list[Finding]:
 
 
 def lint_asset(asset: Asset, project: Project) -> list[Finding]:
-    findings: list[Finding] = []
-    section = "frames" if asset.kind == "sprite" else "tiles"
+    """Style warnings for one parsed asset, minus those its `lint:` section turns off."""
+    found: list[tuple[Finding, tuple[str, ...]]] = []  # each finding with the frames/animations it's about
+    section = "tiles" if asset.kind == "tileset" else "frames"
 
     def warn(rule: str, message: str, frame: str | None = None, where: str | None = None, row: int | None = None) -> None:
         line = asset.frame_lines.get(frame) if frame is not None else None
         if line is not None and row is not None:
             line += 1 + row  # grids are block scalars starting on the line after the frame name
-        findings.append(Finding(rule, message, asset.path, line, where or (f"{section}.{frame}" if frame else None)))
+        finding = Finding(rule, message, asset.path, line, where or (f"{section}.{frame}" if frame else None))
+        found.append((finding, (frame,) if frame else ()))
+
+    def add(finding: Finding, *targets: str) -> None:
+        found.append((finding, targets))
 
     # Mirrored sprites: report pixels in the authored left half only, in authored coordinates.
     authored_width = -(-asset.size[0] // 2) if asset.mirror else asset.size[0]
@@ -119,6 +126,8 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
         if all(c == TRANSPARENT for row in grid for c in row):
             warn("W004", "frame is fully transparent", name)
             continue
+        if asset.kind == "model":
+            continue  # a rendered orphan (e.g. a spar tip seen end-on) can't be fixed pixel by pixel
         for x, y in _orphans(grid):
             if x >= authored_width:
                 continue
@@ -141,7 +150,7 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
     limit = lint_config.max_ramps_per_model if asset.kind == "model" else lint_config.max_ramps_per_sprite
     ramps = _ramps_used(asset)
     if len(ramps) > limit:
-        findings.append(
+        add(
             Finding(
                 "W003",
                 f"uses colors from {len(ramps)} ramps ({', '.join(ramps)}); the project limit is {limit}. "
@@ -156,14 +165,15 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
         boxes = [_bbox(asset.frames[f]) for f in anim.frames]
         areas = [(b[2] - b[0] + 1) * (b[3] - b[1] + 1) for b in boxes if b is not None]
         if len(areas) > 1 and max(areas) > 2 * min(areas):
-            findings.append(
+            add(
                 Finding(
                     "W005",
                     "frames' visible areas differ by more than 2x; check for jitter or a missing body part",
                     asset.path,
                     None,
                     f"animations.{anim.name}",
-                )
+                ),
+                anim.name,
             )
 
     max_steps = project.config.lint.max_ramp_steps
@@ -172,7 +182,7 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
         for ramp in ramps:
             steps = [k for k in asset.palette.ramps[ramp] if k in used]
             if len(steps) > max_steps:
-                findings.append(
+                add(
                     Finding(
                         "W008",
                         f"uses {len(steps)} shades of ramp {ramp!r} ({', '.join(steps)}); the project allows "
@@ -194,7 +204,7 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
             change, (dx, dy) = frame_change(asset.frames[a], asset.frames[b])
             if change > limit_change:
                 moved = f" (best alignment: moved {dx:+d},{dy:+d})" if dx or dy else ""
-                findings.append(
+                add(
                     Finding(
                         "W007",
                         f"{a} -> {b}: {change:.0%} of pixels change{moved}; the project limit is "
@@ -203,12 +213,14 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
                         asset.path,
                         asset.frame_lines.get(b),
                         f"animations.{anim.name}",
-                    )
+                    ),
+                    anim.name,
+                    b,
                 )
 
     current = project.config.style_version
     if asset.style_version < current:
-        findings.append(
+        add(
             Finding(
                 "W006",
                 f"made under style v{asset.style_version}, the project is at v{current}: review it against the "
@@ -218,7 +230,12 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
                 "style_version",
             )
         )
-    return findings
+    return [
+        finding
+        for finding, targets in found
+        if finding.rule not in asset.lint_disable
+        and not any(finding.rule in asset.lint_disable_for.get(t, ()) for t in targets)
+    ]
 
 
 def frame_change(a: Grid, b: Grid, max_shift: int = 2) -> tuple[float, tuple[int, int]]:

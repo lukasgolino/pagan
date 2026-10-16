@@ -1,0 +1,148 @@
+name: water
+description: >
+  Open sea, animated: 8 frames of a wave pattern drifting 2px per frame, seamless in space and time.
+tile_size: [16, 16]
+columns: 8
+status: draft
+style_version: 1
+tags: [terrain, water, animated]
+tiles:
+  water_0: |
+    ijkkjjiiiiiiiiii
+    jkkkjiiiiiiiiiii
+    jjjjjiiiiiiijjjj
+    iiiiiiiiiiijkkjj
+    iiiiiiiiiijkkkji
+    iiiiiiiiijjkkjii
+    iiiijjjjjjjjjiii
+    iiiijkkkjiiiiiii
+    iiijjkkjiiiiiiii
+    jjjjjjjiiiiiiijj
+    kjjiiiiiiiiiijjk
+    kjiiiiiiiiiiijkk
+    jiiiiiiijjjjjjjj
+    iiiiiiijkkkjiiii
+    iiiiiijjkkjjiiii
+    iijjjjjjjjjiiiii
+  water_1: |
+    kkjjiiiiiiiiiiij
+    kkjiiiiiiiiiiijk
+    jjjiiiiiiijjjjjj
+    iiiiiiiiijkkjjii
+    iiiiiiiijkkkjiii
+    iiiiiiijjkkjiiii
+    iijjjjjjjjjiiiii
+    iijkkkjiiiiiiiii
+    ijjkkjiiiiiiiiii
+    jjjjjiiiiiiijjjj
+    jiiiiiiiiiijjkkj
+    iiiiiiiiiiijkkkj
+    iiiiiijjjjjjjjji
+    iiiiijkkkjiiiiii
+    iiiijjkkjjiiiiii
+    jjjjjjjjjiiiiiii
+  water_2: |
+    jjiiiiiiiiiiijkk
+    jiiiiiiiiiiijkkk
+    jiiiiiiijjjjjjjj
+    iiiiiiijkkjjiiii
+    iiiiiijkkkjiiiii
+    iiiiijjkkjiiiiii
+    jjjjjjjjjiiiiiii
+    jkkkjiiiiiiiiiii
+    jkkjiiiiiiiiiiij
+    jjjiiiiiiijjjjjj
+    iiiiiiiiijjkkjji
+    iiiiiiiiijkkkjii
+    iiiijjjjjjjjjiii
+    iiijkkkjiiiiiiii
+    iijjkkjjiiiiiiii
+    jjjjjjjiiiiiiijj
+  water_3: |
+    iiiiiiiiiiijkkjj
+    iiiiiiiiiijkkkji
+    iiiiiijjjjjjjjji
+    iiiiijkkjjiiiiii
+    iiiijkkkjiiiiiii
+    iiijjkkjiiiiiiii
+    jjjjjjjiiiiiiijj
+    kkjiiiiiiiiiiijk
+    kjiiiiiiiiiiijjk
+    jiiiiiiijjjjjjjj
+    iiiiiiijjkkjjiii
+    iiiiiiijkkkjiiii
+    iijjjjjjjjjiiiii
+    ijkkkjiiiiiiiiii
+    jjkkjjiiiiiiiiii
+    jjjjjiiiiiiijjjj
+  water_4: |
+    iiiiiiiiijkkjjii
+    iiiiiiiijkkkjiii
+    iiiijjjjjjjjjiii
+    iiijkkjjiiiiiiii
+    iijkkkjiiiiiiiii
+    ijjkkjiiiiiiiiii
+    jjjjjiiiiiiijjjj
+    jiiiiiiiiiiijkkk
+    iiiiiiiiiiijjkkj
+    iiiiiijjjjjjjjji
+    iiiiijjkkjjiiiii
+    iiiiijkkkjiiiiii
+    jjjjjjjjjiiiiiii
+    kkkjiiiiiiiiiiij
+    kkjjiiiiiiiiiijj
+    jjjiiiiiiijjjjjj
+  water_5: |
+    iiiiiiijkkjjiiii
+    iiiiiijkkkjiiiii
+    iijjjjjjjjjiiiii
+    ijkkjjiiiiiiiiii
+    jkkkjiiiiiiiiiii
+    jkkjiiiiiiiiiiij
+    jjjiiiiiiijjjjjj
+    iiiiiiiiiijkkkji
+    iiiiiiiiijjkkjii
+    iiiijjjjjjjjjiii
+    iiijjkkjjiiiiiii
+    iiijkkkjiiiiiiii
+    jjjjjjjiiiiiiijj
+    kjiiiiiiiiiiijkk
+    jjiiiiiiiiiijjkk
+    jiiiiiiijjjjjjjj
+  water_6: |
+    iiiiijkkjjiiiiii
+    iiiijkkkjiiiiiii
+    jjjjjjjjjiiiiiii
+    kkjjiiiiiiiiiiij
+    kkjiiiiiiiiiiijk
+    kjiiiiiiiiiiijjk
+    jiiiiiiijjjjjjjj
+    iiiiiiiijkkkjiii
+    iiiiiiijjkkjiiii
+    iijjjjjjjjjiiiii
+    ijjkkjjiiiiiiiii
+    ijkkkjiiiiiiiiii
+    jjjjjiiiiiiijjjj
+    iiiiiiiiiiijkkkj
+    iiiiiiiiiijjkkjj
+    iiiiiijjjjjjjjji
+  water_7: |
+    iiijkkjjiiiiiiii
+    iijkkkjiiiiiiiii
+    jjjjjjjiiiiiiijj
+    jjiiiiiiiiiiijkk
+    jiiiiiiiiiiijkkk
+    iiiiiiiiiiijjkkj
+    iiiiiijjjjjjjjji
+    iiiiiijkkkjiiiii
+    iiiiijjkkjiiiiii
+    jjjjjjjjjiiiiiii
+    jkkjjiiiiiiiiiij
+    kkkjiiiiiiiiiiij
+    jjjiiiiiiijjjjjj
+    iiiiiiiiijkkkjii
+    iiiiiiiijjkkjjii
+    iiiijjjjjjjjjiii
+animations:
+  # Animated tile: Godot plays it in the TileSet; frames sit side by side in the atlas.
+  water: { frames: [water_0, water_1, water_2, water_3, water_4, water_5, water_6, water_7], fps: 6 }

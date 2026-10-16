@@ -32,9 +32,10 @@ Kind = Literal["sprite", "tileset", "model"]
 Grid = tuple[str, ...]  # rows of palette keys, "." = transparent
 ErrorFn = Callable[[str, str, int | None, str | None], None]
 
-_COMMON_FIELDS = ("name", "description", "palette", "variants", "tags", "status", "style_version")
+_COMMON_FIELDS = ("name", "description", "palette", "variants", "tags", "status", "style_version", "lint")
+WARNING_ID_RE = re.compile(r"^W\d{3}$")
 _SPRITE_FIELDS = (*_COMMON_FIELDS, "size", "pivot", "mirror", "outline", "outline_color", "frames", "animations")
-_TILESET_FIELDS = (*_COMMON_FIELDS, "tile_size", "columns", "tiles")
+_TILESET_FIELDS = (*_COMMON_FIELDS, "tile_size", "columns", "tiles", "animations")
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,9 @@ class Asset:
     tags: tuple[str, ...] = ()
     status: str = "draft"
     style_version: int = 1
+    # `lint:` in the file: warnings off for the whole asset, and per frame/tile/animation name
+    lint_disable: frozenset[str] = frozenset()
+    lint_disable_for: dict[str, frozenset[str]] = field(default_factory=dict)
     # 3D models only: renders screen-space normal maps per frame on demand (H x W x 3 arrays)
     normal_maps: Callable[[], dict[str, Any]] | None = field(default=None, compare=False, repr=False)
 
@@ -299,6 +303,53 @@ def _parse_metadata(data: dict[str, Any], error: ErrorFn) -> dict[str, Any]:
         style_version = 1
     meta["style_version"] = style_version
     return meta
+
+
+def _parse_lint(
+    raw: Any, line: int | None, targets: dict[str, tuple[str, ...]], error: ErrorFn
+) -> tuple[frozenset[str], dict[str, frozenset[str]]]:
+    """`lint: { disable: [W007], for: { name: [W004] } }`: warnings off for this asset only.
+
+    `targets` maps each name allowed under `for` to the frame/animation names it covers.
+    """
+    if raw is None:
+        return frozenset(), {}
+    usage = "lint must be { disable: [W007, ...], for: { <frame, tile or animation>: [W004, ...] } }"
+    if not isinstance(raw, dict):
+        error("E001", usage, line, "lint")
+        return frozenset(), {}
+
+    def rules(value: Any, where: str) -> frozenset[str] | None:
+        if isinstance(value, str):
+            value = [value]
+        if not isinstance(value, list) or not all(isinstance(r, str) and WARNING_ID_RE.match(r) for r in value):
+            error("E001", "list warning ids, e.g. [W007, W005] (errors can't be disabled)", _line(raw, where.split(".")[1]) or line, where)
+            return None
+        return frozenset(value)
+
+    disable: frozenset[str] = frozenset()
+    per_name: dict[str, frozenset[str]] = {}
+    for key in raw:
+        if key not in ("disable", "for"):
+            error("E001", f"unknown lint field {key!r}; allowed: disable, for", _line(raw, key) or line, f"lint.{key}")
+    if "disable" in raw:
+        disable = rules(raw["disable"], "lint.disable") or frozenset()
+    if "for" in raw:
+        section = raw["for"]
+        if not isinstance(section, dict):
+            error("E001", usage, _line(raw, "for") or line, "lint.for")
+            return disable, per_name
+        for name, value in section.items():
+            where = f"lint.for.{name}"
+            if not isinstance(name, str) or name not in targets:
+                error("E001", f"lint.for: {name!r} isn't a frame, tile or animation of this asset", _line(section, name) or line, where)
+                continue
+            found = rules(value, where)
+            if found is None:
+                continue
+            for target in targets[name]:
+                per_name[target] = per_name.get(target, frozenset()) | found
+    return disable, per_name
 
 
 def _parse_frames(
@@ -566,6 +617,66 @@ def _parse_animations(raw: Any, frames_known: set[str], line: int | None, error:
     return animations
 
 
+def _parse_tile_animations(
+    raw: Any, tiles: dict[str, int | None], line: int | None, error: ErrorFn
+) -> dict[str, Animation]:
+    """Tileset `animations: { water: { frames: [water_0, water_1, ...], fps: 4 } }`: animated tiles.
+
+    The animation's name becomes the tile's name; its frames are laid out side by side in the atlas
+    (engines such as Godot animate a tile by stepping through neighbouring cells). Tile animations
+    always loop. Each tile can be a frame of one animation only.
+    """
+    animations: dict[str, Animation] = {}
+    if raw is None:
+        return animations
+    if not isinstance(raw, dict):
+        error("E001", "animations must map a tile name to { frames: [tile, ...], fps: N }", line, "animations")
+        return animations
+    claimed: dict[str, str] = {}
+    for name, spec in raw.items():
+        aline = _line(raw, name) or line
+        where = f"animations.{name}"
+        if not isinstance(name, str) or not FRAME_NAME_RE.match(name):
+            error("E001", f"animation name {name!r} must be letters, digits, '_' or '-'", aline, where)
+            continue
+        if isinstance(spec, list):
+            spec = {"frames": spec}
+        if not isinstance(spec, dict):
+            error("E001", "a tile animation is { frames: [tile, ...], fps: N }", aline, where)
+            continue
+        extra = [k for k in spec if k not in ("frames", "fps")]
+        if extra:
+            hint = " (tile animations always loop)" if "loop" in extra else ""
+            error("E001", f"unknown tile animation field(s) {', '.join(map(str, extra))}; allowed: frames, fps{hint}", aline, where)
+            continue
+        frame_list = spec.get("frames")
+        if not isinstance(frame_list, list) or len(frame_list) < 2 or not all(isinstance(f, str) for f in frame_list):
+            error("E001", "a tile animation needs frames: a list of at least 2 tile names", aline, where)
+            continue
+        missing = [f for f in dict.fromkeys(frame_list) if f not in tiles]
+        for frame in missing:
+            error("E004", f"animation uses missing tile {frame!r}", aline, where)
+        repeated = sorted({f for f in frame_list if frame_list.count(f) > 1})
+        if repeated:
+            error("E001", f"tile animation repeats {', '.join(repeated)}; each frame is its own atlas cell, so list it once", aline, where)
+        taken = [f for f in frame_list if f in claimed]
+        for frame in dict.fromkeys(taken):
+            error("E001", f"tile {frame!r} is already a frame of animation {claimed[frame]!r}; a tile can animate in one animation only", aline, where)
+        if name in tiles and name != frame_list[0]:
+            error("E001", f"animation name {name!r} is also a tile name; name it after its first frame or pick another name", aline, where)
+            continue
+        fps = spec.get("fps", DEFAULT_FPS)
+        if isinstance(fps, bool) or not isinstance(fps, int | float) or not 0 < fps <= 120:
+            error("E001", "fps must be a number between 0 and 120", aline, where)
+            continue
+        if missing or repeated or taken:
+            continue
+        for frame in frame_list:
+            claimed[frame] = name
+        animations[name] = Animation(name=name, frames=tuple(frame_list), fps=float(fps), loop=True)
+    return animations
+
+
 def _expand_mirrored_animations(
     raw: Any,
     frames: dict[str, Grid],
@@ -750,6 +861,10 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             data.get("animations"), base_frames, frame_lines, derived_from, _line(data, "animations"), error
         )
         animations = _parse_animations(raw_animations, set(frame_lines), _line(data, "animations"), error)
+    else:
+        animations = _parse_tile_animations(data.get("animations"), frame_lines, _line(data, "animations"), error)
+    lint_targets: dict[str, tuple[str, ...]] = {n: (n,) for n in [*frame_lines, *animations]}
+    lint_disable, lint_disable_for = _parse_lint(data.get("lint"), _line(data, "lint"), lint_targets, error)
 
     frames = dict(base_frames)
     if outline and outline_color is not None:
@@ -798,6 +913,8 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             mirror=mirror,
             outline=outline,
             outline_color=outline_color,
+            lint_disable=lint_disable,
+            lint_disable_for=lint_disable_for,
             **meta,
         ),
         findings,

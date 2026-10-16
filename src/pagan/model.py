@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ from pagan.asset import (
     _edge_pixel,
     _line,
     _outline,
+    _parse_lint,
     _parse_metadata,
     _parse_size,
     _parse_variants,
@@ -39,18 +41,21 @@ from pagan.voxel import (
     Cell,
     Light,
     Material,
+    Overlay,
+    PartMove,
+    VoxelData,
     VoxelModel,
     heading_angles,
     render_heading,
     render_heading_full,
 )
 
-RENDERER_VERSION = "3"  # bump when rendering changes, to invalidate caches
+RENDERER_VERSION = "4"  # bump when rendering changes, to invalidate caches
 PART_TYPES = ("box", "hull", "cylinder", "ellipsoid", "line", "sail", "triangle", "layers")
 _MODEL_FIELDS = (
     "name", "description", "palette", "variants", "tags", "status", "style_version",
     "size", "pivot", "origin", "outline", "outline_color", "directions", "heading",
-    "camera", "light", "materials", "parts", "animations",
+    "camera", "light", "materials", "parts", "animations", "lint",
 )  # fmt: skip
 
 ErrorFn = Callable[[str, str, int | None, str | None], None]
@@ -147,8 +152,21 @@ class _Builder:
         self.error = error
         self.materials = materials
         self.pending_normals: dict[Cell, tuple[float, float, float]] = {}
+        self.hidden_ids: dict[str, int | None] = {}
+        self.visible_ids: dict[str, int | None] = {}
 
     def build(self, parts: Any, line: int | None) -> None:
+        self._build(parts, line)
+        for part_id in sorted(self.hidden_ids.keys() & self.visible_ids.keys()):
+            self.error(
+                "E013",
+                f"id {part_id!r} is used by hidden and visible parts; give the hidden part(s) their own id "
+                "(a pose shows or hides a whole id)",
+                self.hidden_ids[part_id],
+                "parts",
+            )
+
+    def _build(self, parts: Any, line: int | None) -> None:
         if not isinstance(parts, list) or not parts:
             self.error("E013", "parts must be a non-empty list, e.g. - box: { from: [0,0,0], to: [3,3,3], material: wood }", line, "parts")
             return
@@ -182,6 +200,8 @@ class _Builder:
             if not isinstance(hidden, bool) or (hidden and part_id is None):
                 self.error("E013", "hidden: true needs an id (poses reveal it with show: [id])", pline, where)
                 continue
+            if part_id is not None:
+                (self.hidden_ids if hidden else self.visible_ids).setdefault(part_id, pline)
             if hidden and part_id is not None:
                 self.model.hidden_by_default.add(part_id)
             self.pending_normals = {}
@@ -196,24 +216,19 @@ class _Builder:
             if mirror:
                 cells = {**cells, **{(x, -y, z): m for (x, y, z), m in cells.items()}}
                 shape_normals = {**shape_normals, **{(x, -y, z): (n[0], -n[1], n[2]) for (x, y, z), n in shape_normals.items()}}
-            for cell, material in cells.items():
-                if carve:
-                    self.model.voxels.pop(cell, None)
-                    self.model.groups.pop(cell, None)
-                    self.model.normals.pop(cell, None)
-                    self.model.parts.pop(cell, None)
+            if hidden and part_id is not None:
+                # A hidden part is a layer of its own: shown (or carved) by poses, never touching the normal frames.
+                layer: dict[Cell, VoxelData] = {c: (m, part_id, index, shape_normals.get(c)) for c, m in cells.items()}
+                self.model.overlays.append(Overlay(part_id, layer, carve))
+            for cell, material in cells.items() if not hidden else ():
+                if carve:  # removes everything placed before it, hidden layers included
+                    self.model._remove(cell)
+                    for overlay in self.model.overlays:
+                        overlay.cells.pop(cell, None)
                 else:
-                    self.model.voxels[cell] = material
-                    if part_id is not None:
-                        self.model.groups[cell] = part_id
-                    else:
-                        self.model.groups.pop(cell, None)
-                    self.model.parts[cell] = index
-                    if cell in shape_normals:
-                        self.model.normals[cell] = shape_normals[cell]
-                    else:
-                        self.model.normals.pop(cell, None)
-            if len(self.model.voxels) > MAX_MODEL_VOXELS:
+                    self.model._put(cell, (material, part_id, index, shape_normals.get(cell)))
+            total = len(self.model.voxels) + sum(len(o.cells) for o in self.model.overlays)
+            if total > MAX_MODEL_VOXELS:
                 self.error("E013", f"the model has over {MAX_MODEL_VOXELS:,} voxels; make it smaller", pline, where)
                 return
 
@@ -293,19 +308,10 @@ class _Builder:
             return None
         length, beam, height, bow, stern = float(length), float(beam), float(height), float(bow), float(stern)
         x0, yc, z0 = at
-        half = beam / 2
         cells: set[Cell] = set()
         for x in range(x0, x0 + math.ceil(length)):
-            u = (x - x0 + 0.5) / length
-            if bow > 0 and u > 1 - bow:
-                hw = half * math.sqrt(max(0.0, 1 - ((u - (1 - bow)) / bow) ** 2))
-            elif stern > 0 and u < stern:
-                hw = half * (0.75 + 0.25 * u / stern)
-            else:
-                hw = half
             for z in range(z0, z0 + math.ceil(height)):
-                layer_hw = hw * (0.8 if z == z0 else 1.0)  # rounded keel
-                reach = math.floor(layer_hw - 0.5 + 1e-9)
+                reach = hull_reach(x - x0, length, beam, bow, stern, keel=z == z0)
                 for y in range(yc - reach, yc + reach + 1):
                     cells.add((x, y, z))
         if not cells:
@@ -405,48 +411,13 @@ class _Builder:
             return None
         if material is None or ("yard" in spec and yard is None):
             return None
-        width, height, bulge = float(width), float(height), float(bulge)
-        fore_aft = rig == "fore-aft"
-        # Square sails span the hull's width; fore-and-aft sails lie along it, luff at the mast, reaching aft.
-        angle = math.radians(brace + (90 if fore_aft else 0))
-        ca, sa = math.cos(angle), math.sin(angle)
-        half = width / 2
-        centre = -half if fore_aft else 0.0
-        lift = 0.0 if fore_aft else 1.0
-        rows = math.ceil(height)
         cells: dict[Cell, str] = {}
-
-        def put(u: float, v: float, z: int, mat: str, normal: tuple[float, float, float] | None = None) -> None:
-            x = at[0] + v * ca + u * sa
-            y = at[1] - v * sa + u * ca
-            cell = (math.floor(x + 0.5), math.floor(y + 0.5), z)
-            cells[cell] = mat
-            if normal is not None:
-                self.pending_normals[cell] = normal
-
-        def bulge_at(u: float, row: float) -> float:
-            fullness = math.sin(math.pi * (row + 0.5) / rows)
-            return bulge * (1 - ((u - centre) / (half + 0.5)) ** 2) * fullness
-
-        steps = max(1, math.ceil(width * 4))
-        for row in range(rows):
-            z = at[2] + row
-            for i in range(steps + 1):
-                u = centre - half + width * i / steps
-                v = lift + bulge_at(u, row)
-                # Exact normal of the curved cloth: the forward axis tilted by the bulge's slopes.
-                dv_du = (bulge_at(u + 0.1, row) - bulge_at(u - 0.1, row)) / 0.2
-                dv_dz = (bulge_at(u, row + 0.1) - bulge_at(u, row - 0.1)) / 0.2
-                nu, nv, nz = -dv_du, 1.0, -dv_dz
-                length = math.sqrt(nu * nu + nv * nv + nz * nz)
-                nu, nv, nz = nu / length, nv / length, nz / length
-                normal = (nv * ca + nu * sa, -nv * sa + nu * ca, nz)
-                put(u, v, z, material, normal)
-                put(u, v + 0.6, z, material, normal)  # two voxels thick: no gaps for rays to slip through
-        if yard is not None:  # square: the yard across the top; fore-and-aft: the gaff along the top
-            for i in range(steps + 9):
-                u = centre - half - 1 + (width + 2) * i / (steps + 8)
-                put(u, 0, at[2] + rows, yard)
+        for cell in sail_cells(at, float(width), float(height), float(bulge), float(brace), rig, yard=yard is not None):
+            if cell.normal is None:  # the yard
+                cells[cell.cell] = str(yard)
+            else:
+                cells[cell.cell] = material
+                self.pending_normals[cell.cell] = cell.normal
         return cells
 
     def _triangle(self, spec: dict[str, Any], line: int | None, where: str) -> dict[Cell, str] | None:
@@ -524,6 +495,80 @@ class _Builder:
         return cells
 
 
+def hull_reach(x: int, length: float, beam: float, bow: float = 0.35, stern: float = 0.1, keel: bool = False) -> int:
+    """How far the `hull` primitive reaches either side of its centre line at column `x` (0 = the stern end
+    of `from`): it fills y = centre - reach .. centre + reach. `keel` = the bottom layer, which is narrower."""
+    u = (x + 0.5) / length
+    half = beam / 2
+    if bow > 0 and u > 1 - bow:
+        hw = half * math.sqrt(max(0.0, 1 - ((u - (1 - bow)) / bow) ** 2))
+    elif stern > 0 and u < stern:
+        hw = half * (0.75 + 0.25 * u / stern)
+    else:
+        hw = half
+    layer_hw = hw * (0.8 if keel else 1.0)  # rounded keel
+    return math.floor(layer_hw - 0.5 + 1e-9)
+
+
+@dataclass(frozen=True)
+class SailCell:
+    """One voxel of a `sail`: where it is, and where on the cloth it came from.
+
+    `u` runs across the cloth (from -width/2 to +width/2; for fore-aft rigs from -width at the leech to 0
+    at the mast), `row` counts up from the foot. Yard voxels have `row` = height and no normal.
+    """
+
+    cell: Cell
+    u: float
+    row: int
+    normal: tuple[float, float, float] | None
+
+
+def sail_cells(
+    at: tuple[int, ...], width: float, height: float, bulge: float = 2, brace: float = 0, rig: str = "square", yard: bool = False
+) -> list[SailCell]:
+    """The voxels the `sail` primitive fills, in the order it fills them (later ones win a shared cell)."""
+    fore_aft = rig == "fore-aft"
+    # Square sails span the hull's width; fore-and-aft sails lie along it, luff at the mast, reaching aft.
+    angle = math.radians(brace + (90 if fore_aft else 0))
+    ca, sa = math.cos(angle), math.sin(angle)
+    half = width / 2
+    centre = -half if fore_aft else 0.0
+    lift = 0.0 if fore_aft else 1.0
+    rows = math.ceil(height)
+    out: list[SailCell] = []
+
+    def place(u: float, v: float) -> tuple[int, int]:
+        x = at[0] + v * ca + u * sa
+        y = at[1] - v * sa + u * ca
+        return math.floor(x + 0.5), math.floor(y + 0.5)
+
+    def bulge_at(u: float, row: float) -> float:
+        fullness = math.sin(math.pi * (row + 0.5) / rows)
+        return bulge * (1 - ((u - centre) / (half + 0.5)) ** 2) * fullness
+
+    steps = max(1, math.ceil(width * 4))
+    for row in range(rows):
+        z = at[2] + row
+        for i in range(steps + 1):
+            u = centre - half + width * i / steps
+            v = lift + bulge_at(u, row)
+            # Exact normal of the curved cloth: the forward axis tilted by the bulge's slopes.
+            dv_du = (bulge_at(u + 0.1, row) - bulge_at(u - 0.1, row)) / 0.2
+            dv_dz = (bulge_at(u, row + 0.1) - bulge_at(u, row - 0.1)) / 0.2
+            nu, nv, nz = -dv_du, 1.0, -dv_dz
+            length = math.sqrt(nu * nu + nv * nv + nz * nz)
+            nu, nv, nz = nu / length, nv / length, nz / length
+            normal = (nv * ca + nu * sa, -nv * sa + nu * ca, nz)
+            for depth in (v, v + 0.6):  # two voxels thick: no gaps for rays to slip through
+                out.append(SailCell((*place(u, depth), z), u, row, normal))
+    if yard:  # square: the yard across the top; fore-and-aft: the gaff along the top
+        for i in range(steps + 9):
+            u = centre - half - 1 + (width + 2) * i / (steps + 8)
+            out.append(SailCell((*place(u, 0), at[2] + rows), u, rows, None))
+    return out
+
+
 def _estimated_cells(shape: str, spec: dict[str, Any]) -> float:
     """Upper bound on the voxels a shape fills, from its parameters (inf if they're absurd)."""
 
@@ -565,20 +610,39 @@ def _estimated_cells(shape: str, spec: dict[str, Any]) -> float:
 # --- poses ------------------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class Pose:
+    """One animation frame of a model: parts moved/hidden/shown, and the whole model tilted."""
+
+    moves: tuple[tuple[str, PartMove], ...] = ()
+    hidden: frozenset[str] = frozenset()
+    roll: float = 0.0
+    pitch: float = 0.0
+
+
+_MOVE_FIELDS = ("offset", "roll", "pitch", "yaw", "about")
+
+
+def _angle(value: Any) -> bool:
+    return _num(value) and -360 <= value <= 360
+
+
 def _parse_poses(
     raw: Any, line: int | None, ids: set[str], error: ErrorFn, hidden_by_default: set[str] | None = None
-) -> dict[str, tuple[float, bool, list[tuple[dict[str, Cell], set[str]]]]]:
-    """animations: { name: { fps, loop, poses: [ { part_id: { offset: [...] }, hide: [ids], show: [ids] } ] } }
+) -> dict[str, tuple[float, bool, list[Pose]]]:
+    """animations: { name: { fps, loop, poses: [ { roll, pitch, part_id: { offset, roll, pitch, yaw, about },
+    hide: [ids], show: [ids] } ] } }
 
     Each pose's hidden set = parts hidden by default, minus `show`, plus `hide`.
     """
     hidden_by_default = hidden_by_default or set()
-    out: dict[str, tuple[float, bool, list[tuple[dict[str, Cell], set[str]]]]] = {}
+    out: dict[str, tuple[float, bool, list[Pose]]] = {}
     if raw is None:
         return out
     if not isinstance(raw, dict):
         error("E013", "animations must map a name to { fps, loop, poses: [...] }", line, "animations")
         return out
+    known = ", ".join(sorted(ids)) or "none defined"
     for name, spec in raw.items():
         aline = _line(raw, name)
         where = f"animations.{name}"
@@ -592,35 +656,61 @@ def _parse_poses(
         if not _num(fps) or not 0 < fps <= 120 or not isinstance(loop, bool):
             error("E013", "fps must be 0-120 and loop true/false", aline, where)
             continue
-        poses: list[tuple[dict[str, Cell], set[str]]] = []
+        poses: list[Pose] = []
         for index, pose in enumerate(spec["poses"]):
             pose = pose or {}
+            pwhere = f"{where}.poses[{index}]"
             if not isinstance(pose, dict):
-                error("E013", f"poses[{index}] must be a mapping of part id -> {{ offset: [dx, dy, dz] }}", aline, where)
+                error("E013", "a pose is a mapping: part id -> { offset, roll, pitch, yaw, about }, plus roll, pitch, hide, show", aline, pwhere)
                 break
-            offsets: dict[str, Cell] = {}
+            moves: dict[str, PartMove] = {}
             hide: set[str] = set()
             show: set[str] = set()
+            tilt = {"roll": 0.0, "pitch": 0.0}
             for part_id, change in pose.items():
                 if part_id in ("hide", "show"):
                     if not isinstance(change, list) or not all(isinstance(c, str) and c in ids for c in change):
-                        error("E013", f"poses[{index}].{part_id} must list part ids ({', '.join(sorted(ids)) or 'none defined'})", aline, where)
+                        error("E013", f"{part_id} must list part ids ({known})", aline, f"{pwhere}.{part_id}")
                     elif part_id == "hide":
                         hide = set(change)
                     else:
                         show = set(change)
                     continue
+                if part_id in ("roll", "pitch"):
+                    if not _angle(change):
+                        error("E013", f"{part_id} tilts the whole model: degrees, -360..360", aline, f"{pwhere}.{part_id}")
+                    else:
+                        tilt[part_id] = float(change)
+                    continue
                 if part_id not in ids:
-                    error("E013", f"poses[{index}]: unknown part id {part_id!r} (ids: {', '.join(sorted(ids)) or 'none'})", aline, where)
+                    error("E013", f"unknown part id {part_id!r} (ids: {known}); a pose also takes roll, pitch, hide, show", aline, f"{pwhere}.{part_id}")
                     continue
-                offset = _ivec(change.get("offset")) if isinstance(change, dict) else None
-                if offset is None:
-                    error("E013", f"poses[{index}].{part_id} needs offset: [dx, dy, dz] in whole voxels", aline, where)
-                    continue
-                offsets[part_id] = (offset[0], offset[1], offset[2])
-            poses.append((offsets, (hidden_by_default - show) | hide))
+                move = _parse_move(change, aline, f"{pwhere}.{part_id}", error)
+                if move is not None:
+                    moves[part_id] = move
+            poses.append(Pose(tuple(sorted(moves.items())), frozenset((hidden_by_default - show) | hide), tilt["roll"], tilt["pitch"]))
         out[name] = (float(fps), loop, poses)
     return out
+
+
+def _parse_move(change: Any, line: int | None, where: str, error: ErrorFn) -> PartMove | None:
+    usage = "a part's pose is { offset: [dx, dy, dz] (whole voxels), roll/pitch/yaw: degrees, about: [x, y, z] (hinge) }"
+    if not isinstance(change, dict) or not change or any(k not in _MOVE_FIELDS for k in change):
+        error("E013", usage, line, where)
+        return None
+    offset = _ivec(change.get("offset", [0, 0, 0]))
+    angles = [change.get(k, 0) for k in ("roll", "pitch", "yaw")]
+    about = _vec(change["about"]) if "about" in change else None
+    if offset is None or not all(_angle(a) for a in angles) or ("about" in change and about is None):
+        error("E013", usage, line, where)
+        return None
+    return PartMove(
+        (offset[0], offset[1], offset[2]),
+        float(angles[0]),
+        float(angles[1]),
+        float(angles[2]),
+        (about[0], about[1], about[2]) if about is not None else None,
+    )
 
 
 # --- render settings --------------------------------------------------------------------------
@@ -640,15 +730,34 @@ def _camera_and_light(project: Project, data: dict[str, Any], error: ErrorFn) ->
 # --- entry point ------------------------------------------------------------------------------
 
 
-def parse_model(data: Any, path: Path | None, project: Project, source_text: str = "") -> tuple[Asset | None, list[Finding]]:
-    findings: list[Finding] = []
+@dataclass
+class _Setup:
+    """A parsed model, ready to render: everything except the pixels."""
 
-    def error(rule: str, message: str, line: int | None, where: str | None = None) -> None:
-        findings.append(Finding(rule, message, path, line, where))
+    name: str
+    data: dict[str, Any]
+    palette: Palette
+    meta: dict[str, Any]
+    size: tuple[int, int]
+    pivot: tuple[int, int]
+    origin: tuple[float, float, float]
+    outline: bool
+    outline_color: str
+    camera: Camera
+    light: Light
+    materials: dict[str, Material]
+    model: VoxelModel
+    jobs: list[tuple[str, float, Pose]]  # frame name, heading angle, pose
+    animations: dict[str, Animation]
+    pose_names: list[str]  # the file's animation names (each rendered per heading)
+    directions: int
+    heading: float
 
+
+def _setup(data: Any, path: Path | None, project: Project, error: ErrorFn, findings: list[Finding]) -> _Setup | None:
     if not isinstance(data, dict):
-        error("E001", "a model file must be a mapping", None)
-        return None, findings
+        error("E001", "a model file must be a mapping", None, None)
+        return None
     for key in data:
         if key not in _MODEL_FIELDS:
             error("E001", f"unknown field {key!r}; allowed: {', '.join(_MODEL_FIELDS)}", _line(data, key), str(key))
@@ -665,10 +774,10 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
     meta = _parse_metadata(data, error)
     if "size" not in data:
         error("E001", "missing required field 'size' (the frame size in pixels)", _line(data), "size")
-        return None, findings
+        return None
     size = _parse_size(data["size"], "size", _line(data, "size"), error)
     if size is None or palette is None:
-        return None, findings
+        return None
     width, height = size
 
     pivot = (width // 2, round(height * 0.62))
@@ -717,9 +826,7 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
         _Builder(model, error, materials).build(data.get("parts"), _line(data, "parts"))
         if not model.voxels and not has_errors(findings):
             error("E013", "the model has no voxels (everything was carved away?)", _line(data, "parts"), "parts")
-    poses = _parse_poses(
-        data.get("animations"), _line(data, "animations"), set(model.groups.values()), error, model.hidden_by_default
-    )
+    poses = _parse_poses(data.get("animations"), _line(data, "animations"), model.part_ids(), error, model.hidden_by_default)
     heading_names = {n for n, _ in heading_angles(directions, float(heading))} if _num(heading) else set()
     for anim_name in poses:
         if anim_name in heading_names:
@@ -735,69 +842,104 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
             origin = (vec[0], vec[1], vec[2])
 
     if has_errors(findings):
-        return None, findings
+        return None
 
-    lo, hi = model.bounds()
-    if origin is None:
+    if origin is None:  # the centre of everything the file builds, hidden parts included
+        cells = [*model.voxels, *(c for o in model.overlays for c in o.cells)]
+        lo = tuple(min(c[i] for c in cells) for i in range(3))
+        hi = tuple(max(c[i] for c in cells) for i in range(3))
         origin = ((lo[0] + hi[0] + 1) / 2, (lo[1] + hi[1] + 1) / 2, float(lo[2]))
 
-    jobs: list[tuple[str, float, dict[str, Cell], set[str]]] = []
+    base = Pose(hidden=frozenset(model.hidden_by_default))
+    jobs: list[tuple[str, float, Pose]] = []
     animations: dict[str, Animation] = {}
     for direction_name, angle in heading_angles(directions, float(heading)):
-        jobs.append((direction_name, angle, {}, set(model.hidden_by_default)))
+        jobs.append((direction_name, angle, base))
         animations[direction_name] = Animation(direction_name, (direction_name,), 1.0, True)
         for anim_name, (fps, loop, pose_list) in poses.items():
             frame_names = []
-            for index, (offsets, hidden) in enumerate(pose_list):
+            for index, pose in enumerate(pose_list):
                 frame = f"{anim_name}_{direction_name}_{index}" if directions > 1 else f"{anim_name}_{index}"
-                jobs.append((frame, angle, offsets, hidden))
+                jobs.append((frame, angle, pose))
                 frame_names.append(frame)
             anim_key = f"{anim_name}_{direction_name}" if directions > 1 else anim_name
             animations[anim_key] = Animation(anim_key, tuple(frame_names), fps, loop)
 
-    material_keys = {m.name: [list(m.keys), m.two_sided] for m in materials.values()}
+    return _Setup(
+        name, data, palette, meta, size, pivot, origin, outline, outline_color, camera, light, materials, model,
+        jobs, animations, list(poses), directions, float(heading),
+    )  # fmt: skip
+
+
+def _render_jobs(
+    setup: _Setup, size: tuple[int, int], pivot: tuple[int, int], full: bool = False
+) -> dict[str, Any]:
+    """Render every job: rows of keys per frame (or Rendered objects with normals when `full`)."""
+    out: dict[str, Any] = {}
+    posed_models: dict[tuple[Any, ...], VoxelModel] = {}
+    for frame_name, angle, pose in setup.jobs:
+        key = (pose.moves, pose.hidden)
+        if key not in posed_models:
+            posed_models[key] = setup.model.posed(dict(pose.moves), set(pose.hidden))
+        render = render_heading_full if full else render_heading
+        out[frame_name] = render(
+            posed_models[key], setup.materials, heading=angle, size=size, origin=setup.origin, pivot=pivot,
+            camera=setup.camera, light=setup.light, roll=pose.roll, pitch=pose.pitch,
+        )  # fmt: skip
+    return out
+
+
+def parse_model(data: Any, path: Path | None, project: Project, source_text: str = "") -> tuple[Asset | None, list[Finding]]:
+    findings: list[Finding] = []
+
+    def error(rule: str, message: str, line: int | None, where: str | None = None) -> None:
+        findings.append(Finding(rule, message, path, line, where))
+
+    setup = _setup(data, path, project, error, findings)
+    if setup is None:
+        return None, findings
+    data, size, pivot, camera, light = setup.data, setup.size, setup.pivot, setup.camera, setup.light
+    material_keys = {m.name: [list(m.keys), m.two_sided] for m in setup.materials.values()}
     cache_key = hashlib.sha256(
         json.dumps(
-            [RENDERER_VERSION, source_text, material_keys, camera.__dict__, light.__dict__, origin, pivot, size, heading, directions],
+            [RENDERER_VERSION, source_text, material_keys, camera.__dict__, light.__dict__, setup.origin, pivot, size, setup.heading, setup.directions],
             sort_keys=True,
             default=str,
         ).encode()
     ).hexdigest()[:24]
-    base_frames = _cached_render(project, name, cache_key, model, materials, jobs, size, origin, pivot, camera, light)
+    base_frames = _cached_render(project, setup, cache_key)
 
     frames: dict[str, Grid] = {}
+    clipped = [name for name, grid in base_frames.items() if setup.outline and _edge_pixel(grid) is not None]
+    if clipped:
+        first = clipped[0]
+        edge = _edge_pixel(base_frames[first])
+        assert edge is not None
+        more = f" (and {len(clipped) - 1} more frames)" if len(clipped) > 1 else ""
+        error(
+            "E007",
+            f"frame {first}{more}: the model touches the frame edge (pixel {edge[0]},{edge[1]}), so the outline "
+            "would be clipped. Run `pagan fit` for a size and pivot that fit every frame, or lower camera scale",
+            _line(data, "size"),
+            "size",
+        )
     for frame_name, grid in base_frames.items():
-        if outline:
-            edge = _edge_pixel(grid)
-            if edge is not None:
-                error(
-                    "E007",
-                    f"frame {frame_name}: the model touches the frame edge (pixel {edge[0]},{edge[1]}), so the outline "
-                    "would be clipped. Grow size, move pivot/origin, or lower camera scale",
-                    _line(data, "size"),
-                    "size",
-                )
-                break
-            frames[frame_name] = _outline(grid, outline_color)
-        else:
-            frames[frame_name] = grid
+        frames[frame_name] = _outline(grid, setup.outline_color) if setup.outline else grid
 
     used = {c for grid in frames.values() for row in grid for c in row if c != TRANSPARENT}
-    variants = _parse_variants(data.get("variants"), palette, project, _line(data, "variants"), used, error)
+    variants = _parse_variants(data.get("variants"), setup.palette, project, _line(data, "variants"), used, error)
+    lint_targets: dict[str, tuple[str, ...]] = {name: (name,) for name in [*frames, *setup.animations]}
+    for pose_name in setup.pose_names:  # `damaged` covers damaged_<heading> and its frames
+        covered = [a for a in setup.animations if a == pose_name or a.startswith(f"{pose_name}_")]
+        lint_targets.setdefault(pose_name, tuple(t for a in covered for t in (a, *setup.animations[a].frames)))
+    lint_disable, lint_disable_for = _parse_lint(data.get("lint"), _line(data, "lint"), lint_targets, error)
     if has_errors(findings):
         return None, findings
-    model_line = _line(data, "parts")
 
     def normal_maps() -> dict[str, Any]:
         """Screen-space normals per frame (rendered on demand, e.g. for the "normals" exporter)."""
         out: dict[str, Any] = {}
-        posed_models: dict[tuple[Any, ...], VoxelModel] = {}
-        for frame_name, angle, offsets, hidden in jobs:
-            pose_key = (tuple(sorted(offsets.items())), tuple(sorted(hidden)))
-            posed = posed_models.setdefault(pose_key, model.posed(offsets, hidden))
-            rendered = render_heading_full(
-                posed, materials, heading=angle, size=size, origin=origin, pivot=pivot, camera=camera, light=light
-            )
+        for frame_name, rendered in _render_jobs(setup, size, pivot, full=True).items():
             normals = rendered.normals.copy()
             outlined = (normals == 0).all(axis=2) & np.array([[c != "." for c in row] for row in frames[frame_name]])
             normals[outlined] = (0.0, 0.0, 1.0)  # outline pixels face the viewer
@@ -807,61 +949,102 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
     return (
         Asset(
             kind="model",
-            name=name,
+            name=setup.name,
             path=path,
-            palette=palette,
+            palette=setup.palette,
             size=size,
             frames=frames,
             base_frames=dict(base_frames),
-            frame_lines={f: model_line for f in frames},
+            frame_lines={f: None for f in frames},  # rendered: no source line per frame
             derived_from={},
-            animations=animations,
+            animations=setup.animations,
             variants=variants,
             pivot=pivot,
-            outline=outline,
-            outline_color=outline_color,
+            outline=setup.outline,
+            outline_color=setup.outline_color,
             normal_maps=normal_maps,
-            **meta,
+            lint_disable=lint_disable,
+            lint_disable_for=lint_disable_for,
+            **setup.meta,
         ),
         findings,
     )
 
 
-def _cached_render(
-    project: Project,
-    name: str,
-    key: str,
-    model: VoxelModel,
-    materials: dict[str, Material],
-    jobs: list[tuple[str, float, dict[str, Cell], set[str]]],
-    size: tuple[int, int],
-    origin: tuple[float, float, float],
-    pivot: tuple[int, int],
-    camera: Camera,
-    light: Light,
-) -> dict[str, Grid]:
+@dataclass
+class Fit:
+    """`pagan fit`: the smallest frame that holds every heading and pose, with the origin kept on the pivot."""
+
+    name: str
+    size: tuple[int, int]
+    pivot: tuple[int, int]
+    current_size: tuple[int, int]
+    current_pivot: tuple[int, int]
+    clipped: list[str]  # frames that don't fit the current size/pivot
+    margin: int
+
+
+def fit_model(path: Path, project: Project, margin: int = 0) -> tuple[Fit | None, list[Finding]]:
+    """Render every frame on a canvas big enough for anything, and measure what's actually drawn."""
+    from pagan.yamlio import YamlError, load_yaml
+
+    findings: list[Finding] = []
+
+    def error(rule: str, message: str, line: int | None, where: str | None = None) -> None:
+        findings.append(Finding(rule, message, path, line, where))
+
+    try:
+        data = load_yaml(path)
+    except YamlError as exc:
+        return None, [Finding("E001", exc.message, path, exc.line)]
+    setup = _setup(data, path, project, error, findings)
+    if setup is None:
+        return None, findings
+    cells = [*setup.model.voxels, *(c for o in setup.model.overlays for c in o.cells)]
+    reach = max(math.dist((x + dx, y + dy, z + dz), setup.origin) for x, y, z in cells for dx in (0, 1) for dy in (0, 1) for dz in (0, 1))
+    reach += max((abs(o) for _, _, pose in setup.jobs for _, move in pose.moves for o in move.offset), default=0)
+    reach *= 2 if any(m.roll or m.pitch or m.yaw for _, _, pose in setup.jobs for _, m in pose.moves) else 1
+    half = math.ceil(reach * setup.camera.scale) + 4
+    canvas, centre = (2 * half, 2 * half), (half, half)
+    border = (1 if setup.outline else 0) + margin
+    boxes: dict[str, tuple[int, int, int, int]] = {}  # frame -> drawn x0, y0, x1, y1 relative to the pivot
+    for frame, grid in _render_jobs(setup, canvas, centre).items():
+        points = [(x, y) for y, row in enumerate(grid) for x, c in enumerate(row) if c != TRANSPARENT]
+        if points:
+            xs, ys = [x for x, _ in points], [y for _, y in points]
+            boxes[frame] = (min(xs) - centre[0], min(ys) - centre[1], max(xs) - centre[0], max(ys) - centre[1])
+    if not boxes:
+        return None, [*findings, Finding("E013", "nothing to fit: no frame draws any pixels", path, None, "parts")]
+    x0, y0 = min(b[0] for b in boxes.values()), min(b[1] for b in boxes.values())
+    x1, y1 = max(b[2] for b in boxes.values()), max(b[3] for b in boxes.values())
+    size = (x1 - x0 + 1 + 2 * border, y1 - y0 + 1 + 2 * border)
+    pivot = (border - x0, border - y0)
+    edge = 1 if setup.outline else 0  # outlined frames need a free pixel around the model
+    (w, h), (px, py) = setup.size, setup.pivot
+    clipped = [
+        frame
+        for frame, (a, b, c, d) in boxes.items()
+        if px + a < edge or py + b < edge or px + c > w - 1 - edge or py + d > h - 1 - edge
+    ]
+    return Fit(setup.name, size, pivot, setup.size, setup.pivot, clipped, margin), findings
+
+
+def _cached_render(project: Project, setup: _Setup, key: str) -> dict[str, Grid]:
+    name, (width, height) = setup.name, setup.size
     cache_file = project.root / ".pagan-cache" / "models" / f"{name}-{key}.json"
     if cache_file.is_file():
         try:
             cached = json.loads(cache_file.read_text(encoding="utf-8"))
-            width, height = size
             if isinstance(cached, dict) and all(
                 isinstance(cached.get(job[0]), list)
                 and len(cached[job[0]]) == height
                 and all(isinstance(row, str) and len(row) == width for row in cached[job[0]])
-                for job in jobs
+                for job in setup.jobs
             ):
-                return {job[0]: tuple(cached[job[0]]) for job in jobs}
+                return {job[0]: tuple(cached[job[0]]) for job in setup.jobs}
         except (OSError, ValueError):
             pass  # unreadable or malformed cache: render again
-    frames: dict[str, Grid] = {}
-    posed_models: dict[tuple[Any, ...], VoxelModel] = {}
-    for frame_name, angle, offsets, hidden in jobs:
-        pose_key = (tuple(sorted(offsets.items())), tuple(sorted(hidden)))
-        posed = posed_models.setdefault(pose_key, model.posed(offsets, hidden))
-        frames[frame_name] = render_heading(
-            posed, materials, heading=angle, size=size, origin=origin, pivot=pivot, camera=camera, light=light
-        )
+    frames: dict[str, Grid] = _render_jobs(setup, setup.size, setup.pivot)
     try:
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         for stale in cache_file.parent.glob(f"{name}-*.json"):

@@ -173,3 +173,39 @@ prow, harpoon …). Each must be identifiable at a glance: different silhouettes
 only recolour), character palettes on top of player colours (palette layering: team ramp + character ramp), and a
 per-character set of ability effects. Worth checking that models can share a base hull with part overrides and that
 variants can compose (character × player colour) rather than enumerate.
+
+### R16 · feature · high · Palette key space exhausted
+Palette keys are one character (0-9a-zA-Z, 62). Age of Boom's `naval` palette uses 61, so new team-colour ramps had
+to alias existing keys (`blue` = the navy flag keys, `yellow` = the gold keys), i.e. no genuinely new colours. The
+alternative, a `palette:` variant copying all 61 colours, drifts from the source. Want multi-character keys, or ramps
+defined by hex colours that don't consume grid keys (3D models never use grid keys).
+
+### R17 · feature · medium · Variant previews and palette-swap data
+(a) `pagan preview`/`gallery` don't compare variants; frames land in `previews/<asset>/native/<variant>/frames/`
+only. Want `pagan preview --variants` (side-by-side montage, one heading, optional 1x strip). (b) A recolour variant
+costs a full duplicate sheet + SpriteFrames (16 headings × 3 poses = 48 frames each; 4 player colours = 192 frames
+per ship). Want the manifest to carry a variant's key→colour swap table so games can palette-swap in a shader.
+
+### PAGAN responses to R7-R14 — 2026-10-16 (main, unreleased; planned 0.3.0, see CHANGELOG.md)
+
+- **R7** fixed: `lint: { disable: [...], for: { <frame/tile/animation>: [...] } }` in any asset file; build
+  and lint print warnings per rule. (No tag-based defaults: the file-level switch is explicit and greppable.)
+- **R8** fixed: tileset `animations:`; frames side by side in the atlas; Godot atlas tile animation;
+  manifest `tiles` names the animated tile, `animations` describes it. Verified loading in Godot 4.7.2.
+- **R9** fixed: pose `roll`/`pitch` tilt the whole model exactly; parts take `roll`/`pitch`/`yaw` + `about`.
+- **R10** fixed at the root: hidden parts are overlays and can't change the normal frames any more, so
+  (a) the warning and (c) the pixel-identity check aren't needed. (b) `hidden: true` + `carve: true`
+  cuts holes only when shown. Your models: the sloop's normal frames gain the 3 deck voxels the `dmg`
+  scorch used to remove; damaged frames of all four damaged ships gain the torn-sail voxels later
+  parts used to remove. Nothing else changes (all 240 ship frames and every sprite/tile compared).
+  The "one voxel outside the hull" workaround in `ships_gen.py` is no longer needed.
+- **R11/R12** answered with `pagan.api` (owner's call: an API rather than more notation): `hull_reach`,
+  `sail_cells` (with cloth `u`/`row` per voxel), `shape_cells`, `Canvas` (ellipse/ring/fade/scatter,
+  W001-exact orphans), `light_2d` (project light for 2D shading), `periodic_noise`, `corner_tiles`
+  (Match-Corners sets), `compose` + `pagan preview --scene`, and sprite/tileset YAML writers.
+  Please port `ships_gen.py` (`reach_at`, `sail_cells`), `effects_gen.py` (`blob`, `dither`, orphan
+  helpers, the copied light vector) and `tiles_gen.py` (`corner_set`, `pnoise`, `hash01`).
+- **R13** fixed: `pagan fit <model> [--margin N]`.
+- **R14** fixed: model findings say `frames.<name>` with no line; W001 is skipped on models.
+
+R15-R17 (above) arrived during this work; not addressed yet.

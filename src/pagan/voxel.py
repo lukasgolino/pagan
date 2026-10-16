@@ -52,6 +52,32 @@ class Light:
     shadow_strength: float = 0.65  # how much a cast shadow removes of the direct light
 
 
+VoxelData = tuple[str, str | None, int | None, Vec | None]  # material, part id, part index, exact normal
+
+
+@dataclass(frozen=True)
+class PartMove:
+    """How a pose moves one part: rotate (degrees) about `about`, then shift by whole voxels."""
+
+    offset: Cell = (0, 0, 0)
+    roll: float = 0.0  # about the model's x (bow-stern) axis; positive lowers the right (-y) side
+    pitch: float = 0.0  # about the y axis; positive tips the front (+x) down
+    yaw: float = 0.0  # about the z axis; positive turns counter-clockwise seen from above
+    about: Vec | None = None  # rotation centre in model space; None = the part's bottom centre
+
+
+@dataclass
+class Overlay:
+    """A hidden part: drawn over the model only in poses that `show` it; never changes the normal frames.
+
+    A carving overlay removes its cells instead (holes, torn cloth) when shown.
+    """
+
+    part_id: str
+    cells: dict[Cell, VoxelData]
+    carve: bool = False
+
+
 @dataclass
 class VoxelModel:
     voxels: dict[Cell, str] = field(default_factory=dict)  # cell -> material name
@@ -59,6 +85,7 @@ class VoxelModel:
     normals: dict[Cell, Vec] = field(default_factory=dict)  # exact normals from shapes that know them (sails)
     parts: dict[Cell, int] = field(default_factory=dict)  # cell -> index of the part that made it (no self-shadowing)
     hidden_by_default: set[str] = field(default_factory=set)  # part ids only shown by poses that `show` them
+    overlays: list[Overlay] = field(default_factory=list)  # the hidden parts, in source order
 
     def bounds(self) -> tuple[Cell, Cell]:
         xs = [c[0] for c in self.voxels]
@@ -66,37 +93,127 @@ class VoxelModel:
         zs = [c[2] for c in self.voxels]
         return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs))
 
-    def posed(self, pose: dict[str, Cell], hidden: set[str]) -> VoxelModel:
-        """A copy with whole parts moved by integer offsets (keeps animation frames pixel-consistent)."""
-        if not pose and not hidden:
+    def part_ids(self) -> set[str]:
+        return set(self.groups.values()) | {o.part_id for o in self.overlays}
+
+    def _data(self, cell: Cell) -> VoxelData:
+        return (self.voxels[cell], self.groups.get(cell), self.parts.get(cell), self.normals.get(cell))
+
+    def _put(self, cell: Cell, data: VoxelData) -> None:
+        material, group, part, normal = data
+        self.voxels[cell] = material
+        if group is None:
+            self.groups.pop(cell, None)
+        else:
+            self.groups[cell] = group
+        if part is None:
+            self.parts.pop(cell, None)
+        else:
+            self.parts[cell] = part
+        if normal is None:
+            self.normals.pop(cell, None)
+        else:
+            self.normals[cell] = normal
+
+    def _remove(self, cell: Cell) -> None:
+        self.voxels.pop(cell, None)
+        self.groups.pop(cell, None)
+        self.parts.pop(cell, None)
+        self.normals.pop(cell, None)
+
+    def posed(self, moves: dict[str, PartMove], hidden: set[str]) -> VoxelModel:
+        """A copy for one pose: parts in `hidden` left out, parts in `moves` moved (and drawn over the
+        static ones), then every shown overlay drawn (or carved) on top in source order."""
+        shown = [o for o in self.overlays if o.part_id not in hidden]
+        if not moves and not shown and not hidden & set(self.groups.values()):
             return self
         out = VoxelModel()
-        moved: list[tuple[Cell, Cell, str, str]] = []
-        for cell, material in self.voxels.items():
+        moving: dict[str, dict[Cell, VoxelData]] = {}
+        for cell in self.voxels:
             group = self.groups.get(cell)
             if group in hidden:
                 continue
-            if group is not None and group in pose:
-                dx, dy, dz = pose[group]
-                moved.append((cell, (cell[0] + dx, cell[1] + dy, cell[2] + dz), material, group))
+            if group is not None and group in moves:
+                moving.setdefault(group, {})[cell] = self._data(cell)
             else:
-                out.voxels[cell] = material
-                if group is not None:
-                    out.groups[cell] = group
-                if cell in self.normals:
-                    out.normals[cell] = self.normals[cell]
-                if cell in self.parts:
-                    out.parts[cell] = self.parts[cell]
-        for old, cell, material, group in moved:  # moved parts draw over static ones
-            out.voxels[cell] = material
-            out.groups[cell] = group
-            if old in self.parts:
-                out.parts[cell] = self.parts[old]
-            if old in self.normals:
-                out.normals[cell] = self.normals[old]
-            else:
-                out.normals.pop(cell, None)
+                out._put(cell, self._data(cell))
+        for group, cells in moving.items():  # moved parts draw over static ones
+            for cell, data in move_cells(cells, moves[group]).items():
+                out._put(cell, data)
+        for overlay in shown:
+            cells = overlay.cells if overlay.part_id not in moves else move_cells(overlay.cells, moves[overlay.part_id])
+            for cell, data in cells.items():
+                if overlay.carve:
+                    out._remove(cell)
+                else:
+                    out._put(cell, data)
         return out
+
+
+def rotation_matrix(roll: float, pitch: float, yaw: float) -> tuple[Vec, Vec, Vec]:
+    """Rz(yaw) . Ry(pitch) . Rx(roll), degrees, right-handed (x forward, y left, z up).
+
+    Entries are rounded like other trig results so builds stay byte-stable across platforms.
+    """
+    r, p, y = math.radians(roll), math.radians(pitch), math.radians(yaw)
+    cr, sr = _clean(math.cos(r)), _clean(math.sin(r))
+    cp, sp = _clean(math.cos(p)), _clean(math.sin(p))
+    cy, sy = _clean(math.cos(y)), _clean(math.sin(y))
+    return (
+        (cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr),
+        (sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr),
+        (-sp, cp * sr, cp * cr),
+    )
+
+
+def _apply(m: tuple[Vec, Vec, Vec], v: Vec) -> Vec:
+    return (
+        m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2],
+        m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2],
+        m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2],
+    )
+
+
+def _transpose(m: tuple[Vec, Vec, Vec]) -> tuple[Vec, Vec, Vec]:
+    return ((m[0][0], m[1][0], m[2][0]), (m[0][1], m[1][1], m[2][1]), (m[0][2], m[1][2], m[2][2]))
+
+
+def bottom_centre(cells: dict[Cell, VoxelData] | set[Cell]) -> Vec:
+    """Centre of a part's bounding box at its lowest face: the default hinge for rotating it."""
+    xs, ys, zs = ([c[i] for c in cells] for i in range(3))
+    return ((min(xs) + max(xs) + 1) / 2, (min(ys) + max(ys) + 1) / 2, float(min(zs)))
+
+
+def move_cells(cells: dict[Cell, VoxelData], move: PartMove) -> dict[Cell, VoxelData]:
+    """Rotate a part about its hinge, then shift it. Rotated parts are resampled both ways (every voxel
+    lands somewhere, and gaps the rotation opens are filled from the source), so thin parts stay solid."""
+    dx, dy, dz = move.offset
+    if not cells or (move.roll, move.pitch, move.yaw) == (0.0, 0.0, 0.0):
+        return {(x + dx, y + dy, z + dz): data for (x, y, z), data in cells.items()}
+    m = rotation_matrix(move.roll, move.pitch, move.yaw)
+    back = _transpose(m)
+    cx, cy, cz = move.about if move.about is not None else bottom_centre(cells)
+
+    def rotated(data: VoxelData) -> VoxelData:
+        material, group, part, normal = data
+        return (material, group, part, _apply(m, normal) if normal is not None else None)
+
+    out: dict[Cell, VoxelData] = {}
+    for (x, y, z), data in cells.items():
+        q = _apply(m, (x + 0.5 - cx, y + 0.5 - cy, z + 0.5 - cz))
+        out[(math.floor(q[0] + cx), math.floor(q[1] + cy), math.floor(q[2] + cz))] = rotated(data)
+    lo = [min(c[i] for c in out) - 1 for i in range(3)]
+    hi = [max(c[i] for c in out) + 1 for i in range(3)]
+    for x in range(lo[0], hi[0] + 1):
+        for y in range(lo[1], hi[1] + 1):
+            for z in range(lo[2], hi[2] + 1):
+                if (x, y, z) in out:
+                    continue
+                q = _apply(back, (x + 0.5 - cx, y + 0.5 - cy, z + 0.5 - cz))
+                source = (math.floor(q[0] + cx), math.floor(q[1] + cy), math.floor(q[2] + cz))
+                if source in cells:
+                    out[(x, y, z)] = rotated(cells[source])
+    return {(x + dx, y + dy, z + dz): data for (x, y, z), data in out.items()}
 
 
 # --- normals and shading ----------------------------------------------------------------------
@@ -260,11 +377,14 @@ def render_heading(
     pivot: tuple[int, int],
     camera: Camera,
     light: Light,
+    roll: float = 0.0,
+    pitch: float = 0.0,
 ) -> tuple[str, ...]:
     """Render one heading to rows of palette keys. `origin` (model space) lands on `pivot` (pixels)."""
     return render_heading_full(
-        model, materials, heading=heading, size=size, origin=origin, pivot=pivot, camera=camera, light=light
-    ).rows
+        model, materials, heading=heading, size=size, origin=origin, pivot=pivot, camera=camera, light=light,
+        roll=roll, pitch=pitch,
+    ).rows  # fmt: skip
 
 
 def render_heading_full(
@@ -277,7 +397,11 @@ def render_heading_full(
     pivot: tuple[int, int],
     camera: Camera,
     light: Light,
+    roll: float = 0.0,
+    pitch: float = 0.0,
 ) -> Rendered:
+    """Like render_heading, plus screen-space normals. `roll`/`pitch` tilt the whole model about `origin`
+    (see PartMove for the signs); the view stays exact, nothing is resampled."""
     width, height = size
     keys_out = np.full((height, width), TRANSPARENT, dtype="<U1")
     normals_out = np.zeros((height, width, 3))
@@ -287,12 +411,11 @@ def render_heading_full(
     lo, hi = dense.lo, dense.hi
     elev = math.radians(camera.elevation)
     ce, se = _clean(math.cos(elev)), _clean(math.sin(elev))
-    h = math.radians(heading)
-    ch, sh = _clean(math.cos(h)), _clean(math.sin(h))
+    world = rotation_matrix(roll, pitch, heading)  # model -> world: tilt, then turn to the heading
+    model_from_world = _transpose(world)
 
-    def to_model(v: Vec) -> Vec:  # world -> model direction: rotate by -heading about z
-        x, y, z = v
-        return (ch * x + sh * y, -sh * x + ch * y, z)
+    def to_model(v: Vec) -> Vec:  # world -> model direction
+        return _apply(model_from_world, v)
 
     forward: Vec = (0.0, ce, -se)  # camera looks "north" and down
     up: Vec = (0.0, se, ce)
@@ -306,10 +429,9 @@ def render_heading_full(
     # Only pixels inside the projected bounding box can hit anything.
     xs_screen, ys_screen = [], []
     for cx, cy, cz in corners:
-        mx, my, mz = cx - origin[0], cy - origin[1], cz - origin[2]
-        wx, wy = ch * mx - sh * my, sh * mx + ch * my  # model -> world (rotate by +heading)
+        wx, wy, wz = _apply(world, (cx - origin[0], cy - origin[1], cz - origin[2]))
         xs_screen.append(pivot[0] + wx * camera.scale)
-        ys_screen.append(pivot[1] - (wy * up[1] + mz * up[2]) * camera.scale)
+        ys_screen.append(pivot[1] - (wy * up[1] + wz * up[2]) * camera.scale)
     x0, x1 = max(0, math.floor(min(xs_screen)) - 1), min(width, math.ceil(max(xs_screen)) + 1)
     y0, y1 = max(0, math.floor(min(ys_screen)) - 1), min(height, math.ceil(max(ys_screen)) + 1)
     if x0 >= x1 or y0 >= y1:
@@ -320,7 +442,11 @@ def render_heading_full(
     sx = (px + 0.5 - pivot[0]) / camera.scale
     sy = (pivot[1] - (py + 0.5)) / camera.scale
     wx, wy, wz = sx - reach * forward[0], sy * up[1] - reach * forward[1], sy * up[2] - reach * forward[2]
-    starts = np.stack((ch * wx + sh * wy + origin[0], -sh * wx + ch * wy + origin[1], wz + origin[2]), axis=1)
+    (a0, a1, a2), (b0, b1, b2), (c0, c1, c2) = model_from_world
+    starts = np.stack(
+        (a0 * wx + a1 * wy + a2 * wz + origin[0], b0 * wx + b1 * wy + b2 * wz + origin[1], c0 * wx + c1 * wy + c2 * wz + origin[2]),
+        axis=1,
+    )
     hit, cells = _traverse_many(dense, starts, ray_dir)
     py, px, cells = py[hit], px[hit], cells[hit]
     if not len(cells):
@@ -359,8 +485,11 @@ def render_heading_full(
             chosen = np.clip((intensity[mine] * len(keys)).astype(np.int64), 0, len(keys) - 1)
         keys_out[py[mine], px[mine]] = np.array(keys)[chosen]
 
-    # Screen-space normals for engine lighting: model -> world (rotate by +heading) -> view.
-    wnx, wny, wnz = ch * n[:, 0] - sh * n[:, 1], sh * n[:, 0] + ch * n[:, 1], n[:, 2]
+    # Screen-space normals for engine lighting: model -> world -> view.
+    (a0, a1, a2), (b0, b1, b2), (c0, c1, c2) = world
+    wnx = a0 * n[:, 0] + a1 * n[:, 1] + a2 * n[:, 2]
+    wny = b0 * n[:, 0] + b1 * n[:, 1] + b2 * n[:, 2]
+    wnz = c0 * n[:, 0] + c1 * n[:, 1] + c2 * n[:, 2]
     screen = np.stack((wnx, wny * se + wnz * ce, -wny * ce + wnz * se), axis=1)
     flip = two_sided & (screen[:, 2] < 0)  # cloth faces whichever side the viewer sees
     screen[flip] *= -1

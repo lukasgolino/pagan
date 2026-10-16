@@ -496,6 +496,10 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
             f"  frames: {display_path(result.sheet.parent / 'frames')}/ ({len(result.frames)} PNGs at x{result.scale}; "
             "1x PNGs: `pagan render`)"
         )
+        scene: Path | None = None
+        if args.scene:
+            scene = _scene_preview(asset, Path(args.scene), result.sheet.parent / "scene.png", options)
+            out.say(f"  scene ({args.scene}): {display_path(scene)}")
         outputs.append(
             {
                 "asset": asset.name,
@@ -504,6 +508,7 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
                 "montage": display_path(result.montage),
                 "gifs": [display_path(g) for g in result.gifs],
                 "frames": [display_path(f) for f in result.frames],
+                **({"scene": display_path(scene)} if scene is not None else {}),
             }
         )
     if findings:
@@ -511,6 +516,24 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
         return 1
     out.result({"outputs": outputs})
     return 0
+
+
+def _scene_preview(asset: Asset, layout_file: Path, path: Path, options: PreviewOptions) -> Path:
+    from pagan.api import compose
+    from pagan.preview import auto_scale, upscale
+
+    if asset.kind != "tileset":
+        raise _usage_error(f"--scene needs a tileset; {asset.name} is a {asset.kind}")
+    try:
+        layout = layout_file.read_text(encoding="utf-8")
+        image = compose(asset, layout)
+    except OSError as exc:
+        raise _usage_error(f"can't read --scene file: {exc}", layout_file) from exc
+    except ValueError as exc:
+        raise _usage_error(str(exc), layout_file) from exc
+    scale = options.scale or max(1, auto_scale((image.width, image.height)))
+    upscale(image, scale, options).save(path)
+    return path
 
 
 def cmd_gallery(args: argparse.Namespace, out: Output) -> int:
@@ -539,6 +562,8 @@ def cmd_lint(args: argparse.Namespace, out: Output) -> int:
     result = lint_paths(project, paths)
     failed = bool(result.errors) or (args.warnings_as_errors and bool(result.warnings))
     summary = f"{len(result.files)} files: {len(result.errors)} errors, {len(result.warnings)} warnings"
+    if result.warnings:
+        summary += f" ({_rule_counts(result.warnings)})"
     if out.as_json:
         print(
             json.dumps(
@@ -559,6 +584,14 @@ def cmd_lint(args: argparse.Namespace, out: Output) -> int:
     return 1 if failed else 0
 
 
+def _rule_counts(findings: list[Finding]) -> str:
+    """"W007×40, W005×11": most frequent first."""
+    counts: dict[str, int] = {}
+    for f in findings:
+        counts[f.rule] = counts.get(f.rule, 0) + 1
+    return ", ".join(f"{rule}×{n}" for rule, n in sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
 # --- pagan build ------------------------------------------------------------------------------
 
 
@@ -576,7 +609,7 @@ def cmd_build(args: argparse.Namespace, out: Output) -> int:
     out.say(f"built {len(result.lint.assets)} assets into {display_path(project.output_dir)}")
     out.say(f"  {len(result.written)} files written, {len(result.unchanged)} unchanged, {len(result.removed)} stale removed")
     if warnings:
-        out.say(f"  {len(warnings)} lint warnings (run `pagan lint` to see them)")
+        out.say(f"  {len(warnings)} lint warnings: {_rule_counts(warnings)} (run `pagan lint` to see them)")
     verified: bool | None = None
     if args.verify_godot:
         godot = find_godot_binary()
@@ -606,7 +639,46 @@ def cmd_build(args: argparse.Namespace, out: Output) -> int:
             "unchanged": len(result.unchanged),
             "removed": [display_path(p) for p in result.removed],
             "warnings": len(warnings),
+            "warnings_by_rule": {r: sum(f.rule == r for f in warnings) for r in sorted({f.rule for f in warnings})},
             "godot_verified": verified,
+        }
+    )
+    return 0
+
+
+# --- pagan fit --------------------------------------------------------------------------------
+
+
+def cmd_fit(args: argparse.Namespace, out: Output) -> int:
+    from pagan.model import fit_model
+
+    project = project_for([args.model])
+    path = resolve_asset_path(args.model, project)
+    if not path.name.endswith(MODEL_SUFFIX):
+        raise _usage_error(f"pagan fit works on 3D models ({MODEL_SUFFIX}), not {path.name}", path)
+    if args.margin < 0:
+        raise _usage_error("--margin must be 0 or more")
+    fit, findings = fit_model(path, project, args.margin)
+    if fit is None:
+        out.failure(findings)
+        return 1
+    (w, h), (px, py) = fit.size, fit.pivot
+    out.say(f"{fit.name}: every heading and pose fits in")
+    out.say(f"  size: [{w}, {h}]")
+    out.say(f"  pivot: [{px}, {py}]")
+    out.say(f"  (now size [{fit.current_size[0]}, {fit.current_size[1]}], pivot [{fit.current_pivot[0]}, {fit.current_pivot[1]}]; "
+            f"the origin stays on the pivot{f', {fit.margin}px margin' if fit.margin else ''})")  # fmt: skip
+    if fit.clipped:
+        shown = ", ".join(fit.clipped[:8]) + (f" and {len(fit.clipped) - 8} more" if len(fit.clipped) > 8 else "")
+        out.say(f"  {len(fit.clipped)} frames don't fit the current size: {shown}")
+    out.result(
+        {
+            "asset": fit.name,
+            "size": list(fit.size),
+            "pivot": list(fit.pivot),
+            "current_size": list(fit.current_size),
+            "current_pivot": list(fit.current_pivot),
+            "clipped": fit.clipped,
         }
     )
     return 0
@@ -1060,6 +1132,11 @@ def build_parser() -> argparse.ArgumentParser:
     build_cmd.add_argument("--verify-godot", action="store_true", help="load every generated resource in headless Godot")
     build_cmd.set_defaults(handler=cmd_build)
 
+    fit_cmd = commands.add_parser("fit", parents=[common], help="smallest frame size and pivot that fit every heading and pose of a model")
+    fit_cmd.add_argument("model", help="model file or name")
+    fit_cmd.add_argument("--margin", type=int, default=0, help="extra empty pixels on every side (default 0)")
+    fit_cmd.set_defaults(handler=cmd_fit)
+
     imp = commands.add_parser("import", parents=[common], help="convert a PNG into a sprite source file")
     imp.add_argument("png", help="image to import")
     imp.add_argument("--palette", help="snap colors to this palette (default: the project's default_palette)")
@@ -1081,6 +1158,9 @@ def build_parser() -> argparse.ArgumentParser:
         "preview", parents=[common, view], help="upscaled previews: contact sheet, frames, animated GIFs"
     )
     preview.add_argument("assets", nargs="+", help="asset files or names")
+    preview.add_argument(
+        "--scene", metavar="FILE", help="tilesets: also draw FILE's layout (rows of tile names, '.' = empty) to scene.png"
+    )
     preview.set_defaults(handler=cmd_preview)
 
     gallery_cmd = commands.add_parser(

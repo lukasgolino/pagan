@@ -55,6 +55,9 @@ variants:                     # recolors with identical geometry, built as <name
   fire: { ramp_swap: { green: warm } }            # ramps must be the same length
   ice:  { key_swap: { "5": "a", "6": "b" } }
   night: { palette: dusk_night }                  # same keys, another palette (+ swaps if needed)
+lint:                         # optional: warnings off for this asset only (any asset kind)
+  disable: [W005, W007]       # e.g. expanding bursts change shape by design
+  for: { idle_1: [W001] }     # ...or only for some frames/tiles/animations
 ```
 
 Frame order in the file = order in the sprite sheet (generated frames of mirrored animations come
@@ -71,10 +74,18 @@ tiles:
   grass: |
     ...16 rows of 16...
   grass_b: { from: grass, flip: horizontal }
+  water_0: |
+    ...
+animations:                   # animated tiles: the animation's name is the tile's name
+  water: { frames: [water_0, water_1, water_2, water_3], fps: 4 }   # always loops
 variants: ...                 # as for sprites
+lint: { for: { shore_0000: [W004] } }   # e.g. a corner set's fully transparent tile
 ```
 
-No mirror/outline/animations. Tiles should be seamless (preview shows a 3x3 tiling).
+No mirror/outline. Tiles should be seamless (preview shows a 3x3 tiling; `pagan preview <tileset>
+--scene layout.txt` draws a layout of different tiles to check the seams between them). An animated
+tile's frames sit side by side in the atlas (a new row if they don't fit; longer than `columns`: a
+block `columns` wide); each tile is a frame of at most one animation. Godot gets an animated atlas tile.
 
 ## 3D model - `models/<name>.model.yaml`
 
@@ -120,7 +131,11 @@ parts:                        # applied in order; later parts overwrite earlier 
     carve: false              # true removes voxels instead of adding them
   - line: { from: [2, -4, 10], to: [8, -4, 16], material: steel }
     id: sword
-    hidden: true              # not in the static frames; poses reveal it with `show: [sword]`
+    hidden: true              # an overlay: never in the normal frames; poses draw it with `show: [sword]`
+  - box: { from: [20, 3, 6], to: [22, 3, 7], material: hull }
+    id: shot_hole
+    hidden: true
+    carve: true               # hidden + carve: cuts a hole only in poses that `show: [shot_hole]`
 animations:                   # one pose per frame; parts move by whole voxels (consistent frames)
   sail:
     fps: 6
@@ -130,7 +145,15 @@ animations:                   # one pose per frame; parts move by whole voxels (
       - { pennant: { offset: [0, 1, 0] } }
       - { hide: [pennant] }                     # hide: take parts away for this frame
       - { show: [sword], sword: { offset: [1, 0, -2] } }   # show: reveal hidden parts
+  sinking:
+    fps: 2
+    loop: false
+    poses:
+      - { roll: 12 }                            # tilt the whole model about `origin` (exact, no resampling)
+      - { roll: 25, pitch: 8, show: [shot_hole] }
+      - { roll: 40, pitch: 15, mast: { roll: 60, about: [36, 0, 8] } }   # rotate one part about a hinge
 variants: ...                 # as for sprites
+lint: { for: { sinking: [W005] } }   # a pose animation name covers all its headings
 ```
 
 Coordinates: x = the model's front, y = its left, z = up; whole voxels (1 voxel = `camera.scale`
@@ -147,6 +170,16 @@ voxels aft. `triangle` fills a flat triangle between three points (`thickness` 1
 its exact normal. Frames: `<heading>` (static) and `<anim>_<heading>_<i>`;
 animations `<heading>` and `<anim>_<heading>` (1 direction: `main`, `<anim>_<i>`, `<anim>`).
 `pagan bake <model>` writes the rendered frames as an editable sprite.
+
+Hidden parts are overlays: they never change the normal frames, and a shown one is drawn over
+everything (a hidden `carve` part cuts instead). A visible `carve` part removes voxels from everything
+before it, hidden parts included. An id is either hidden or visible, not both.
+Poses: `roll` (degrees about the front-back axis; positive lowers the right/-y side) and `pitch`
+(positive tips the front down) tilt the whole model exactly. A part takes `offset` (whole voxels),
+`roll`/`pitch`/`yaw` (degrees, yaw counter-clockwise from above) and `about: [x, y, z]` (hinge; default
+the part's bottom centre); rotated parts are resampled, so keep rotations for things that fall or break.
+Sizing: `pagan fit <model>` renders every heading and pose and prints the smallest `size` and `pivot`
+that hold them all (origin stays on the pivot), plus the frames the current size clips.
 
 ## Recipes
 
@@ -184,6 +217,25 @@ braced ~30° so they read from every heading, `line` for spars, flags as small b
 
 **Icons and items (2D).** 16x16 sprite, `outline: auto`, light from the top-left, one or two ramps,
 `mirror: horizontal` only if the light can be symmetric.
+
+## Generator scripts: `pagan.api`
+
+When a script is quicker than hand-written grids (effects, corner/terrain sets, families of ships), build
+on `from pagan import api` instead of copying PAGAN's maths; it's versioned with PAGAN (`api.API_VERSION`).
+
+- `api.Canvas(w, h)`: `put`, `rect`, `line`, `circle`, `ellipse`, `ring`, `blit`, `flip`; a key can be a
+  function `(dx, dy) -> key` (offsets in radii, -1..1); `fade(amount, seed)` dissolves from the edge,
+  `scatter(n, key, seed, box, size)`, `orphans()` (exactly W001), `remove_orphans()`, `pair_orphans()`, `rows()`.
+- Shading: `light_2d(project)` (the project's light for flat art), `sphere_light(dx, dy, light)`,
+  `ramp_pick(keys, t)`, `hash01(x, y, seed)`, `periodic_noise(x, y, period, seed)` (seamless), `smoothstep`.
+- Terrain: `corner_tiles(prefix, size, paint, seed, amp)` -> the 16 Match-Corners tiles
+  `<prefix>_<NW><NE><SW><SE>`; `paint(field, x, y, corners)` returns a key, `field(x, y) >= 0.5` = upper
+  terrain. `compose(tileset_asset, "a b\nb a")` -> a PIL image of a layout.
+- 3D: `shape_cells(shape, spec)` = the voxels a part fills; `hull_reach(x, length, beam, bow, stern, keel)`;
+  `sail_cells(at, width, height, bulge, brace, rig, yard)` -> cells with their cloth position (`u`, `row`),
+  e.g. to place patches or gun ports exactly on a sail or hull side.
+- Files: `sprite_yaml(name, size, frames, animations, **fields)`, `tileset_yaml(...)`, `write(path, text)`
+  (writes only on change), `load(path)` -> parsed asset, `open_project(path)`, `palette(name, project)`.
 
 ## `pagan.toml`
 
@@ -226,13 +278,14 @@ require_outline = false            # E011
 | `pagan new tiles <name> [--size] [--frames N]` | blank tileset |
 | `pagan new model <name> [--size 64x64] [--directions 8]` | starter model |
 | `pagan lint [paths] [--warnings-as-errors]` | errors + style warnings |
-| `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb]` | sheet.png (labelled), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale |
+| `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb] [--scene FILE]` | sheet.png (labelled), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale; `--scene` (tilesets): scene.png from a layout file (rows of tile names, `.` = empty) |
 | `pagan gallery` | every asset in one image |
 | `pagan render <asset...>` | native-size PNGs |
 | `pagan palette show [palettes]` | swatches |
 | `pagan palette adjust <pal> [--lightness d] [--contrast k] [--saturation k] [--hue deg] [--warmth d] [--ramp r] [--keys ...] [--out new] [--dry-run]` | change the look globally |
 | `pagan import <png> [--palette P \| --open] [--scale N] [--name] [--out]` | PNG -> sprite (snaps colors, report) |
 | `pagan bake <model> [--name]` | model -> editable sprite (default name `<model>_baked`) |
+| `pagan fit <model> [--margin N]` | smallest size + pivot that fit every heading and pose |
 | `pagan status` | catalogue + what needs attention |
 | `pagan config show` / `get <key>` / `set <key> <value>` / `unset <key>` | project settings: value, default, meaning; validated edits; unset = back to default |
 | `pagan mark <asset...> [--status approved] [--current] [--outdated]` | record reviews |
@@ -250,19 +303,23 @@ E013 model problem.
 Warnings: W001 orphan pixel, W002 unused frame, W003 too many ramps, W004 empty frame, W005 visible area
 jumps between frames, W006 made under an older style version, W007 too much change between frames,
 W008 too many shades from one ramp (sprites) / in one material (models), when `max_ramp_steps` is set.
+Turn warnings off project-wide with `[lint] disable`, or per asset/frame/animation with the file's `lint:`.
+W001 isn't checked on 3D models (a rendered orphan can't be fixed pixel by pixel).
 
 ## Build output (any engine)
 
 `manifest.json` in `output_dir` describes everything: per asset its kind, sheet, frame rects, animations
 (frames, fps, loop), pivot, `godot_offset`, headings (models), tiles (`name -> [column, row]` for
-tilesets), variants, and `normal_sheet` (when "normals" is exported: RGB = normal * 0.5 + 0.5, x right,
+tilesets; an animated tile is listed by its animation name at its first frame's cell, and the tileset
+gets `animations`), variants, and `normal_sheet` (when "normals" is exported: RGB = normal * 0.5 + 0.5, x right,
 y up, z towards the viewer). Pivots aren't stored in engine resources: apply them in the game.
 
 ## Godot
 
 `pagan build` writes `sprites/<name>.png` + `<name>.tres` (SpriteFrames, one animation per PAGAN
 animation; sprites without animations get one per frame), `tiles/<name>.png` + `<name>.tres` (TileSet:
-one atlas source, every tile created; add terrains/physics in the editor), plus `manifest.json`.
+one atlas source, every tile created, animated tiles as atlas tile animations; add terrains/physics in
+the editor), plus `manifest.json`.
 Apply the pivot in code: `sprite.centered = true; sprite.offset = Vector2(godot_offset[0], godot_offset[1])`.
 Project settings for crisp pixels: Default Texture Filter = Nearest, stretch mode `viewport`, scale mode
 `integer`, snap 2D transforms to pixel.

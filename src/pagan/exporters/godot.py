@@ -84,9 +84,30 @@ def sprite_frames_tres(
     return "\n".join(lines)
 
 
-def tileset_tres(atlas_res: str, tile_size: tuple[int, int], coords: list[tuple[int, int]]) -> str:
+@dataclass(frozen=True)
+class AtlasTile:
+    """One tile of a TileSet atlas. An animated tile's frames follow it to the right (wrapping every
+    `columns` cells when columns > 0), each shown for 1/fps seconds."""
+
+    column: int
+    row: int
+    frames: int = 1
+    columns: int = 0
+    fps: float = 1.0
+
+
+def tileset_tres(atlas_res: str, tile_size: tuple[int, int], tiles: list[AtlasTile]) -> str:
     """TileSet resource text: one TileSetAtlasSource over the atlas, a tile at every (column, row)."""
     width, height = tile_size
+    tile_lines: list[str] = []
+    for tile in tiles:
+        cell = f"{tile.column}:{tile.row}"
+        if tile.frames > 1:
+            if tile.columns:
+                tile_lines.append(f"{cell}/animation_columns = {tile.columns}")
+            tile_lines.append(f"{cell}/animation_speed = {float(tile.fps)!r}")
+            tile_lines += [f"{cell}/animation_frame_{i}/duration = 1.0" for i in range(tile.frames)]
+        tile_lines.append(f"{cell}/0 = 0")
     lines = [
         '[gd_resource type="TileSet" format=3]',
         "",
@@ -95,7 +116,7 @@ def tileset_tres(atlas_res: str, tile_size: tuple[int, int], coords: list[tuple[
         '[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_0"]',
         'texture = ExtResource("1_atlas")',
         f"texture_region_size = Vector2i({width}, {height})",
-        *(f"{col}:{row}/0 = 0" for col, row in coords),
+        *tile_lines,
         "",
         "[resource]",
         f"tile_size = Vector2i({width}, {height})",

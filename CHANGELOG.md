@@ -12,6 +12,43 @@ A new version (and tag) is cut for **any** change to:
 While on 0.x, a minor bump (0.1 -> 0.2) may change any of these; read the notes before upgrading.
 Patch bumps (0.1.0 -> 0.1.1) never change them.
 
+## Unreleased (planned 0.3.0)
+
+From orchestrator reports R7-R14 (ORCHESTRATOR_PLAN.md, Age of Boom G2-G3).
+
+### Upgrading from 0.2.0
+
+- **Hidden parts are overlays now.** A `hidden: true` part never changes the normal frames, and when a
+  pose shows it, it's drawn over everything. Before, a hidden part that overlapped visible voxels cut
+  them out of the normal frames, and visible parts placed later cut holes in it. Affected models render
+  differently where that happened (Age of Boom: the sloop's deck had 3 voxels missing in every heading;
+  the torn-sail copies were missing voxels in the damaged frames).
+- An id used by both hidden and visible parts is now an error (E013).
+- Model render caches are invalidated (`RENDERER_VERSION` 4): the first build re-renders every model.
+- W001 (orphan pixel) is no longer checked on 3D models, and model findings say `frames.<name>` with no
+  source line (they said `tiles.<name>` and pointed at the `parts:` line).
+- Tilesets accept `animations:`; a tileset without them is laid out and exported exactly as before.
+
+### Changes
+
+- Per-asset lint suppression (R7): `lint: { disable: [W005, W007], for: { <frame|tile|animation>: [W004] } }`
+  in any sprite, tileset or model (a model's pose animation name covers all its headings). `pagan build`
+  and `pagan lint` count warnings per rule (`W007×40, W005×11`); `build --json` has `warnings_by_rule`.
+- Animated tiles (R8): tileset `animations: { water: { frames: [...], fps } }`. Frames are laid out side by
+  side in the atlas; the Godot TileSet gets an animated atlas tile (verified in Godot 4.7.2); the manifest
+  lists the tile by its animation name and adds `animations` to the tileset entry.
+- Pose rotation (R9): `roll`/`pitch` in a pose tilt the whole model about its origin (rendered exactly);
+  a part takes `roll`/`pitch`/`yaw` and `about: [x, y, z]` (hinge) as well as `offset`.
+- Hidden carve parts (R10): `hidden: true` + `carve: true` cut holes only in poses that show them.
+- `pagan.api` (R11, R12): a stable Python API for generator scripts: `Canvas` drawing (ellipse, ring,
+  fade, scatter, orphan handling matching W001), project-light shading, seamless noise, Match-Corners
+  tile generation, tile-layout `compose`, the exact `hull`/`sail` geometry (`hull_reach`, `sail_cells`,
+  `shape_cells`) and canonical sprite/tileset YAML writers.
+- `pagan preview <tileset> --scene layout.txt` draws a layout of different tiles (R12).
+- `pagan fit <model>` (R13): the smallest size and pivot that fit every heading and pose, and which
+  frames the current size clips. E007 on models now counts the clipped frames and points at `pagan fit`.
+- Demo: animated `water` tileset.
+
 ## 0.2.0 — 2026-10-15
 
 From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN log, and review round 3.

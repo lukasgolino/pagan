@@ -39,6 +39,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `build.py` `pagan build` (sheets, manifest.json, stale cleanup); `exporters/godot.py` SpriteFrames .tres + headless verify;
   - `manage.py` long-term management: catalogue (`pagan status`), palette adjust, `mark`, `style bump` (text edits keep comments);
   - `settings.py` registry of every pagan.toml setting (default, meaning, what it refreshes) + safe `pagan config set` edits;
+  - `api.py` stable Python API for generator scripts (drawing, shading, corner sets, exact hull/sail geometry, YAML writers);
   - `swatch.py` palette swatch images; `templates/` files copied by `pagan init`.
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
@@ -107,3 +108,8 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-15: Sizes are the requester's choice (owner): skill explains the detail trade-off and the two ways up (camera.scale for chunkier, more voxels for detail).
 - 2026-10-15: Release v0.1.0 tagged locally (owner approved); CHANGELOG.md defines what forces a version bump.
 - 2026-10-15: Release v0.2.0 tagged locally (owner approved): orchestrator reports R1-R6, Age of Boom log fixes, review round 3.
+- 2026-10-16: Hidden model parts are overlays (never change normal frames; shown = drawn on top; hidden+carve = pose-only hole); an id is hidden or visible, not both.
+- 2026-10-16: Whole-model `roll`/`pitch` are rendered exactly (camera rotation, no resampling); part rotations resample voxels (forward + inverse mapping, no gaps).
+- 2026-10-16: Generators get `pagan.api` instead of more notation (owner, R11/R12); its functions are the ones the primitives use, and it's covered by versioning (`API_VERSION`).
+- 2026-10-16: Animated tiles: frames side by side in the atlas (new row if they don't fit); tilesets without animations keep the old layout byte for byte.
+- 2026-10-16: Per-asset `lint:` (disable / for) instead of tag-based defaults: explicit in the file.

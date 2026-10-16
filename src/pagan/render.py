@@ -46,11 +46,48 @@ def sheet_columns(asset: Asset) -> int:
 def frame_rects(asset: Asset) -> dict[str, tuple[int, int, int, int]]:
     """Frame -> (x, y, w, h) in the sheet, in source order (stable when frames are appended)."""
     width, height = asset.size
+    if asset.kind == "tileset":
+        cells = tile_cells(asset)
+        return {name: (cells[name][0] * width, cells[name][1] * height, width, height) for name in asset.frames}
     columns = sheet_columns(asset)
     return {
         name: ((i % columns) * width, (i // columns) * height, width, height)
         for i, name in enumerate(asset.frames)
     }
+
+
+def tile_cells(asset: Asset) -> dict[str, tuple[int, int]]:
+    """Atlas cell (column, row) of every tile, filled row by row in source order, `columns` wide.
+
+    An animated tile's frames sit side by side in animation order (engines step through neighbouring
+    cells), starting on a new row if they wouldn't fit in the current one; an animation longer than a
+    row wraps into a block `columns` wide. Without animations this is plain source order.
+    """
+    columns = asset.columns
+    animation_of = {frame: anim for anim in asset.animations.values() for frame in anim.frames}
+    cells: dict[str, tuple[int, int]] = {}
+    col = row = 0
+    for name in asset.frames:
+        if name in cells:
+            continue
+        anim = animation_of.get(name)
+        group = anim.frames if anim is not None else (name,)
+        count = len(group)
+        if count <= columns:
+            if col + count > columns:
+                col, row = 0, row + 1
+            for i, frame in enumerate(group):
+                cells[frame] = (col + i, row)
+            col += count
+            if col == columns:
+                col, row = 0, row + 1
+        else:
+            if col:
+                col, row = 0, row + 1
+            for i, frame in enumerate(group):
+                cells[frame] = (i % columns, row + i // columns)
+            row += -(-count // columns)
+    return cells
 
 
 def sheet_image(asset: Asset, variant: str | None = None) -> Image.Image:

@@ -107,13 +107,22 @@ size). Small means less detail; that's the deal, so say so if a request is small
   (`from`/`flip`/`shift`) save time, but mirroring lights both sides the same, which is wrong when the light
   comes from one side. Use them for front-facing symmetric subjects or where the difference can't be seen;
   never trade a worse sprite for less work.
-- **Tileset** (`pagan new tiles`) for terrain; tiles must be seamless.
+- **Tileset** (`pagan new tiles`) for terrain; tiles must be seamless. Animated terrain (water, lava)
+  is a tileset `animations:` entry, not a separate sprite. Check transitions between different tiles
+  with `pagan preview <tileset> --scene layout.txt`.
+- **Many similar assets or procedural shapes** (effect bursts, 16-tile corner sets, a family of ships):
+  write a generator script on `pagan.api` (reference.md) - never copy PAGAN's geometry or lint rules into
+  your own code; they'd drift. Keep the script next to the art and regenerate rather than hand-edit.
 
 **The loop** (cap at ~4 rounds, then show the owner what you have):
 1. Scaffold: `pagan new sprite|model|tiles <name> --size WxH --description "..."` (description = what it
    is and what it should look like; future you will rely on it).
 2. Author the grid / parts. Write rows carefully: every row exactly the frame width.
 3. `pagan lint <file>` -> fix every error; read warnings (orphans, ramps, jitter) and fix real ones.
+   A warning that's wrong *by design* for one asset (an expanding burst trips W005/W007) goes in that
+   file's `lint: { disable: [...] }` or `lint: { for: { <frame>: [...] } }` - never in pagan.toml, which
+   would hide real problems everywhere. Models: `pagan fit <model>` gives a size and pivot that fit
+   every heading and pose (after adding animations, run it again).
 4. `pagan preview <name>` -> **open `previews/<name>/sheet.png` with the Read tool and look at it.**
 5. Self-review against STYLE.md and the reference assets (`pagan gallery` shows the whole set):
    silhouette readable at 1x? light from the right side? ramps used dark->light? no pillow shading?
@@ -146,7 +155,10 @@ in `pagan gallery`, then delete the losers and keep the winner under the real na
   then remove/rename the sprite (asset names must be unique). Models already have them: change
   `directions`.
 - **New animation** (sword swing, walk, hop): models -> add parts with `id:` and an `animations:` entry
-  with one pose per frame; 2D -> add frames (derive with `from`/`shift` where possible) and an
+  with one pose per frame (parts move by whole voxels; `roll`/`pitch` tilt the whole model, e.g. a ship
+  listing as it sinks; a part can rotate about a hinge, e.g. a falling mast). Damage and extras are
+  `hidden: true` parts (overlays: they never alter the normal frames; with `carve: true` they cut holes)
+  that poses `show`; 2D -> add frames (derive with `from`/`shift` where possible) and an
   `animations` entry. Keep everything that shouldn't move on exactly the same pixels; check the changes
   row and W007. Typical frame counts: idle 2-4, walk 4-6, attack 3-5.
 - **"Make an enemy / another character"**: new asset in the same style - same palette, outline, light,

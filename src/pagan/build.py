@@ -16,11 +16,18 @@ from PIL import Image
 
 from pagan import __version__
 from pagan.asset import Animation, Asset
-from pagan.exporters.godot import centered_offset, find_godot_project, res_path, sprite_frames_tres, tileset_tres
+from pagan.exporters.godot import (
+    AtlasTile,
+    centered_offset,
+    find_godot_project,
+    res_path,
+    sprite_frames_tres,
+    tileset_tres,
+)
 from pagan.findings import Finding
 from pagan.lint import LintResult, lint_paths
 from pagan.project import Project
-from pagan.render import frame_rects, save_png, sheet_image
+from pagan.render import frame_rects, save_png, sheet_image, tile_cells
 
 MANIFEST = "manifest.json"
 
@@ -110,8 +117,7 @@ def build(project: Project) -> BuildResult:
             if godot_root is not None:
                 tres = folder / f"{stem}.tres"
                 if asset.kind == "tileset":
-                    coords = [(x // asset.size[0], y // asset.size[1]) for x, y, _, _ in rects.values()]
-                    text = tileset_tres(res_path(sheet, godot_root), asset.size, coords)
+                    text = tileset_tres(res_path(sheet, godot_root), asset.size, _atlas_tiles(asset))
                     info["godot_tileset"] = res_path(tres, godot_root)
                 else:
                     normal_res = res_path(normal_sheet, godot_root) if normal_sheet is not None else None
@@ -134,7 +140,11 @@ def build(project: Project) -> BuildResult:
         }
         if asset.kind == "tileset":
             entry["columns"] = asset.columns
-            entry["tiles"] = {name: [x // asset.size[0], y // asset.size[1]] for name, (x, y, _, _) in rects.items()}
+            entry["tiles"] = {name: list(cell) for name, cell in _tile_names(asset).items()}
+            if asset.animations:
+                entry["animations"] = {
+                    a.name: {"frames": list(a.frames), "fps": a.fps, "loop": True} for a in asset.animations.values()
+                }
         else:
             entry["pivot"] = list(asset.pivot)
             entry["godot_offset"] = list(centered_offset(asset.size, asset.pivot))
@@ -165,6 +175,28 @@ def build(project: Project) -> BuildResult:
             imported = stale.with_name(stale.name + ".import")  # Godot's sidecar for the removed file
             imported.unlink(missing_ok=True)
     return result
+
+
+def _tile_names(asset: Asset) -> dict[str, tuple[int, int]]:
+    """Tile name -> atlas cell. An animated tile is named after its animation, at its first frame's cell;
+    its frames aren't tiles of their own."""
+    cells = tile_cells(asset)
+    frames_of_animations = {f for a in asset.animations.values() for f in a.frames}
+    names = {name: cell for name, cell in cells.items() if name not in frames_of_animations}
+    names.update({a.name: cells[a.frames[0]] for a in asset.animations.values()})
+    return dict(sorted(names.items(), key=lambda item: (item[1][1], item[1][0])))
+
+
+def _atlas_tiles(asset: Asset) -> list[AtlasTile]:
+    tiles = []
+    for name, (column, row) in _tile_names(asset).items():
+        anim = asset.animations.get(name)
+        if anim is None:
+            tiles.append(AtlasTile(column, row))
+        else:
+            wraps = len(anim.frames) > asset.columns
+            tiles.append(AtlasTile(column, row, len(anim.frames), asset.columns if wraps else 0, anim.fps))
+    return tiles
 
 
 def _normal_sheet(asset: Asset, rects: dict[str, tuple[int, int, int, int]]) -> Image.Image:
