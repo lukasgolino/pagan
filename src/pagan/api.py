@@ -32,7 +32,7 @@ from pagan.project import Project, discover_project
 from pagan.render import frame_image
 from pagan.voxel import Cell, Material, VoxelModel
 
-API_VERSION = 1
+API_VERSION = 2  # 2: ellipse/ring exclude pixel centres exactly on the edge
 
 __all__ = [
     "API_VERSION",
@@ -47,6 +47,7 @@ __all__ = [
     "open_project",
     "palette",
     "periodic_noise",
+    "polygon_distance",
     "ramp_pick",
     "sail_cells",
     "shape_cells",
@@ -58,6 +59,8 @@ __all__ = [
 ]
 
 Key = str | Callable[[float, float], str | None]  # a palette key, or (dx, dy) -> key/None per pixel
+EdgeKey = str | Callable[[float], str | None]  # a palette key, or distance-to-edge -> key/None per pixel
+Point = tuple[float, float]
 
 
 # --- projects and assets ------------------------------------------------------------------------
@@ -132,12 +135,13 @@ class Canvas:
         return self
 
     def ellipse(self, cx: float, cy: float, rx: float, ry: float, key: Key) -> Canvas:
-        """Fill pixels whose centres lie inside the ellipse. A callable key gets the pixel's offset from
+        """Fill pixels whose centres lie strictly inside the ellipse (a centre exactly on the edge, as with
+        radius 15.5 around 16, would stick out as a 1px nub). A callable key gets the pixel's offset from
         the centre in radii (dx, dy in -1..1), e.g. for sphere shading with `sphere_light`."""
         for y in range(math.floor(cy - ry), math.ceil(cy + ry) + 1):
             for x in range(math.floor(cx - rx), math.ceil(cx + rx) + 1):
                 dx, dy = (x + 0.5 - cx) / rx, (y + 0.5 - cy) / ry
-                if dx * dx + dy * dy <= 1 + 1e-9:
+                if dx * dx + dy * dy < 1 - 1e-9:
                     self._paint(x, y, key, dx, dy)
         return self
 
@@ -150,7 +154,7 @@ class Canvas:
         for y in range(math.floor(cy - ry), math.ceil(cy + ry) + 1):
             for x in range(math.floor(cx - rx), math.ceil(cx + rx) + 1):
                 dx, dy = (x + 0.5 - cx) / rx, (y + 0.5 - cy) / ry
-                if dx * dx + dy * dy > 1 + 1e-9:
+                if dx * dx + dy * dy >= 1 - 1e-9:
                     continue
                 if inner_x > 0 and inner_y > 0:
                     ix, iy = (x + 0.5 - cx) / inner_x, (y + 0.5 - cy) / inner_y
@@ -159,13 +163,43 @@ class Canvas:
                 self._paint(x, y, key, dx, dy)
         return self
 
-    def line(self, x0: float, y0: float, x1: float, y1: float, key: str) -> Canvas:
-        """A 1px line between two points (pixel centres: pass 3.5 for the middle of pixel 3)."""
-        steps = max(1, math.ceil(max(abs(x1 - x0), abs(y1 - y0))))
-        for i in range(steps + 1):
-            t = i / steps
-            self.put(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, key)
+    def line(self, x0: float, y0: float, x1: float, y1: float, key: str, width: float = 1) -> Canvas:
+        """A line between two points (pixel centres: pass 3.5 for the middle of pixel 3). Width 1 steps
+        pixel by pixel; a wider line fills every pixel whose centre is within width/2 of the segment
+        (round ends), e.g. for thick strokes and laser beams."""
+        if width <= 1:
+            steps = max(1, math.ceil(max(abs(x1 - x0), abs(y1 - y0))))
+            for i in range(steps + 1):
+                t = i / steps
+                self.put(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, key)
+            return self
+        half = width / 2
+        for y in range(math.floor(min(y0, y1) - half), math.ceil(max(y0, y1) + half) + 1):
+            for x in range(math.floor(min(x0, x1) - half), math.ceil(max(x0, x1) + half) + 1):
+                if _segment_distance(x + 0.5, y + 0.5, (x0, y0), (x1, y1)) < half - 1e-9:
+                    self.put(x, y, key)
         return self
+
+    def polygon(self, points: Sequence[Point], key: EdgeKey) -> Canvas:
+        """Fill pixels whose centres lie inside the polygon (even-odd rule; points in order, either winding).
+        A callable key gets the pixel centre's distance to the nearest edge in pixels (0 at the outline,
+        growing inwards), so rims, bevels and inner glows are one function:
+        `c.polygon(ship, lambda d: "rim" if d < 2 else "fill")`."""
+        if len(points) < 3:
+            raise ValueError("a polygon needs at least 3 points")
+        xs, ys = [p[0] for p in points], [p[1] for p in points]
+        for y in range(math.floor(min(ys)), math.ceil(max(ys)) + 1):
+            for x in range(math.floor(min(xs)), math.ceil(max(xs)) + 1):
+                depth = polygon_distance(points, x + 0.5, y + 0.5)
+                if depth > 1e-9:
+                    value = key(depth) if callable(key) else key
+                    if value is not None:
+                        self.put(x, y, value)
+        return self
+
+    def triangle(self, a: Point, b: Point, c: Point, key: EdgeKey) -> Canvas:
+        """A filled triangle; see `polygon`."""
+        return self.polygon([a, b, c], key)
 
     def blit(self, other: Canvas, x: int, y: int) -> Canvas:
         """Draw `other` with its top-left at (x, y); its transparent pixels leave this canvas alone."""
@@ -228,6 +262,31 @@ class Canvas:
                     self.pixels[ny][nx] = self.pixels[y][x]
                     break
         return self
+
+
+# --- geometry ---------------------------------------------------------------------------------
+
+
+def _segment_distance(px: float, py: float, a: Point, b: Point) -> float:
+    ax, ay = a
+    bx, by = b
+    dx, dy = bx - ax, by - ay
+    length2 = dx * dx + dy * dy
+    t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length2))
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+
+def polygon_distance(points: Sequence[Point], x: float, y: float) -> float:
+    """Signed distance from (x, y) to the polygon's outline: positive inside, negative outside (even-odd
+    rule). Pixel centres are (x + 0.5, y + 0.5). This is what `Canvas.polygon` fills and passes to its key."""
+    inside = False
+    nearest = math.inf
+    for i, a in enumerate(points):
+        b = points[i - 1]
+        if (a[1] > y) != (b[1] > y) and x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]:
+            inside = not inside
+        nearest = min(nearest, _segment_distance(x, y, a, b))
+    return nearest if inside else -nearest
 
 
 # --- noise and shading ------------------------------------------------------------------------

@@ -32,6 +32,7 @@ from pagan.asset import (
     _parse_variant_axes,
     _parse_variants,
     _resolve_palette,
+    check_base_variant,
 )
 from pagan.findings import Finding, has_errors
 from pagan.palette import TRANSPARENT, Palette
@@ -58,7 +59,7 @@ _MODEL_FIELDS = (
     "name", "description", "palette", "variants", "tags", "status", "style_version",
     "size", "pivot", "origin", "outline", "outline_color", "directions", "heading",
     "camera", "light", "materials", "parts", "animations", "lint", "variant_axes",
-    "extends", "remove", "template",
+    "extends", "remove", "template", "base_variant", "supersample",
 )  # fmt: skip
 # Not inherited through `extends`: what the asset is, and how it's built/reviewed.
 _OWN_FIELDS = ("name", "description", "tags", "status", "style_version", "lint", "template", "extends", "remove")
@@ -1015,6 +1016,7 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
     variants = _parse_variants(data.get("variants"), setup.palette, project, _line(data, "variants"), used, error)
     variant_axes, combos = _parse_variant_axes(data.get("variant_axes"), setup.palette, project, _line(data, "variant_axes"), used, variants, error)
     variants.update(combos)
+    check_base_variant(setup.meta["base_variant"], variants, _line(data, "base_variant"), error)
     lint_targets: dict[str, tuple[str, ...]] = {name: (name,) for name in [*frames, *setup.animations]}
     for pose_name in setup.pose_names:  # `damaged` covers damaged_<heading> and its frames
         covered = [a for a in setup.animations if a == pose_name or a.startswith(f"{pose_name}_")]

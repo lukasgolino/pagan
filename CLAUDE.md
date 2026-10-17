@@ -40,7 +40,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `manage.py` long-term management: catalogue (`pagan status`), palette adjust, `mark`, `style bump` (text edits keep comments);
   - `settings.py` registry of every pagan.toml setting (default, meaning, what it refreshes) + safe `pagan config set` edits;
   - `api.py` stable Python API for generator scripts (drawing, shading, corner sets, exact hull/sail geometry, YAML writers);
-  - `swatch.py` palette swatch images; `templates/` files copied by `pagan init`.
+  - `swatch.py` palette swatch images; `templates/` files copied by `pagan init` (STYLE.md for pixel art, STYLE_flat.md for flat art).
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
 - `tests/` — pytest suite
@@ -119,3 +119,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-16: PAGAN stays general-purpose (owner): features from one game's reports get generic names and docs examples; no game-specific notation.
 - 2026-10-16: R15: models `extends` a `template: true` base (own-identity fields not inherited; materials/animations/variants merge by name; `remove` drops base part ids). `variant_axes` combinations are variants named `a+b` ("+" can't occur in names, so no clashes); axes must change disjoint keys.
 - 2026-10-16: Release v0.4.0 tagged locally (owner approved): orchestrator reports R15-R17.
+- 2026-10-17: Space IO report S1-S10 (flat / vector arcade game): PAGAN isn't only pixel art. Smooth output is
+  `supersample` (sources stay palette-keyed and linted; only build output blends); `[godot] mipmaps` edits just the
+  `mipmaps/generate` line of Godot's `.import` (minimal file if none; Godot fills the rest), `filter` is a CanvasTexture
+  `texture_filter` on SpriteFrames (TileSets: set on the TileMapLayer). Ellipses exclude edge-exact pixel centres (API_VERSION 2).

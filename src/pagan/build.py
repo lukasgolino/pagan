@@ -20,15 +20,17 @@ from pagan.exporters.godot import (
     AtlasTile,
     centered_offset,
     find_godot_project,
+    import_mipmaps,
     res_path,
     sprite_frames_tres,
+    texture_filter,
     tileset_tres,
 )
 from pagan.findings import Finding
 from pagan.lint import LintResult, lint_paths
 from pagan.palette import TRANSPARENT
 from pagan.project import Project
-from pagan.render import frame_rects, save_png, sheet_image, tile_cells
+from pagan.render import downsample, frame_rects, save_png, sheet_image, supersample_factor, tile_cells
 
 MANIFEST = "manifest.json"
 
@@ -99,30 +101,41 @@ def build(project: Project) -> BuildResult:
     entries: dict[str, Any] = {}
     produced: set[Path] = set()
 
+    godot = project.config.godot
+    filter_mode = texture_filter(godot.filter, godot.mipmaps)
+
+    def write_png(path: Path, image: Image.Image) -> None:
+        _write(path, _png_bytes(image, scratch), result)
+        produced.add(path.resolve())
+        if godot_root is not None:
+            imported = import_mipmaps(path, godot.mipmaps)
+            if imported is not None:
+                result.written.append(imported)
+
     for asset in sorted((a for a in lint.assets if not a.template), key=lambda a: a.name):
         folder = out / ("tiles" if asset.kind == "tileset" else "sprites")
-        rects = frame_rects(asset)
+        factor = supersample_factor(asset, project)
+        size = (asset.size[0] // factor, asset.size[1] // factor)
+        rects = {name: (x // factor, y // factor, w // factor, h // factor) for name, (x, y, w, h) in frame_rects(asset).items()}
         animations = _animations_for(asset) if asset.kind != "tileset" else []
         normal_sheet: Path | None = None
         if "normals" in exporters and asset.normal_maps is not None:
             normal_sheet = folder / f"{asset.name}.normal.png"
-            _write(normal_sheet, _png_bytes(_normal_sheet(asset, rects), scratch), result)
-            produced.add(normal_sheet.resolve())
+            write_png(normal_sheet, downsample(_normal_sheet(asset, frame_rects(asset)), factor))
 
         def emit(variant: str | None) -> dict[str, Any]:
             stem = asset.name if variant is None else f"{asset.name}.{variant}"
             sheet = folder / f"{stem}.png"
-            _write(sheet, _png_bytes(sheet_image(asset, variant), scratch), result)
-            produced.add(sheet.resolve())
+            write_png(sheet, downsample(sheet_image(asset, variant), factor))
             info: dict[str, Any] = {"sheet": _ref(sheet, out, godot_root)}
             if godot_root is not None:
                 tres = folder / f"{stem}.tres"
                 if asset.kind == "tileset":
-                    text = tileset_tres(res_path(sheet, godot_root), asset.size, _atlas_tiles(asset))
+                    text = tileset_tres(res_path(sheet, godot_root), size, _atlas_tiles(asset))
                     info["godot_tileset"] = res_path(tres, godot_root)
                 else:
                     normal_res = res_path(normal_sheet, godot_root) if normal_sheet is not None else None
-                    text = sprite_frames_tres(res_path(sheet, godot_root), rects, animations, normal_res)
+                    text = sprite_frames_tres(res_path(sheet, godot_root), rects, animations, normal_res, filter_mode)
                     info["godot_sprite_frames"] = res_path(tres, godot_root)
                 _write(tres, text.encode("utf-8"), result)
                 produced.add(tres.resolve())
@@ -135,7 +148,7 @@ def build(project: Project) -> BuildResult:
             "status": asset.status,
             "style_version": asset.style_version,
             "palette": asset.palette.name,
-            "size": list(asset.size),
+            "size": list(size),
             **emit(None),
             "frames": {name: list(rect) for name, rect in rects.items()},
         }
@@ -147,8 +160,9 @@ def build(project: Project) -> BuildResult:
                     a.name: {"frames": list(a.frames), "fps": a.fps, "loop": True} for a in asset.animations.values()
                 }
         else:
-            entry["pivot"] = list(asset.pivot)
-            entry["godot_offset"] = list(centered_offset(asset.size, asset.pivot))
+            pivot = (_shrink(asset.pivot[0], factor), _shrink(asset.pivot[1], factor))
+            entry["pivot"] = list(pivot)
+            entry["godot_offset"] = list(centered_offset(size, pivot))
             entry["animations"] = {
                 a.name: {"frames": list(a.frames), "fps": a.fps, "loop": a.loop} for a in animations
             }
@@ -156,7 +170,14 @@ def build(project: Project) -> BuildResult:
             entry["headings"] = [a.name for a in asset.animations.values() if a.frames == (a.name,)]
         if normal_sheet is not None:
             entry["normal_sheet"] = _ref(normal_sheet, out, godot_root)
+        if factor > 1:
+            entry["supersample"] = factor
+            entry["source_size"] = list(asset.size)
         variants: dict[str, Any] = {}
+        if asset.base_variant is not None:  # the base under its own name, so the game sees one uniform set
+            entry["base_variant"] = asset.base_variant
+            base_files = {k: entry[k] for k in ("sheet", "godot_sprite_frames", "godot_tileset") if k in entry}
+            variants[asset.base_variant] = {**(base_files if project.config.variant_sheets else {}), "swap": {}, "swap_exact": True}
         axis_options = {f"{axis}.{name}": v for axis, options in asset.variant_axes.items() for name, v in options.items()}
         for v in [*asset.variants, *axis_options]:
             variant = asset.variants[v] if v in asset.variants else axis_options[v]
@@ -204,6 +225,11 @@ def build(project: Project) -> BuildResult:
             imported = stale.with_name(stale.name + ".import")  # Godot's sidecar for the removed file
             imported.unlink(missing_ok=True)
     return result
+
+
+def _shrink(value: int, factor: int) -> int | float:
+    """A source pixel coordinate in output pixels: an int when it lands on a pixel edge."""
+    return value // factor if value % factor == 0 else value / factor
 
 
 def variant_swap(asset: Asset, v: Variant) -> tuple[dict[str, str], bool]:

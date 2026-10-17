@@ -24,7 +24,7 @@ from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_st
 from pagan.palette import KEY_ORDER, NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.preview import PreviewOptions, gallery, write_previews
-from pagan.render import frame_image, save_png, sheet_image
+from pagan.render import frame_image, save_png, sheet_image, supersample_factor
 from pagan.settings import BY_KEY, Change, describe, set_in_toml, set_setting, unset_setting
 from pagan.swatch import render_swatch
 
@@ -69,6 +69,19 @@ def _require_project() -> Project:
 # --- pagan init -------------------------------------------------------------------------------
 
 
+# perspective -> (camera.elevation, what it means)
+PERSPECTIVES: dict[str, tuple[float, str]] = {
+    "top-down": (90.0, "straight down"),
+    "top-down-3/4": (42.0, "top-down 3/4, seeing fronts and tops"),
+    "side": (15.0, "side-on"),
+    "iso": (30.0, "isometric, 2:1 pixel-art projection"),
+}
+STYLES = {
+    "pixel": "traditional pixel art: outline, painted light, shading ramps",
+    "flat": "flat / vector-like arcade shapes: fill + rim, no outline, no painted light, glow by the engine",
+}
+
+
 def cmd_init(args: argparse.Namespace, out: Output) -> int:
     root = Path(args.dir)
     config_path = root / CONFIG_NAME
@@ -87,6 +100,8 @@ def cmd_init(args: argparse.Namespace, out: Output) -> int:
 
     mode = "open" if args.open else "strict"
     config_text = Template(_template("pagan.toml")).substitute(palette_mode=mode)
+    if args.perspective is not None:
+        config_text = set_in_toml(config_text, "camera.elevation", PERSPECTIVES[args.perspective][0])
     if godot_root is not None:
         output = Path(os.path.relpath((godot_root / "assets" / "generated").resolve(), root.resolve())).as_posix()
         config_text = set_in_toml(config_text, "output_dir", output)
@@ -102,9 +117,21 @@ def cmd_init(args: argparse.Namespace, out: Output) -> int:
             gdignore.write_text("", encoding="utf-8")
             created.append(gdignore)
 
+    perspective = (
+        f"{args.perspective} ({PERSPECTIVES[args.perspective][1]}; `[camera] elevation` in pagan.toml)"
+        if args.perspective is not None
+        else "TODO (top-down 3/4, straight top-down, side-on, isometric) — `pagan config set camera.elevation`: "
+        "90 straight down, 42 top-down 3/4, 30 isometric, 15 side-on"
+    )
+    style = (
+        f"{args.style} ({STYLES[args.style]})"
+        if args.style is not None
+        else "TODO (pixel art, or flat / vector-like arcade shapes) — see STYLE.md"
+    )
+    brief = Template(_template("BRIEF.md")).safe_substitute(perspective=perspective, style=style)
     for name, content in (
-        ("STYLE.md", _template("STYLE.md")),
-        ("BRIEF.md", _template("BRIEF.md")),
+        ("STYLE.md", _template("STYLE_flat.md" if args.style == "flat" else "STYLE.md")),
+        ("BRIEF.md", brief),
         (".gitignore", "previews/\n.pagan-cache/\n"),
     ):
         path = root / name
@@ -131,10 +158,14 @@ def cmd_init(args: argparse.Namespace, out: Output) -> int:
         out.say(f"Builds go to {display_path(godot_root / 'assets' / 'generated')} as PNG + Godot resources.")
     if mode == "strict":
         out.say("Next: `pagan new palette <name>`, then `pagan config set default_palette <name>`.")
+    if args.perspective is not None:
+        out.say(f"Perspective {args.perspective}: camera.elevation = {PERSPECTIVES[args.perspective][0]:g} (used by 3D models).")
     out.result(
         {
             "project": display_path(root),
             "palette_mode": mode,
+            "perspective": args.perspective,
+            "style": args.style,
             "godot_project": display_path(godot_root) if godot_root is not None else None,
             "created": [display_path(p) for p in created],
             "skipped": [display_path(p) for p in skipped],
@@ -487,13 +518,15 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
     assets, findings = _load_targets(args.assets, project)
     outputs: list[dict[str, Any]] = []
     for asset in assets:
-        result = write_previews(asset, project.preview_dir, options)
+        result = write_previews(asset, project.preview_dir, options, supersample_factor(asset, project))
         out.say(f"{asset.name}: {display_path(result.sheet)}  (x{result.scale})")
         out.say(f"  montage (no labels, on the background): {display_path(result.montage)}")
         for gif in result.gifs:
             out.say(f"  animation: {display_path(gif)}")
         if result.variants is not None and result.variants_1x is not None:
             out.say(f"  variants side by side: {display_path(result.variants)} (1x: {display_path(result.variants_1x)})")
+        if result.built_1x is not None:
+            out.say(f"  as built (supersampled down, what the game gets): {display_path(result.built_1x)}")
         out.say(
             f"  frames: {display_path(result.sheet.parent / 'frames')}/ ({len(result.frames)} PNGs at x{result.scale}; "
             "1x PNGs: `pagan render`)"
@@ -513,6 +546,7 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
                 **({"scene": display_path(scene)} if scene is not None else {}),
                 **({"variants": display_path(result.variants)} if result.variants is not None else {}),
                 **({"variants_1x": display_path(result.variants_1x)} if result.variants_1x is not None else {}),
+                **({"built_1x": display_path(result.built_1x)} if result.built_1x is not None else {}),
             }
         )
     if findings:
@@ -909,14 +943,16 @@ def cmd_palette_adjust(args: argparse.Namespace, out: Output) -> int:
 
 def cmd_config_show(args: argparse.Namespace, out: Output) -> int:
     project = _require_project()
-    rows = describe(project.config)
+    has_models = project.models_dir.is_dir() and any(project.models_dir.rglob(f"*{MODEL_SUFFIX}"))
+    rows = [{**row, "used": has_models or row["refreshes"] != "models"} for row in describe(project.config)]
     if out.as_json:
         print(json.dumps({"ok": True, "config": display_path(project.config_path or project.root), "settings": rows}, indent=2))
         return 0
     print(f"{display_path(project.config_path or project.root)}  (change with `pagan config set <key> <value>`)")
     for row in rows:
         marker = " " if row["is_default"] else "*"
-        print(f"{marker} {row['key']:<26} = {json.dumps(row['value']):<22} {row['meaning']}")
+        unused = "" if row["used"] else "(unused: no 3D models) "
+        print(f"{marker} {row['key']:<26} = {json.dumps(row['value']):<22} {unused}{row['meaning']}")
     print("* = changed from the default. 'models' settings re-render every 3D model on the next build/preview.")
     return 0
 
@@ -1089,6 +1125,10 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("dir", nargs="?", default=".", help="project directory (default: current)")
     init.add_argument("--open", action="store_true", help="open palette mode: sprites may define inline palettes")
     init.add_argument("--godot", metavar="DIR", help="Godot project dir: build into DIR/assets/generated with Godot resources")
+    init.add_argument(
+        "--perspective", choices=list(PERSPECTIVES), help="the game's view; sets [camera] elevation and BRIEF.md (default: top-down-3/4)"
+    )
+    init.add_argument("--style", choices=list(STYLES), help="pixel (default) or flat (vector-like arcade): picks the STYLE.md template")
     init.set_defaults(handler=cmd_init)
 
     new = commands.add_parser("new", help="scaffold a new source file")

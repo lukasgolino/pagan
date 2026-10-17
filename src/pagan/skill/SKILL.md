@@ -1,6 +1,6 @@
 ---
 name: pagan
-description: Make and maintain pixel-art game assets with PAGAN (Pixel Art Grammar And Notation) - sprites, characters, enemies, items, tiles, icons, 3D ships/vehicles/buildings rendered in 4/8/16 directions, animations - and change a game's art style over time (camera angle, light direction, darker, more contrast, pastel, more shadows, new palette). Use whenever a user or an orchestrating agent asks for game art, a sprite, an asset, a tileset, rotations/headings, an animation, or a look change, or mentions pagan / pagan.toml.
+description: Make and maintain pixel-art (and flat / vector-like arcade) game assets with PAGAN (Pixel Art Grammar And Notation) - sprites, characters, enemies, items, tiles, icons, 3D ships/vehicles/buildings rendered in 4/8/16 directions, animations - and change a game's art style over time (camera angle, light direction, darker, more contrast, pastel, more shadows, new palette). Use whenever a user or an orchestrating agent asks for game art, a sprite, an asset, a tileset, rotations/headings, an animation, or a look change, or mentions pagan / pagan.toml.
 ---
 
 # PAGAN: making game art as text
@@ -51,6 +51,10 @@ setting, its current value, its default and what it means. Every one can change 
 | `light.baked` + `export` "normals" | true / off | "the game has its own lighting" (flat colors + normal maps) |
 | `default_palette` | (chosen at setup) | "try a different palette" |
 | `camera.scale` | 1 | "everything 3D should be bigger/smaller" |
+| `supersample` | 1 (off) | "smooth edges", "sprites rotate freely", "not pixel art" (draw at 2x, build smooths) |
+| `godot.filter` / `godot.mipmaps` | inherit / false | "blurry/shimmering when rotated or scaled" (linear + mipmaps) |
+
+`[camera]`/`[light]` only matter for 3D models; `config show` marks them unused when there are none.
 
 `pagan config set <key> <value>` validates and saves the change (invalid values are rejected; nothing is
 written). It then tells you what refreshes: **3D models re-render automatically** on the next `pagan
@@ -65,16 +69,31 @@ Ask once, in ONE compact message, each question with a recommended default so th
 "defaults":
 
 1. **The game** - name, genre, what the player does. (needed for BRIEF.md)
-2. **Perspective** - top-down 3/4 (default), straight top-down, side-on, or isometric. Sets `[camera]`.
-3. **Mood / references** - e.g. "warm and earthy", "neon", "Stardew-like", "Hyper Light Drifter".
-4. **Sizes** - small things 16x16 (default) or 32x32; big things (vehicles, bosses) e.g. 64-96px.
-5. **Look rules** - dark 1px outline (default) or none; light from the top-left (default).
-6. **Engine** - Godot 4 (default; give the path to the Godot project) or plain PNGs.
+2. **Rendering style** - traditional pixel art (default), or flat / vector-like arcade shapes (neon
+   triangles, glowing lines, no outlines or painted light), or painterly. Ask this; don't assume pixel art.
+3. **Perspective** - top-down 3/4 (default), straight top-down, side-on, or isometric. Sets `[camera]`.
+4. **Mood / references** - e.g. "warm and earthy", "neon", "Stardew-like", "Hyper Light Drifter".
+5. **Sizes** - small things 16x16 (default) or 32x32; big things (vehicles, bosses) e.g. 64-96px.
+   Does the game rotate or scale sprites freely? (then: supersample, below)
+6. **Look rules** (pixel art) - dark 1px outline (default) or none; light from the top-left (default).
+7. **Engine** - Godot 4 (default; give the path to the Godot project) or plain PNGs.
+
+Recipes per rendering style:
+- **Pixel art** - the rest of this skill's defaults: outline, light from the top-left, ramps dark -> light,
+  no pillow shading. These are pixel-art defaults, not PAGAN requirements.
+- **Flat / vector arcade** - `pagan init --style flat`: no outline, no painted light or shading ramps;
+  each object is a filled shape with a paler rim (`api.Canvas.polygon(points, lambda d: rim if d < 2 else
+  fill)`), lines/lasers with `line(..., width=)`; glow and lighting are done by the engine. If sprites rotate
+  freely: `pagan config set supersample 2` (draw at 2x, the build writes smooth anti-aliased PNGs) and in Godot
+  `godot.filter linear` + `godot.mipmaps true`. Show the owner one flat shape before detailing anything.
+- **Painterly** - pixel-art workflow with more ramp steps, soft dithering and no outline; consider
+  `supersample 2` for soft edges.
 
 Then:
-- `pagan init art` inside the game repo (`--godot <godot project dir>` to build straight into it;
-  `--open` only for throwaway prototypes). Inside a Godot project, init writes `.gdignore` so Godot
-  doesn't import the art sources.
+- `pagan init art --perspective <top-down|top-down-3/4|side|iso> --style <pixel|flat>` inside the game repo
+  (`--godot <godot project dir>` to build straight into it; `--open` only for throwaway prototypes). The
+  perspective sets `[camera] elevation` and is written into BRIEF.md. Inside a Godot project, init writes
+  `.gdignore` so Godot doesn't import the art sources.
 - Palette: propose 2-3 palettes (16-32 colors, grouped into ramps dark -> light; one ramp per material:
   skin, wood, foliage, stone, metal, cloth...). Write them to `palettes/`, run `pagan palette show`,
   **look at the swatches**, show the owner the paths, let them pick or tweak. Set `default_palette`.
@@ -110,7 +129,8 @@ size). Small means less detail; that's the deal, so say so if a request is small
 - **Tileset** (`pagan new tiles`) for terrain; tiles must be seamless. Animated terrain (water, lava)
   is a tileset `animations:` entry, not a separate sprite. Check transitions between different tiles
   with `pagan preview <tileset> --scene layout.txt`.
-- **Many similar assets or procedural shapes** (effect bursts, 16-tile corner sets, a family of ships):
+- **Many similar assets or procedural shapes** (effect bursts, 16-tile corner sets, a family of ships,
+  polygon ships with rims):
   write a generator script on `pagan.api` (reference.md) - never copy PAGAN's geometry or lint rules into
   your own code; they'd drift. Keep the script next to the art and regenerate rather than hand-edit.
 
@@ -126,6 +146,7 @@ size). Small means less detail; that's the deal, so say so if a request is small
 4. `pagan preview <name>` -> **open `previews/<name>/sheet.png` with the Read tool and look at it.**
 5. Self-review against STYLE.md and the reference assets (`pagan gallery` shows the whole set):
    silhouette readable at 1x? light from the right side? ramps used dark->light? no pillow shading?
+   (flat style: clean shapes, even rims, no stray pixels.) Supersampled: judge `built_1x.png`, not the source.
    consistent with the other assets' size and detail? For animations: the "changes" row should only
    light up the parts that are meant to move - no jumps.
 6. Show the owner: the sheet path (and GIF paths), a one-line summary, and any choice you made.
@@ -164,7 +185,8 @@ in `pagan gallery`, then delete the losers and keep the winner under the real na
 - **"Make an enemy / another character"**: new asset in the same style - same palette, outline, light,
   proportions; compare side by side with `pagan gallery`. Variants (`variants:` ramp_swap/key_swap/
   palette) are the cheap way to make recolored versions (elite enemy, night version, team colours);
-  `pagan preview` writes variants.png to compare them. Many variants of big models multiply sheet sizes:
+  `pagan preview` writes variants.png to compare them. When the base colours are one of the set (team
+  cyan + red/orange/...), name them with `base_variant: cyan` so the manifest lists all of them uniformly. Many variants of big models multiply sheet sizes:
   if the game can recolour in a shader, set `variant_sheets = false` and point it at each variant's
   `swap` table in manifest.json.
 - **A family of related assets** (character classes, unit types, building tiers): put the shared body in a

@@ -64,6 +64,10 @@ variant_axes:                 # recolours that combine (any asset kind): one opt
   team: { red: { ramp_swap: { cloth: red } }, blue: { ramp_swap: { cloth: blue } } }
   rank: { none: {}, elite: { key_swap: { "4": "a" } } }   # {} = leave this axis as it is
                               # axes must recolour different keys; builds red+none, red+elite, blue+none...
+base_variant: cyan            # optional (any asset kind): the base colours' name; the manifest lists the
+                              # base sheet under variants.cyan too, so the game sees one uniform set
+supersample: 2                # optional (any asset kind): drawn at 2x the size the game gets; the build
+                              # box-filters it down (smooth edges, partial alpha). Default: pagan.toml `supersample`
 lint:                         # optional: warnings off for this asset only (any asset kind)
   disable: [W005, W007]       # e.g. expanding bursts change shape by design
   for: { idle_1: [W001] }     # ...or only for some frames/tiles/animations
@@ -239,8 +243,12 @@ braced ~30° so they read from every heading, `line` for spars, flags as small b
 When a script is quicker than hand-written grids (effects, corner/terrain sets, families of ships), build
 on `from pagan import api` instead of copying PAGAN's maths; it's versioned with PAGAN (`api.API_VERSION`).
 
-- `api.Canvas(w, h)`: `put`, `rect`, `line`, `circle`, `ellipse`, `ring`, `blit`, `flip`; a key can be a
-  function `(dx, dy) -> key` (offsets in radii, -1..1); `fade(amount, seed)` dissolves from the edge,
+- `api.Canvas(w, h)`: `put`, `rect`, `line` (`width=` for thick strokes, round ends), `circle`, `ellipse`, `ring`,
+  `polygon(points, key)`, `triangle(a, b, c, key)`, `blit`, `flip`; for rect/ellipse/ring a key can be a
+  function `(dx, dy) -> key` (offsets in radii, -1..1); for polygon/triangle a function `d -> key` (d = pixel
+  centre's distance to the nearest edge in pixels: `lambda d: "rim" if d < 2 else "fill"` = a 2px rim);
+  shapes fill pixels whose centres are strictly inside; `api.polygon_distance(points, x, y)` is the signed
+  distance (+ inside). `fade(amount, seed)` dissolves from the edge,
   `scatter(n, key, seed, box, size)`, `orphans()` (exactly W001), `remove_orphans()`, `pair_orphans()`, `rows()`.
 - Shading: `light_2d(project)` (the project's light for flat art), `sphere_light(dx, dy, light)`,
   `ramp_pick(keys, t)`, `hash01(x, y, seed)`, `periodic_noise(x, y, period, seed)` (seamless), `smoothstep`.
@@ -262,6 +270,7 @@ output_dir = "../game/assets/generated"
 preview_dir = "previews"
 export = ["png", "godot"]          # PNG sheets + manifest always; + "godot" (.tres, needs project.godot above output_dir), "normals"
 variant_sheets = true              # false: no sheet/.tres per variant, only its swap table in the manifest
+supersample = 1                    # N > 1: sources drawn at N x, build box-filters down (smooth, non-pixel-art)
 style_version = 1
 
 [camera]                           # used by every model
@@ -276,6 +285,10 @@ shadow_strength = 0.65             # how dark cast shadows are
 wrap = 0.3                         # light wrapping around curves (softer shading)
 baked = true                       # false: flat colors for engine lighting (+ export "normals")
 
+[godot]                            # with export "godot"
+mipmaps = false                    # true: PAGAN sets mipmaps/generate in each PNG's .import (kept across builds)
+filter = "inherit"                 # SpriteFrames texture filter: inherit (node/project) | nearest | linear
+
 [lint]
 max_ramps_per_sprite = 3            # W003 for sprites/tilesets
 max_ramps_per_model = 6             # W003 for 3D models           # W003
@@ -289,13 +302,13 @@ require_outline = false            # E011
 
 | Command | Purpose |
 |---|---|
-| `pagan init [dir] [--open]` | create a project |
+| `pagan init [dir] [--open] [--godot DIR] [--perspective top-down\|top-down-3/4\|side\|iso] [--style pixel\|flat]` | create a project; perspective sets `[camera] elevation` (90/42/15/30) and BRIEF.md; `--style flat` = STYLE.md for flat / vector-like arcade art |
 | `pagan new palette <name>` | starter palette |
 | `pagan new sprite <name> [--size 16x16] [--frames N] [--directions 1\|4\|8] [--mirror] [--outline] [--palette P] [--description D]` | blank sprite; `--directions 4` scaffolds down/up/left frames + a mirrored right animation |
 | `pagan new tiles <name> [--size] [--frames N]` | blank tileset |
 | `pagan new model <name> [--size 64x64] [--directions 8]` | starter model |
 | `pagan lint [paths] [--warnings-as-errors]` | errors + style warnings |
-| `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb] [--scene FILE]` | sheet.png (labelled), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale; variants.png + variants_1x.png (base and every variant side by side) when the asset has variants; `--scene` (tilesets): scene.png from a layout file (rows of tile names, `.` = empty) |
+| `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb] [--scene FILE]` | sheet.png (labelled), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale; variants.png + variants_1x.png (base and every variant side by side) when the asset has variants; `--scene` (tilesets): scene.png from a layout file (rows of tile names, `.` = empty); supersampled assets also get an "as built" row and built_1x.png (what the game gets) |
 | `pagan gallery` | every asset in one image |
 | `pagan render <asset...>` | native-size PNGs |
 | `pagan palette show [palettes]` | swatches |
@@ -315,7 +328,7 @@ require_outline = false            # E011
 Errors: E000 command/usage, E001 YAML/field, E002 unknown pixel key, E003 grid size, E004 missing
 animation frame, E005 palette problem, E006 variant problem, E007 outline clipped at the edge, E008 pivot,
 E009 inline palette in strict mode, E010 derived frame, E011 outline required, E012 duplicate asset name,
-E013 model problem.
+E013 model problem. E003 also: a size that isn't a multiple of `supersample`.
 
 Warnings: W001 orphan pixel, W002 unused frame, W003 too many ramps, W004 empty frame, W005 visible area
 jumps between frames, W006 made under an older style version, W007 too much change between frames,
@@ -334,7 +347,11 @@ keys share a base colour but not a variant colour, so a shader swap would be wro
 `variant_sheets = false` that's error E006), `variant_axes` (per axis, per option: `swap`, `swap_exact`;
 apply one option's swap per axis together - with `variant_sheets = false` the combinations aren't listed
 in `variants`, the game composes them), and `normal_sheet` (when "normals" is exported: RGB = normal * 0.5 + 0.5, x right,
-y up, z towards the viewer). Pivots aren't stored in engine resources: apply them in the game.
+y up, z towards the viewer). Supersampled assets: `size`, frame rects and `pivot` are in output pixels
+(`pivot` may be fractional), plus `supersample` and `source_size`; their sheets blend colours at edges, so
+a shader swap by exact colour misses the blended pixels: use variant sheets for them. `base_variant` (when
+set) names the base, also listed under `variants` with its sheet and an empty swap. Pivots aren't stored
+in engine resources: apply them in the game.
 
 ## Godot
 
@@ -345,3 +362,6 @@ the editor), plus `manifest.json`.
 Apply the pivot in code: `sprite.centered = true; sprite.offset = Vector2(godot_offset[0], godot_offset[1])`.
 Project settings for crisp pixels: Default Texture Filter = Nearest, stretch mode `viewport`, scale mode
 `integer`, snap 2D transforms to pixel.
+Smooth, freely rotated or scaled sprites: `[godot] filter = "linear"` (the SpriteFrames' CanvasTexture
+carries it) and `mipmaps = true` (PAGAN keeps `mipmaps/generate` in each PNG's `.import`; Godot keeps its
+other import settings). TileSets have no filter of their own: set `texture_filter` on the TileMapLayer.

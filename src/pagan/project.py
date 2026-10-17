@@ -17,6 +17,8 @@ from pagan.voxel import Camera, Light
 CONFIG_NAME = "pagan.toml"
 PALETTE_MODES = ("strict", "open")
 EXPORTERS = ("png", "godot", "normals")
+GODOT_FILTERS = ("inherit", "nearest", "linear")
+MAX_SUPERSAMPLE = 8
 
 PaletteMode = Literal["strict", "open"]
 
@@ -32,6 +34,12 @@ class LintConfig:
 
 
 @dataclass(frozen=True)
+class GodotConfig:
+    mipmaps: bool = False  # written into each PNG's .import (mipmaps/generate)
+    filter: str = "inherit"  # SpriteFrames texture filter: inherit (the node/project decides), nearest, linear
+
+
+@dataclass(frozen=True)
 class Config:
     palette_mode: PaletteMode = "strict"
     default_palette: str | None = None
@@ -40,9 +48,11 @@ class Config:
     export: tuple[str, ...] = ("png",)
     style_version: int = 1
     variant_sheets: bool = True  # False: variants are only swap tables in the manifest (recolour in a shader)
+    supersample: int = 1  # sources are authored at N x the output size; build box-filters them down
     lint: LintConfig = field(default_factory=LintConfig)
     camera: Camera = field(default_factory=Camera)
     light: Light = field(default_factory=Light)
+    godot: GodotConfig = field(default_factory=GodotConfig)
 
 
 @dataclass(frozen=True)
@@ -138,8 +148,8 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
 
     defaults = Config()
     allowed = (
-        "palette_mode", "default_palette", "output_dir", "preview_dir", "export", "style_version", "variant_sheets", "lint",
-        "camera", "light",
+        "palette_mode", "default_palette", "output_dir", "preview_dir", "export", "style_version", "variant_sheets",
+        "supersample", "lint", "camera", "light", "godot",
     )  # fmt: skip
     for key in data:
         if key not in allowed:
@@ -178,6 +188,12 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         error("variant_sheets must be true or false", "variant_sheets")
         variant_sheets = defaults.variant_sheets
 
+    supersample = data.get("supersample", defaults.supersample)
+    if isinstance(supersample, bool) or not isinstance(supersample, int) or not 1 <= supersample <= MAX_SUPERSAMPLE:
+        error(f"supersample must be a whole number 1-{MAX_SUPERSAMPLE} (1 = off)", "supersample")
+        supersample = defaults.supersample
+
+    godot = _parse_godot(data.get("godot", {}), error)
     lint = _parse_lint(data.get("lint", {}), error)
     camera, light = parse_render(data.get("camera", {}), data.get("light", {}), error)
 
@@ -191,10 +207,31 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         export=tuple(export),
         style_version=style_version,
         variant_sheets=variant_sheets,
+        supersample=supersample,
         lint=lint,
         camera=camera,
         light=light,
+        godot=godot,
     )
+
+
+def _parse_godot(data: Any, error: Callable[[str, str], None]) -> GodotConfig:
+    defaults = GodotConfig()
+    if not isinstance(data, dict):
+        error("[godot] must be a table", "godot")
+        return defaults
+    for key in data:
+        if key not in ("mipmaps", "filter"):
+            error(f"unknown godot setting {key!r}; allowed: mipmaps, filter", f"godot.{key}")
+    mipmaps = data.get("mipmaps", defaults.mipmaps)
+    if not isinstance(mipmaps, bool):
+        error("godot.mipmaps must be true or false", "godot.mipmaps")
+        mipmaps = defaults.mipmaps
+    texture_filter = data.get("filter", defaults.filter)
+    if texture_filter not in GODOT_FILTERS:
+        error(f"godot.filter must be one of {', '.join(GODOT_FILTERS)}", "godot.filter")
+        texture_filter = defaults.filter
+    return GodotConfig(mipmaps=mipmaps, filter=texture_filter)
 
 
 def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:

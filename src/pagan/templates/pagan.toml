@@ -22,6 +22,10 @@ export = ["png"]
 # from each variant's "swap" table (base colour -> variant colour) in manifest.json.
 variant_sheets = true
 
+# Smooth (anti-aliased) output for art that isn't pixel art, e.g. sprites the game rotates freely: draw
+# sources at N x the size the game gets, and `pagan build` box-filters them down. 1 = off (pixel-exact).
+supersample = 1
+
 # Bump this when STYLE.md changes in a way that means existing art should be revisited (e.g. "more
 # shadows"). Assets record the style_version they were made under; older ones get lint warning W006.
 # Palette color changes don't need a bump: every asset picks them up automatically.
@@ -40,6 +44,11 @@ shadows = true                   # parts cast shadows on each other
 shadow_strength = 0.65           # how dark cast shadows are (0-1)
 wrap = 0.3                       # how far light wraps around curves (0-1, higher = softer)
 baked = true                     # false: flat colors for engines with their own lighting (+ export "normals")
+
+# Only with export "godot".
+[godot]
+mipmaps = false                  # import the PNGs with mipmaps (sprites drawn scaled down or rotated)
+filter = "inherit"               # SpriteFrames texture filter: inherit (node/project decides), nearest, linear
 
 [lint]
 # W003: warn when a sprite uses colors from more than this many ramps.

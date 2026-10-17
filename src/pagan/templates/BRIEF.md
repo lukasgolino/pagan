@@ -8,7 +8,8 @@ the way. Agents read this (with STYLE.md) before making or changing any asset, a
 
 - **Title / working name:** TODO
 - **Genre and core loop:** TODO (e.g. top-down naval exploration; sail, trade, fight)
-- **Perspective:** TODO (top-down 3/4, side-on, isometric, straight top-down) — drives `[camera]` in pagan.toml
+- **Perspective:** $perspective
+- **Rendering style:** $style
 - **Mood / references:** TODO (games, films, palettes the look should evoke)
 - **Target resolution:** TODO (e.g. 480x270 scaled x4)
 

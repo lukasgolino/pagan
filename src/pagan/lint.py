@@ -75,6 +75,7 @@ def lint_paths(project: Project, paths: list[Path] | None = None) -> LintResult:
         if asset is not None:
             assets.append(asset)
             findings.extend(lint_asset(asset, project))
+            findings.extend(_check_supersample(asset, project))
     by_name: dict[str, list[Asset]] = {}
     for asset in assets:
         by_name.setdefault(asset.name, []).append(asset)
@@ -96,6 +97,26 @@ def lint_paths(project: Project, paths: list[Path] | None = None) -> LintResult:
     disabled = set(project.config.lint.disable)
     findings = [f for f in findings if f.rule not in disabled]
     return LintResult(files=files, findings=_dedupe(findings), assets=assets)
+
+
+def _check_supersample(asset: Asset, project: Project) -> list[Finding]:
+    """Supersampled assets are box-filtered down by N, so the frame size must be a multiple of N."""
+    factor = asset.supersample if asset.supersample is not None else project.config.supersample
+    width, height = asset.size
+    if width % factor == 0 and height % factor == 0:
+        return []
+    source = "its supersample" if asset.supersample is not None else "pagan.toml supersample"
+    field = "tile_size" if asset.kind == "tileset" else "size"
+    return [
+        Finding(
+            "E003",
+            f"{field} {width}x{height} isn't a multiple of {source} ({factor}): the build shrinks every frame by "
+            f"{factor}. Use a size divisible by {factor}",
+            asset.path,
+            None,
+            field,
+        )
+    ]
 
 
 def _dedupe(findings: list[Finding]) -> list[Finding]:

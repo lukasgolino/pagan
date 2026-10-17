@@ -6,6 +6,9 @@ are a reasonable starting point.
 
 Rules that can be checked mechanically belong in `pagan.toml` too (see `[lint]`).
 
+These are **pixel-art** defaults (outline, painted light, shading ramps). For flat / vector-like arcade
+art, they don't apply: start from the flat template instead (`pagan init --style flat`).
+
 ## 1. Palette
 
 - Palette file: **TODO** (e.g. `palettes/my_palette.pal.yaml`, or "open" for per-sprite palettes)

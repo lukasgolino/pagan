@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 from pagan.findings import Finding, PaganError, has_errors
 from pagan.palette import TRANSPARENT, Palette, parse_palette
-from pagan.project import Project
+from pagan.project import MAX_SUPERSAMPLE, Project
 from pagan.yamlio import LineMap, YamlError, load_yaml
 
 SPRITE_SUFFIX = ".sprite.yaml"
@@ -32,7 +32,10 @@ Kind = Literal["sprite", "tileset", "model"]
 Grid = tuple[str, ...]  # rows of palette keys, "." = transparent
 ErrorFn = Callable[[str, str, int | None, str | None], None]
 
-_COMMON_FIELDS = ("name", "description", "palette", "variants", "variant_axes", "tags", "status", "style_version", "lint")
+_COMMON_FIELDS = (
+    "name", "description", "palette", "variants", "variant_axes", "base_variant", "tags", "status", "style_version", "lint",
+    "supersample",
+)  # fmt: skip
 WARNING_ID_RE = re.compile(r"^W\d{3}$")
 _SPRITE_FIELDS = (*_COMMON_FIELDS, "size", "pivot", "mirror", "outline", "outline_color", "frames", "animations")
 _TILESET_FIELDS = (*_COMMON_FIELDS, "tile_size", "columns", "tiles", "animations")
@@ -83,6 +86,8 @@ class Asset:
     template: bool = False  # models: only a base for `extends`; linted, never built
     # `variant_axes`: axis -> option -> recolour; every combination is also in `variants` as "<a>+<b>"
     variant_axes: dict[str, dict[str, Variant]] = field(default_factory=dict)
+    base_variant: str | None = None  # the name the base colours go by among the variants (e.g. "cyan")
+    supersample: int | None = None  # authored at N x the output size; None = the project's setting
     # 3D models only: renders screen-space normal maps per frame on demand (H x W x 3 arrays)
     normal_maps: Callable[[], dict[str, Any]] | None = field(default=None, compare=False, repr=False)
 
@@ -305,7 +310,26 @@ def _parse_metadata(data: dict[str, Any], error: ErrorFn) -> dict[str, Any]:
         error("E001", "style_version must be a positive integer", _line(data, "style_version"), "style_version")
         style_version = 1
     meta["style_version"] = style_version
+
+    base_variant = data.get("base_variant")
+    if base_variant is not None and not (isinstance(base_variant, str) and NAME_RE.match(base_variant)):
+        error("E006", "base_variant must be a variant name (lowercase letters, digits, '_' or '-')", _line(data, "base_variant"), "base_variant")
+        base_variant = None
+    meta["base_variant"] = base_variant
+
+    supersample = data.get("supersample")
+    if supersample is not None and (
+        isinstance(supersample, bool) or not isinstance(supersample, int) or not 1 <= supersample <= MAX_SUPERSAMPLE
+    ):
+        error("E001", f"supersample must be a whole number 1-{MAX_SUPERSAMPLE}", _line(data, "supersample"), "supersample")
+        supersample = None
+    meta["supersample"] = supersample
     return meta
+
+
+def check_base_variant(base_variant: str | None, variants: dict[str, Variant], line: int | None, error: ErrorFn) -> None:
+    if base_variant is not None and base_variant in variants:
+        error("E006", f"base_variant {base_variant!r} is also a variant's name; rename one", line, "base_variant")
 
 
 def _parse_lint(
@@ -977,6 +1001,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
         variants = _parse_variants(data.get("variants"), palette, project, _line(data, "variants"), used, error)
         variant_axes, combos = _parse_variant_axes(data.get("variant_axes"), palette, project, _line(data, "variant_axes"), used, variants, error)
         variants.update(combos)
+        check_base_variant(meta["base_variant"], variants, _line(data, "base_variant"), error)
 
     if has_errors(findings) or palette is None:
         return None, findings

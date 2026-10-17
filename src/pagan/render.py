@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
 from pagan.asset import Asset, Grid
 from pagan.palette import TRANSPARENT
+from pagan.project import Project
 
 RGBA = tuple[int, int, int, int]
 CLEAR: RGBA = (0, 0, 0, 0)
@@ -100,6 +102,31 @@ def sheet_image(asset: Asset, variant: str | None = None) -> Image.Image:
     for name, (x, y, _, _) in rects.items():
         sheet.paste(grid_image(asset.frames[name], table), (x, y))
     return sheet
+
+
+def supersample_factor(asset: Asset, project: Project) -> int:
+    """How many source pixels make one output pixel on each axis: the asset's `supersample`, else the project's."""
+    return asset.supersample if asset.supersample is not None else project.config.supersample
+
+
+def downsample(image: Image.Image, factor: int) -> Image.Image:
+    """Box-filter an RGBA image by `factor` (its size must be a multiple): each output pixel averages a
+    factor x factor block, colours weighted by alpha so edges against transparency don't darken.
+    Integer maths only, so output is identical on every machine."""
+    if factor == 1:
+        return image
+    data = np.asarray(image.convert("RGBA"), dtype=np.int64)
+    h, w = data.shape[0] // factor, data.shape[1] // factor
+    blocks = data.reshape(h, factor, w, factor, 4)
+    alpha = blocks[..., 3].sum(axis=(1, 3))
+    weighted = (blocks[..., :3] * blocks[..., 3:4]).sum(axis=(1, 3))
+    out = np.zeros((h, w, 4), dtype=np.int64)
+    covered = alpha > 0
+    out[covered, :3] = (weighted[covered] * 2 + alpha[covered][:, None]) // (alpha[covered][:, None] * 2)
+    n = factor * factor
+    out[..., 3] = (alpha * 2 + n) // (n * 2)
+    out[out[..., 3] == 0] = 0
+    return Image.fromarray(out.astype(np.uint8), "RGBA")
 
 
 def save_png(image: Image.Image, path: Path) -> None:

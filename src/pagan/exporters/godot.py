@@ -36,28 +36,69 @@ def _string(value: str) -> str:
     return f'"{escaped}"'
 
 
+# CanvasItem.TextureFilter values
+_FILTERS = {("nearest", False): 1, ("linear", False): 2, ("nearest", True): 3, ("linear", True): 4}
+
+
+def texture_filter(name: str, mipmaps: bool) -> int | None:
+    """The CanvasItem.TextureFilter for a `[godot] filter` setting; None = inherit from the node/project."""
+    return _FILTERS.get((name, mipmaps))
+
+
+def import_mipmaps(png: Path, mipmaps: bool) -> Path | None:
+    """Make Godot import `png` with or without mipmaps, by setting `mipmaps/generate` in its `.import`
+    sidecar (Godot reimports when the sidecar changes and keeps the other settings). Without a sidecar
+    and with mipmaps off, nothing is written: that's Godot's default. Returns the file if it changed."""
+    sidecar = png.with_name(png.name + ".import")
+    value = f"mipmaps/generate={'true' if mipmaps else 'false'}"
+    if not sidecar.is_file():
+        if not mipmaps:
+            return None
+        sidecar.write_text(f'[remap]\n\nimporter="texture"\ntype="CompressedTexture2D"\n\n[params]\n\n{value}\n', encoding="utf-8")
+        return sidecar
+    text = sidecar.read_text(encoding="utf-8")
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if line.startswith("mipmaps/generate="):
+            if line == value:
+                return None
+            lines[i] = value
+            break
+    else:
+        if "[params]" in lines:
+            at = lines.index("[params]") + 1
+            if at < len(lines) and lines[at] == "":
+                at += 1  # after the blank line Godot writes under the header
+            lines.insert(at, value)
+        else:
+            lines += ["[params]", "", value, ""]
+    sidecar.write_text("\n".join(lines), encoding="utf-8")
+    return sidecar
+
+
 def sprite_frames_tres(
     sheet_res: str,
     rects: dict[str, tuple[int, int, int, int]],
     animations: list[Animation],
     normal_res: str | None = None,
+    filter_mode: int | None = None,
 ) -> str:
     """SpriteFrames resource text: one AtlasTexture per frame, shared by every animation using it.
 
-    With `normal_res`, frames come from a CanvasTexture pairing the sheet with its normal map, so
-    Godot's 2D lights shade the sprite.
+    With `normal_res` (and/or a `filter_mode`), frames come from a CanvasTexture wrapping the sheet:
+    the normal map lets Godot's 2D lights shade the sprite, the filter overrides the node's.
     """
     frame_ids = {name: f"AtlasTexture_{i}" for i, name in enumerate(rects)}
     lines = ['[gd_resource type="SpriteFrames" format=3]', "", f'[ext_resource type="Texture2D" path={_string(sheet_res)} id="1_sheet"]']
     atlas = 'ExtResource("1_sheet")'
-    if normal_res is not None:
-        lines += [
-            f'[ext_resource type="Texture2D" path={_string(normal_res)} id="2_normal"]',
-            "",
-            '[sub_resource type="CanvasTexture" id="CanvasTexture_sheet"]',
-            'diffuse_texture = ExtResource("1_sheet")',
-            'normal_texture = ExtResource("2_normal")',
-        ]
+    if normal_res is not None or filter_mode is not None:
+        if normal_res is not None:
+            lines.append(f'[ext_resource type="Texture2D" path={_string(normal_res)} id="2_normal"]')
+        lines += ["", '[sub_resource type="CanvasTexture" id="CanvasTexture_sheet"]', 'diffuse_texture = ExtResource("1_sheet")']
+        if normal_res is not None:
+            lines.append('normal_texture = ExtResource("2_normal")')
+        if filter_mode is not None:
+            lines.append(f"texture_filter = {filter_mode}")
         atlas = 'SubResource("CanvasTexture_sheet")'
     lines.append("")
     for name, (x, y, w, h) in rects.items():
@@ -126,7 +167,7 @@ def tileset_tres(atlas_res: str, tile_size: tuple[int, int], tiles: list[AtlasTi
     return "\n".join(lines)
 
 
-def centered_offset(size: tuple[int, int], pivot: tuple[int, int]) -> tuple[float, float]:
+def centered_offset(size: tuple[int, int], pivot: tuple[float, float]) -> tuple[float, float]:
     """`offset` for an AnimatedSprite2D/Sprite2D with centered = true, putting the pivot on the node origin."""
     return (size[0] / 2 - pivot[0], size[1] / 2 - pivot[1])
 

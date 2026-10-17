@@ -49,3 +49,31 @@ def test_demo_scene_shows_every_asset(copies: tuple[Path, Path]) -> None:
     output = run.stdout + run.stderr
     assert run.returncode == 0 and "CHECK_OK" in output, output
     assert "SCRIPT ERROR" not in output and "ERROR:" not in output, output
+
+
+CHECK_FILTER = """\
+extends SceneTree
+func _init():
+	var frames: SpriteFrames = load("res://assets/generated/sprites/barrel.tres")
+	var texture = frames.get_frame_texture(frames.get_animation_names()[0], 0)
+	var canvas: CanvasTexture = texture.atlas
+	var sheet: Texture2D = canvas.diffuse_texture
+	print("FILTER ", canvas.texture_filter, " MIPMAPS ", sheet.get_image().has_mipmaps())
+	quit()
+"""
+
+
+def test_godot_mipmaps_and_filter(copies: tuple[Path, Path], tmp_path: Path) -> None:
+    """[godot] mipmaps/filter (Space IO S4): Godot imports with mipmaps and SpriteFrames carry the filter."""
+    demo, godot_root = copies
+    with (demo / "pagan.toml").open("a") as config:
+        config.write('\n[godot]\nmipmaps = true\nfilter = "linear"\n')
+    assert not build(load_project(demo)).errors
+    assert GODOT is not None
+    subprocess.run([GODOT, "--headless", "--path", str(godot_root), "--import"], capture_output=True, timeout=300)
+    script = tmp_path / "check_filter.gd"
+    script.write_text(CHECK_FILTER)
+    run = subprocess.run(
+        [GODOT, "--headless", "--path", str(godot_root), "-s", str(script)], capture_output=True, text=True, timeout=300
+    )
+    assert "FILTER 4 MIPMAPS true" in run.stdout, run.stdout + run.stderr

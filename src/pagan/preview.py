@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw
 
 from pagan.asset import Asset, Grid
 from pagan.palette import TRANSPARENT
-from pagan.render import frame_image
+from pagan.render import downsample, frame_image
 from pagan.swatch import _font
 
 BG_DARK = (30, 30, 36)
@@ -110,7 +110,7 @@ def _labelled_grid(title: str, subtitle: str, rows: list[tuple[str, list[tuple[s
     return sheet
 
 
-def contact_sheet(asset: Asset, options: PreviewOptions) -> Image.Image:
+def contact_sheet(asset: Asset, options: PreviewOptions, supersample: int = 1) -> Image.Image:
     scale = options.scale or auto_scale(asset.size)
     rows: list[tuple[str, list[tuple[str, Image.Image]]]] = []
     if asset.kind == "model":
@@ -127,7 +127,12 @@ def contact_sheet(asset: Asset, options: PreviewOptions) -> Image.Image:
     else:
         for variant in (None, *asset.variants):
             cells = [(name, upscale(frame_image(asset, name, variant), scale, options)) for name in asset.frames]
-            rows.append(("" if variant is None and not asset.variants else (variant or "base"), cells))
+            rows.append(("" if variant is None and not asset.variants else (variant or base_label(asset)), cells))
+    if supersample > 1:
+        # What the game gets: each frame box-filtered down, shown at the same on-screen size as the source.
+        names = [a.name for a in asset.animations.values() if a.frames == (a.name,)] if asset.kind == "model" else list(asset.frames)
+        cells = [(n, upscale(downsample(frame_image(asset, n), supersample), scale * supersample, options)) for n in names]
+        rows.append((f"as built: 1/{supersample} size, box-filtered (shown x{scale * supersample}; 1x: built_1x.png)", cells))
     if asset.kind == "tileset":
         rows.append(("tiled 3x3 (check seams)", [(name, upscale(tiled(asset, name, 3), max(1, scale // 2), options)) for name in asset.frames]))
     for anim in asset.animations.values():
@@ -204,6 +209,22 @@ class PreviewResult:
     scale: int
     variants: Path | None = None  # base + every variant side by side (only when the asset has variants)
     variants_1x: Path | None = None
+    built_1x: Path | None = None  # supersampled assets: the frames as built, 1x
+
+
+def base_label(asset: Asset) -> str:
+    """What the base colours are called next to the variants: the asset's base_variant, or "base"."""
+    return asset.base_variant or "base"
+
+
+def built_strip(asset: Asset, supersample: int, gap: int = 1) -> Image.Image:
+    """Every main frame as the build writes it (box-filtered by `supersample`), at 1x on transparent."""
+    names = [a.name for a in asset.animations.values() if a.frames == (a.name,)] if asset.kind == "model" else list(asset.frames)
+    width, height = asset.size[0] // supersample, asset.size[1] // supersample
+    strip = Image.new("RGBA", (len(names) * (width + gap) - gap, height), (0, 0, 0, 0))
+    for i, name in enumerate(names):
+        strip.alpha_composite(downsample(frame_image(asset, name), supersample), (i * (width + gap), 0))
+    return strip
 
 
 def representative_frame(asset: Asset) -> str:
@@ -215,7 +236,7 @@ def variants_image(asset: Asset, options: PreviewOptions) -> Image.Image:
     """The same frame in the base colours and every variant, labelled, at the preview scale."""
     scale = options.scale or auto_scale(asset.size)
     frame = representative_frame(asset)
-    cells = [(name or "base", upscale(frame_image(asset, frame, name), scale, options)) for name in (None, *asset.variants)]
+    cells = [(name or base_label(asset), upscale(frame_image(asset, frame, name), scale, options)) for name in (None, *asset.variants)]
     return _labelled_grid(f"{asset.name} variants  x{scale}", f"frame {frame}", [("", cells)])
 
 
@@ -250,7 +271,7 @@ def montage(asset: Asset, options: PreviewOptions, per_row: int = 8) -> Image.Im
     return out
 
 
-def write_previews(asset: Asset, out_dir: Path, options: PreviewOptions) -> PreviewResult:
+def write_previews(asset: Asset, out_dir: Path, options: PreviewOptions, supersample: int = 1) -> PreviewResult:
     scale = options.scale or auto_scale(asset.size)
     folder = out_dir / asset.name
     frames: list[Path] = []
@@ -266,7 +287,7 @@ def write_previews(asset: Asset, out_dir: Path, options: PreviewOptions) -> Prev
         animation_gif(asset, name, options, path)
         gifs.append(path)
     sheet = folder / "sheet.png"
-    contact_sheet(asset, options).save(sheet)
+    contact_sheet(asset, options, supersample).save(sheet)
     montage_path = folder / "montage.png"
     montage(asset, options).save(montage_path)
     result = PreviewResult(asset=asset.name, sheet=sheet, montage=montage_path, frames=frames, gifs=gifs, scale=scale)
@@ -275,6 +296,9 @@ def write_previews(asset: Asset, out_dir: Path, options: PreviewOptions) -> Prev
         variants_image(asset, options).save(result.variants)
         result.variants_1x = folder / "variants_1x.png"
         variants_strip(asset).save(result.variants_1x)
+    if supersample > 1:
+        result.built_1x = folder / "built_1x.png"
+        built_strip(asset, supersample).save(result.built_1x)
     return result
 
 

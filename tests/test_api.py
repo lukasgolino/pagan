@@ -16,9 +16,10 @@ from pagan.project import Project
 
 def test_canvas_shapes() -> None:
     c = api.Canvas(9, 9).circle(4.5, 4.5, 3, "1")
-    assert c.get(4, 4) == "1" and c.get(0, 0) == "." and c.rows()[4] == "." + "1" * 7 + "."
+    # a pixel centre exactly on the edge (x = 1.5, 3 from the centre) is outside: no 1px nubs (Space IO S5)
+    assert c.get(4, 4) == "1" and c.get(0, 0) == "." and c.rows()[4] == ".." + "1" * 5 + ".."
     ring = api.Canvas(9, 9).ring(4.5, 4.5, 4, 4, 1, "2")
-    assert ring.get(4, 4) == "." and ring.get(4, 0) == "2"
+    assert ring.get(4, 4) == "." and ring.get(4, 1) == "2" and ring.get(4, 0) == "."
     line = api.Canvas(4, 4).line(0.5, 0.5, 3.5, 3.5, "3")
     assert [line.get(i, i) for i in range(4)] == ["3"] * 4
     shaded = api.Canvas(9, 9).ellipse(4.5, 4.5, 4, 4, lambda dx, dy: api.ramp_pick("12", api.sphere_light(dx, dy)))
