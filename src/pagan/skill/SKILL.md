@@ -27,6 +27,9 @@ builds engine-ready assets (PNG sheets, manifest.json, Godot SpriteFrames). Full
    every decision the owner made live there, not in your head.
 4. No `pagan.toml` yet -> do **First-time setup** (section 1) before drawing anything.
 
+**PAGAN as MCP tools:** if you have PAGAN tools (`status`, `write_asset`, `preview`, ...), use them instead of
+the CLI; the workflow below is the same (`write_asset` lints, `preview` returns the image to look at).
+
 ## 0b. Who you're working for
 
 You may be talking to a human, or (often) to an **orchestrator agent** that is building the game and

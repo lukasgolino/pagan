@@ -12,6 +12,24 @@ A new version (and tag) is cut for **any** change to:
 While on 0.x, a minor bump (0.1 -> 0.2) may change any of these; read the notes before upgrading.
 Patch bumps (0.1.0 -> 0.1.1) never change them.
 
+## 0.6.0 — 2026-10-17
+
+### Upgrading from 0.5.0
+
+- `manifest.json` `generator` becomes `"pagan 0.6.0"`: expect every manifest to change once.
+- Nothing else changes in rendering, notation or settings.
+- The MCP tools, their arguments and result keys are now part of the public contract (a change to them is
+  a version bump, like the CLI's `--json` output).
+
+### Changes
+
+- `pagan mcp [--project DIR] [--allow-godot]`: PAGAN as an MCP server over stdio, for any MCP client
+  (optional extra: `pip install "pagan[mcp]"`). 23 tools that mirror the CLI (same JSON), with preview,
+  swatch and gallery images returned inline; `write_asset` writes a source and lints it in one call.
+  Resources for the workflow, notation, BRIEF/STYLE, manifest, palettes and assets; prompts for setting up
+  a game, making an asset, changing the look and reviewing an asset. The server only touches its project,
+  output and preview dirs, and runs Godot only with `--allow-godot`.
+
 ## 0.5.0 — 2026-10-17
 
 From the Space IO use report S1-S10 (SPACIO_USEREPORT.MD): flat / vector-like arcade art, freely

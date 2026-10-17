@@ -322,6 +322,16 @@ require_outline = false            # E011
 | `pagan style bump "note"` | new style version; flags older assets (W006) |
 | `pagan build [--verify-godot]` | final assets + manifest (+ Godot .tres) |
 | `pagan skill install [dir]` | install this skill into a repo's `.claude/skills/` |
+| `pagan mcp [--project DIR] [--allow-godot]` | MCP server over stdio (needs `pagan[mcp]`) |
+
+**MCP tools** (same JSON as the commands above): `status`, `read_docs`, `write_doc`, `log_feedback`,
+`config_show`/`config_set`/`config_unset`, `palette_list`, `palette_show` (image), `palette_write`,
+`palette_adjust` (dry run by default; image), `scaffold`, `read_asset`, `write_asset` (writes + lints +
+preview image), `lint`, `preview` (image: sheet, montage, variants or built), `gallery` (image), `fit`,
+`mark`, `style_bump`, `import_png` (path or base64), `build` (`verify_godot` needs `--allow-godot`),
+`manifest`. Resources: `pagan://workflow`, `pagan://reference`, `pagan://brief`, `pagan://style`,
+`pagan://manifest`, `pagan://palette/{name}`, `pagan://asset/{name}`. Prompts: `setup_new_game`,
+`make_asset`, `change_the_look`, `review_asset`. Errors come back as results (`ok: false` + `findings`).
 
 ## Lint rules
 

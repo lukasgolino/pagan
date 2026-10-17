@@ -77,6 +77,20 @@ pagan skill install          # copies it to <repo>/.claude/skills/pagan/
 
 Then just ask: "I'm making a naval exploration game; make the player's ship, three masts, 8 headings."
 
+## Using PAGAN from any agent (MCP)
+
+`pagan mcp` runs PAGAN as an [MCP](https://modelcontextprotocol.io) server, so any MCP client (Claude
+Desktop, Claude Code, Cursor, your own agent) can make, lint, preview and build art for one project. Tools
+return the same JSON as the CLI's `--json`, and previews come back as images the model can look at.
+
+```sh
+pip install "pagan[mcp] @ git+https://github.com/lukasgolino/pagan@v0.6.0"
+claude mcp add pagan -- pagan mcp --project ./art          # or any client: command `pagan mcp --project <dir>`
+```
+
+Add `--allow-godot` to let the build tool verify output in a headless Godot. Then ask: "make a 16x16
+health potion", "give the zombie an attack animation", "make the whole game a bit darker".
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

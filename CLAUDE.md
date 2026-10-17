@@ -40,6 +40,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `manage.py` long-term management: catalogue (`pagan status`), palette adjust, `mark`, `style bump` (text edits keep comments);
   - `settings.py` registry of every pagan.toml setting (default, meaning, what it refreshes) + safe `pagan config set` edits;
   - `api.py` stable Python API for generator scripts (drawing, shading, corner sets, exact hull/sail geometry, YAML writers);
+  - `mcp_server.py` `pagan mcp`: MCP tools/resources/prompts over the CLI handlers (stdout captured, cwd pinned, under a lock);
   - `swatch.py` palette swatch images; `templates/` files copied by `pagan init` (STYLE.md for pixel art, STYLE_flat.md for flat art).
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
@@ -62,7 +63,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   rule id, file, line where possible, a `where` path (e.g. `colors.4.hex`) and a message that says how to fix it.
 - Versioning: bump `version` in pyproject.toml, add a CHANGELOG.md entry and tag `vX.Y.Z` for ANY change to the
   notation, pagan.toml settings, manifest/exporter output or rendered pixels (game repos pin tags). Ask before pushing tags.
-- Dependencies: Pillow, PyYAML, numpy; dev: pytest, mypy, types-PyYAML. Others only if genuinely needed — log why below.
+- Dependencies: Pillow, PyYAML, numpy; extra `mcp`: mcp (the MCP server); dev: pytest, mypy, types-PyYAML, mcp. Others only if genuinely needed — log why below.
 
 ## Decisions log
 
@@ -123,3 +124,6 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   `supersample` (sources stay palette-keyed and linted; only build output blends); `[godot] mipmaps` edits just the
   `mipmaps/generate` line of Godot's `.import` (minimal file if none; Godot fills the rest), `filter` is a CanvasTexture
   `texture_filter` on SpriteFrames (TileSets: set on the TileMapLayer). Ellipses exclude edge-exact pixel centres (API_VERSION 2).
+- 2026-10-17: MCP server (owner approved): official `mcp` SDK 2.x as an optional extra (`pagan[mcp]`; in dev so mypy/tests
+  cover it). Tools run the CLI handlers with `--json` (stdout captured, cwd pinned, one lock) so CLI and MCP share one
+  contract; errors are `ok: false` results; one server per project; paths confined to project/output/preview; stdio only.

@@ -1030,6 +1030,17 @@ def _report_change(change: Change, project: Project, out: Output) -> int:
     return 0
 
 
+# --- pagan mcp ------------------------------------------------------------------------------------
+
+
+def cmd_mcp(args: argparse.Namespace, out: Output) -> int:
+    try:
+        from pagan.mcp_server import serve
+    except ImportError:
+        raise _usage_error('the MCP server needs the "mcp" extra: pip install "pagan[mcp]"') from None
+    return serve(args.project, args.allow_godot)
+
+
 # --- pagan skill install ----------------------------------------------------------------------
 
 SKILL_FILES = ("SKILL.md", "reference.md")
@@ -1249,6 +1260,11 @@ def build_parser() -> argparse.ArgumentParser:
     config_unset = config_cmds.add_parser("unset", parents=[common], help="return a setting to its default")
     config_unset.add_argument("key", help="e.g. default_palette")
     config_unset.set_defaults(handler=cmd_config_unset)
+
+    mcp_cmd = commands.add_parser("mcp", help="run PAGAN as an MCP server over stdio (needs pagan[mcp])")
+    mcp_cmd.add_argument("--project", help="PAGAN project directory (default: the one containing the cwd)")
+    mcp_cmd.add_argument("--allow-godot", action="store_true", help="let the build tool run a Godot binary (verify_godot)")
+    mcp_cmd.set_defaults(handler=cmd_mcp)
 
     skill = commands.add_parser("skill", help="the Claude skill that teaches agents to use PAGAN")
     skill_cmds = skill.add_subparsers(title="skill commands", metavar="<subcommand>", required=True)
