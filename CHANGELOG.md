@@ -12,6 +12,41 @@ A new version (and tag) is cut for **any** change to:
 While on 0.x, a minor bump (0.1 -> 0.2) may change any of these; read the notes before upgrading.
 Patch bumps (0.1.0 -> 0.1.1) never change them.
 
+## 0.5.0 — 2026-10-17
+
+From the Space IO use report S1-S10 (SPACIO_USEREPORT.MD): flat / vector-like arcade art, freely
+rotated sprites.
+
+### Upgrading from 0.4.0
+
+- `manifest.json` `generator` becomes `"pagan 0.5.0"`: expect every manifest to change once.
+- **`pagan.api` ellipses and rings** (`API_VERSION` 2) no longer fill pixels whose centre lies exactly on
+  the edge (half-integer radii, e.g. 15.5 around 16, used to leave 1px nubs at the extremes). Generators
+  using such radii produce slightly different grids; nothing changes for other radii.
+- Nothing else changes for existing projects: every new setting defaults to the old behaviour.
+
+### Changes
+
+- `pagan init --perspective top-down|top-down-3/4|side|iso` sets `[camera] elevation` (90/42/15/30) and
+  writes the choice into BRIEF.md (S1). `pagan config show` marks `[camera]`/`[light]` as unused when the
+  project has no 3D models (`--json`: `used`).
+- `pagan init --style flat` writes a STYLE.md for flat / vector-like arcade art (fill + rim, no outline,
+  no painted light, engine glow); the pixel-art template says its rules are pixel-art defaults (S7).
+  The skill asks for the rendering style at setup and has a recipe per style.
+- `pagan.api` (S2): `Canvas.polygon(points, key)` (even-odd; a callable key gets the pixel's distance to
+  the nearest edge, for rims and bevels), `Canvas.triangle`, `Canvas.line(..., width=)` for thick strokes,
+  `api.polygon_distance` (signed distance to a polygon's outline).
+- Supersampling (S3, S10): `supersample = N` in pagan.toml or per asset. Sources are drawn at N x the
+  output size; `pagan build` box-filters sheets (alpha-weighted, integer maths, byte-stable) into smooth
+  PNGs with partial alpha. The manifest gives output-pixel `size`/frames/`pivot` (may be fractional) plus
+  `supersample` and `source_size`. Lint E003 if a size isn't a multiple of N. `pagan preview` adds an
+  "as built" row and `built_1x.png`.
+- Godot import settings (S4): `[godot] mipmaps = true` sets `mipmaps/generate` in each built PNG's
+  `.import` (only that line; Godot keeps the rest and reimports); `[godot] filter = "nearest"|"linear"`
+  puts a texture filter on the SpriteFrames (a CanvasTexture around the sheet). Verified in Godot 4.7.2.
+- `base_variant: <name>` on any asset (S6): the manifest lists the base sheet under that name in
+  `variants` too (empty swap), so a game sees one uniform set of team colours; previews label it.
+
 ## 0.4.0 — 2026-10-16
 
 From orchestrator reports R15-R17 (ORCHESTRATOR_PLAN.md).
