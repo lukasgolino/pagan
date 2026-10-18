@@ -61,7 +61,8 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - Commit messages (when asked): imperative subject line, e.g. `Add palette loading`.
 - Validation collects *all* findings in a file rather than stopping at the first, and every finding has a
   rule id, file, line where possible, a `where` path (e.g. `colors.4.hex`) and a message that says how to fix it.
-- Versioning: bump `version` in pyproject.toml, add a CHANGELOG.md entry and tag `vX.Y.Z` for ANY change to the
+- Versioning: bump `version` in pyproject.toml, add a CHANGELOG.md entry ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/): log under
+  `[Unreleased]`, move it to `[X.Y.Z] - date` + compare link on release; new options/keys = minor) and tag `vX.Y.Z` for ANY change to the
   notation, pagan.toml settings, manifest/exporter output or rendered pixels (game repos pin tags). Ask before pushing tags.
 - Dependencies: Pillow, PyYAML, numpy; extra `mcp`: mcp (the MCP server); dev: pytest, mypy, types-PyYAML, mcp. Others only if genuinely needed — log why below.
 
