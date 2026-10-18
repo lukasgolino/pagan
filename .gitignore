@@ -23,3 +23,6 @@ previews/
 .idea/
 .DS_Store
 .pagan-cache/
+
+# Website (lives in its own repo)
+/website/

@@ -12,6 +12,25 @@ A new version (and tag) is cut for **any** change to:
 While on 0.x, a minor bump (0.1 -> 0.2) may change any of these; read the notes before upgrading.
 Patch bumps (0.1.0 -> 0.1.1) never change them.
 
+## 0.6.1 — 2026-10-18
+
+From Age of Boom reports R18-R19.
+
+### Upgrading from 0.6.0
+
+- `manifest.json` `generator` becomes `"pagan 0.6.1"`: expect every manifest to change once.
+- Nothing else changes in rendering, notation, settings or manifest.
+
+### Changes
+
+- `pagan build --verify-godot` works with `variant_sheets = false` (swap-only variants are checked for a swap
+  table instead of a sheet). Any error in the check script now fails the run in seconds with
+  `PAGAN_VERIFY_FAIL`, instead of hanging until the 300 s timeout; a timeout now says whether the import or
+  the check hung.
+- `pagan fit` always proposes a lint-valid pivot: when a model doesn't reach its origin (an overlay whose
+  origin is its parent's pivot), the frame grows to hold it (`grown_for_pivot` in `--json`). New
+  `pagan fit --even` (and MCP `fit(even=...)`) pads to even sizes so `godot_offset` is whole pixels.
+
 ## 0.6.0 — 2026-10-17
 
 ### Upgrading from 0.5.0

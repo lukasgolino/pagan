@@ -696,7 +696,7 @@ def cmd_fit(args: argparse.Namespace, out: Output) -> int:
         raise _usage_error(f"pagan fit works on 3D models ({MODEL_SUFFIX}), not {path.name}", path)
     if args.margin < 0:
         raise _usage_error("--margin must be 0 or more")
-    fit, findings = fit_model(path, project, args.margin)
+    fit, findings = fit_model(path, project, args.margin, args.even)
     if fit is None:
         out.failure(findings)
         return 1
@@ -706,6 +706,8 @@ def cmd_fit(args: argparse.Namespace, out: Output) -> int:
     out.say(f"  pivot: [{px}, {py}]")
     out.say(f"  (now size [{fit.current_size[0]}, {fit.current_size[1]}], pivot [{fit.current_pivot[0]}, {fit.current_pivot[1]}]; "
             f"the origin stays on the pivot{f', {fit.margin}px margin' if fit.margin else ''})")  # fmt: skip
+    if fit.grown_for_pivot:
+        out.say("  the model doesn't reach its origin (an overlay?): the frame is grown to hold the pivot")
     if fit.clipped:
         shown = ", ".join(fit.clipped[:8]) + (f" and {len(fit.clipped) - 8} more" if len(fit.clipped) > 8 else "")
         out.say(f"  {len(fit.clipped)} frames don't fit the current size: {shown}")
@@ -717,6 +719,7 @@ def cmd_fit(args: argparse.Namespace, out: Output) -> int:
             "current_size": list(fit.current_size),
             "current_pivot": list(fit.current_pivot),
             "clipped": fit.clipped,
+            "grown_for_pivot": fit.grown_for_pivot,
         }
     )
     return 0
@@ -1190,6 +1193,7 @@ def build_parser() -> argparse.ArgumentParser:
     fit_cmd = commands.add_parser("fit", parents=[common], help="smallest frame size and pivot that fit every heading and pose of a model")
     fit_cmd.add_argument("model", help="model file or name")
     fit_cmd.add_argument("--margin", type=int, default=0, help="extra empty pixels on every side (default 0)")
+    fit_cmd.add_argument("--even", action="store_true", help="even width and height, so godot_offset is whole pixels")
     fit_cmd.set_defaults(handler=cmd_fit)
 
     imp = commands.add_parser("import", parents=[common], help="convert a PNG into a sprite source file")

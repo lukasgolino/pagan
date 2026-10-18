@@ -442,13 +442,14 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
         return _with_image(result, _image(pagan.root / path) if path else None, path)
 
     @server.tool(annotations=READ)
-    def fit(model: str, margin: int = 0) -> dict[str, Any]:
-        """The smallest frame size and pivot that fit every heading and pose of a 3D model."""
+    def fit(model: str, margin: int = 0, even: bool = False) -> dict[str, Any]:
+        """The smallest frame size and pivot that fit every heading and pose of a 3D model (always holding the
+        pivot). `even`: even width and height, so godot_offset is whole pixels."""
         try:
             path = pagan.rel(pagan.find_asset(model))
         except PaganError as exc:
             return _failure(exc.findings)
-        return pagan.cli("fit", path, f"--margin={margin}")
+        return pagan.cli("fit", path, f"--margin={margin}", *(["--even"] if even else []))
 
     @server.tool(annotations=WRITE)
     def mark(

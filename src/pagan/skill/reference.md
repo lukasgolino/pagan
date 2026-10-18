@@ -199,7 +199,9 @@ Poses: `roll` (degrees about the front-back axis; positive lowers the right/-y s
 `roll`/`pitch`/`yaw` (degrees, yaw counter-clockwise from above) and `about: [x, y, z]` (hinge; default
 the part's bottom centre); rotated parts are resampled, so keep rotations for things that fall or break.
 Sizing: `pagan fit <model>` renders every heading and pose and prints the smallest `size` and `pivot`
-that hold them all (origin stays on the pivot), plus the frames the current size clips.
+that hold them all (origin stays on the pivot), plus the frames the current size clips. The frame always
+holds the pivot, so overlays whose origin is their parent's pivot get a lint-valid size. `--even` pads to
+even sizes so a centred Godot sprite's `godot_offset` is whole pixels.
 
 ## Recipes
 
@@ -315,7 +317,7 @@ require_outline = false            # E011
 | `pagan palette adjust <pal> [--lightness d] [--contrast k] [--saturation k] [--hue deg] [--warmth d] [--ramp r] [--keys ...] [--out new] [--dry-run]` | change the look globally |
 | `pagan import <png> [--palette P \| --open] [--scale N] [--name] [--out]` | PNG -> sprite (snaps colors, report) |
 | `pagan bake <model> [--name]` | model -> editable sprite (default name `<model>_baked`) |
-| `pagan fit <model> [--margin N]` | smallest size + pivot that fit every heading and pose |
+| `pagan fit <model> [--margin N] [--even]` | smallest size + pivot that fit every heading and pose |
 | `pagan status` | catalogue + what needs attention |
 | `pagan config show` / `get <key>` / `set <key> <value>` / `unset <key>` | project settings: value, default, meaning; validated edits; unset = back to default |
 | `pagan mark <asset...> [--status approved] [--current] [--outdated]` | record reviews |

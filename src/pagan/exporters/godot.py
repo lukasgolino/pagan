@@ -203,6 +203,7 @@ def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: 
     with tempfile.TemporaryDirectory(prefix="pagan-verify-") as scratch:
         script_path = Path(scratch) / "pagan_verify.gd"
         script_path.write_text(script, encoding="utf-8")
+        stage = "import"
         try:
             imported = subprocess.run(
                 [godot, "--headless", "--path", str(godot_root), "--import"],
@@ -213,6 +214,7 @@ def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: 
             if imported.returncode != 0 or import_errors:
                 detail = "\n".join(import_errors[-20:]) or import_output[-2000:]
                 return GodotCheck(ok=False, output=f"Godot's import step failed (exit {imported.returncode}):\n{detail}")
+            stage = "check"
             result = subprocess.run(
                 [godot, "--headless", "--path", str(godot_root), "-s", str(script_path), "--", manifest_res],
                 capture_output=True, text=True, timeout=timeout,
@@ -222,9 +224,13 @@ def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: 
         except PermissionError:
             return GodotCheck(ok=False, output=f"can't run {godot}: not executable")
         except subprocess.TimeoutExpired:
-            return GodotCheck(ok=False, output=f"Godot didn't finish within {timeout}s")
+            if stage == "import":
+                return GodotCheck(ok=False, output=f"Godot's import step didn't finish within {timeout}s")
+            return GodotCheck(
+                ok=False, output=f"the Godot check script didn't finish within {timeout}s (it takes seconds: this is a hang, not a slow import)"
+            )
     output = (result.stdout + result.stderr).strip()
-    ok = result.returncode == 0 and "PAGAN_VERIFY_OK" in result.stdout
+    ok = result.returncode == 0 and "PAGAN_VERIFY_OK" in result.stdout and "SCRIPT ERROR" not in output
     match = re.search(r"PAGAN_VERIFY_OK (\d+) SpriteFrames, (\d+) TileSets", result.stdout)
     counts = (int(match.group(1)), int(match.group(2))) if match else (0, 0)
     return GodotCheck(ok=ok, output=output, sprite_frames=counts[0], tilesets=counts[1])

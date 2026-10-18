@@ -1073,10 +1073,16 @@ class Fit:
     current_pivot: tuple[int, int]
     clipped: list[str]  # frames that don't fit the current size/pivot
     margin: int
+    grown_for_pivot: bool = False  # the drawn area doesn't reach the origin (an overlay): the frame was grown to hold it
 
 
-def fit_model(path: Path, project: Project, margin: int = 0) -> tuple[Fit | None, list[Finding]]:
-    """Render every frame on a canvas big enough for anything, and measure what's actually drawn."""
+def fit_model(path: Path, project: Project, margin: int = 0, even: bool = False) -> tuple[Fit | None, list[Finding]]:
+    """Render every frame on a canvas big enough for anything, and measure what's actually drawn.
+
+    The result always passes E008: if nothing is drawn around the origin (an overlay whose origin is its parent's
+    pivot), the frame grows to hold the pivot. `even` pads odd sizes on the right/bottom, so a centred Godot
+    sprite's `godot_offset` is whole pixels.
+    """
     findings: list[Finding] = []
 
     def error(rule: str, message: str, line: int | None, where: str | None = None) -> None:
@@ -1107,7 +1113,12 @@ def fit_model(path: Path, project: Project, margin: int = 0) -> tuple[Fit | None
         return None, [*findings, Finding("E013", "nothing to fit: no frame draws any pixels", path, None, "parts")]
     x0, y0 = min(b[0] for b in boxes.values()), min(b[1] for b in boxes.values())
     x1, y1 = max(b[2] for b in boxes.values()), max(b[3] for b in boxes.values())
+    # The pivot is the pixel edge at 0: the drawn box must span pixel edges 0 (x0 <= 0) to 0 (x1 + 1 >= 0).
+    grown = x0 > 0 or y0 > 0 or x1 < -1 or y1 < -1
+    x0, y0, x1, y1 = min(x0, 0), min(y0, 0), max(x1, -1), max(y1, -1)
     size = (x1 - x0 + 1 + 2 * border, y1 - y0 + 1 + 2 * border)
+    if even:
+        size = (size[0] + size[0] % 2, size[1] + size[1] % 2)
     pivot = (border - x0, border - y0)
     edge = 1 if setup.outline else 0  # outlined frames need a free pixel around the model
     (w, h), (px, py) = setup.size, setup.pivot
@@ -1116,7 +1127,7 @@ def fit_model(path: Path, project: Project, margin: int = 0) -> tuple[Fit | None
         for frame, (a, b, c, d) in boxes.items()
         if px + a < edge or py + b < edge or px + c > w - 1 - edge or py + d > h - 1 - edge
     ]
-    return Fit(setup.name, size, pivot, setup.size, setup.pivot, clipped, margin), findings
+    return Fit(setup.name, size, pivot, setup.size, setup.pivot, clipped, margin, grown), findings
 
 
 def _cached_render(project: Project, setup: _Setup, key: str) -> dict[str, Grid]:

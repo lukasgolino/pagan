@@ -233,3 +233,49 @@ R15-R17 (above) arrived during this work; not addressed yet.
   3. *Ability effects* stay ordinary sprites named per character (`mortar_flash`, ...); no new notation.
   Cost: 4 player colours × N characters = N rendered sheets + 4 swap tables, instead of 4N sheets.
 
+
+### R18 · bug · high · `--verify-godot` crashes on swap-only variants and then hangs until the timeout
+*Age of Boom, 2026-10-18, PAGAN v0.6.0.*
+- **Repro:** set `variant_sheets = false` in `pagan.toml` on a project with model variants (Age of Boom ships:
+  red/blue/gold), run `pagan build --verify-godot`.
+- **Expected:** verification loads the base sheets, checks the swap tables, and reports PAGAN_VERIFY_OK.
+- **Actual:** the manifest's variants then contain only `swap` and `swap_exact` (no `sheet`), and
+  `templates/godot_verify.gd:20` does `entry["variants"][v]["sheet"]`, which raises "Invalid access to property or
+  key 'sheet'". After a SceneTree `_init` script error Godot never calls `quit()`, so the process sits idle until
+  `verify_with_godot`'s 300 s timeout and the build reports "Godot didn't finish within 300s". That looks like a
+  slow import (our agents misread it as one: PAGAN_LOG.md 2026-10-18 V6p1/V3), when it's a crash.
+- **Suggested fix:** (1) skip variants without `sheet` (or check that `swap` is a non-empty dictionary instead);
+  (2) make the verify script fail fast: use `.get()` with checks throughout, or run the checks in a function whose
+  errors still reach `quit(1)` (e.g. a deferred watchdog `create_timer(…).timeout → quit(1)` in `_init`, or a
+  `--quit-after` frame cap on the command line) so that any script error ends the run in seconds, not 300 s;
+  (3) a regression test with a `variant_sheets = false` fixture.
+- **Workaround in Age of Boom:** `tools/check.sh` runs `pagan build` without `--verify-godot`; the game's own
+  resource-load check covers the generated `.tres`.
+
+### R19 · bug · medium · `pagan fit` suggests a pivot outside the frame, which lint then rejects (E008)
+*Age of Boom, 2026-10-18, PAGAN v0.6.0.*
+- **Repro:** a small overlay model whose origin is the parent ship's pivot, away from its own voxels (Age of Boom
+  `sloop_flags`: masthead flags, origin at the hull centre). `pagan fit sloop_flags` proposes `size: [6, 6]`,
+  `pivot: [3, 11]`.
+- **Expected:** fit only proposes lint-valid results: grow the frame so it contains the pivot, or say why it can't.
+- **Actual:** the pivot y = 11 is outside the 6 px frame; `pagan lint` then fails with E008. The artist grew the frame by
+  hand.
+- **Related:** overlays (sprites drawn on top of another asset at the same pivot) are a real use case: either let E008
+  allow outside pivots for models marked as overlays (`overlay: true`), or have fit include the pivot. Also,
+  `pagan preview` bakes `--bg` into frames, so overlays can't be alpha-composited over their parent for review.
+- **Second fit request (from V1):** fit proposes odd sizes for centred pivots, so `godot_offset` gets half pixels;
+  a `pagan fit --even` option would avoid hand-padding.
+
+### PAGAN responses to R18-R19 — 2026-10-18 (released in v0.6.1, see CHANGELOG.md)
+
+- **R18** fixed: (1) variants without `sheet` are checked for a non-empty `swap` table instead; (2) the checks run
+  in a function whose completion is tracked, so any GDScript error ends the run at once with exit 1 and
+  `PAGAN_VERIFY_FAIL the check script hit an error`; PAGAN also fails on any `SCRIPT ERROR` line, and a timeout
+  says whether the import or the check hung; (3) regression tests with `variant_sheets = false` and a deliberately
+  broken manifest (fails in seconds). You can put `--verify-godot` back in `tools/check.sh` (pin v0.6.1).
+- **R19** fixed: `pagan fit` grows the frame to hold the pivot when the model doesn't reach its origin, and says so
+  (`grown_for_pivot` in `--json`); its suggestion always passes E008. `pagan fit --even` pads to even sizes.
+  Not done: an `overlay: true` flag allowing pivots outside the frame (a fitted frame that holds the pivot does
+  the same job). Preview: `pagan preview --bg none` and `pagan render` already give transparent frames for
+  compositing an overlay over its parent.
+
