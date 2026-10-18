@@ -6,13 +6,14 @@ import argparse
 import json
 import os
 import re
+import time
 from collections.abc import Callable, Sequence
 from importlib.resources import files
 from pathlib import Path
 from string import Template
 from typing import Any
 
-from pagan import __version__
+from pagan import __version__, progress
 from pagan.asset import MODEL_SUFFIX, SPRITE_SUFFIX, TILESET_SUFFIX, Asset, load_asset_or_raise
 from pagan.findings import Finding, PaganError, display_path
 from pagan.build import build
@@ -23,8 +24,8 @@ from pagan.lint import lint_paths
 from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_style, catalogue, mark, outdated
 from pagan.palette import KEY_ORDER, NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
-from pagan.preview import PreviewOptions, gallery, write_previews
-from pagan.render import frame_image, save_png, sheet_image, supersample_factor
+from pagan.preview import PreviewOptions, gallery, write_native, write_previews
+from pagan.render import supersample_factor
 from pagan.settings import BY_KEY, Change, describe, set_in_toml, set_setting, unset_setting
 from pagan.swatch import render_swatch
 
@@ -480,18 +481,8 @@ def cmd_render(args: argparse.Namespace, out: Output) -> int:
     assets, findings = _load_targets(args.assets, project)
     outputs: list[dict[str, Any]] = []
     for asset in assets:
-        base = project.preview_dir / asset.name / "native"
-        written: list[str] = []
-        for variant in (None, *asset.variants):
-            folder = base if variant is None else base / variant
-            for frame in asset.frames:
-                path = folder / "frames" / f"{frame}.png"
-                save_png(frame_image(asset, frame, variant), path)
-                written.append(display_path(path))
-            sheet = folder / "sheet.png"
-            save_png(sheet_image(asset, variant), sheet)
-            written.append(display_path(sheet))
-        out.say(f"{asset.name}: wrote {len(written)} PNGs to {display_path(base)}")
+        written = [display_path(p) for p in write_native(asset, project.preview_dir)]
+        out.say(f"{asset.name}: wrote {len(written)} PNGs to {display_path(project.preview_dir / asset.name / 'native')}")
         outputs.append({"asset": asset.name, "files": written})
     if findings:
         out.failure(findings, {"outputs": outputs})
@@ -518,7 +509,10 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
     assets, findings = _load_targets(args.assets, project)
     outputs: list[dict[str, Any]] = []
     for asset in assets:
-        result = write_previews(asset, project.preview_dir, options, supersample_factor(asset, project))
+        if args.frame is not None and args.frame not in asset.frames:
+            findings.append(Finding("E000", f"--frame: {asset.name} has no frame {args.frame!r}", asset.path))
+            continue
+        result = write_previews(asset, project.preview_dir, options, supersample_factor(asset, project), args.frame)
         out.say(f"{asset.name}: {display_path(result.sheet)}  (x{result.scale})")
         out.say(f"  montage (no labels, on the background): {display_path(result.montage)}")
         for gif in result.gifs:
@@ -529,12 +523,15 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
             out.say(f"  as built (supersampled down, what the game gets): {display_path(result.built_1x)}")
         out.say(
             f"  frames: {display_path(result.sheet.parent / 'frames')}/ ({len(result.frames)} PNGs at x{result.scale}; "
-            "1x PNGs: `pagan render`)"
+            f"1x frames and sheet: {display_path(result.sheet.parent / 'native')}/)"
         )
         scene: Path | None = None
+        scene_variants: Path | None = None
         if args.scene:
-            scene = _scene_preview(asset, Path(args.scene), result.sheet.parent / "scene.png", options)
+            scene, scene_variants = _scene_preview(asset, Path(args.scene), result.sheet.parent, options)
             out.say(f"  scene ({args.scene}): {display_path(scene)}")
+            if scene_variants is not None:
+                out.say(f"  scene in every variant: {display_path(scene_variants)}")
         outputs.append(
             {
                 "asset": asset.name,
@@ -543,7 +540,9 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
                 "montage": display_path(result.montage),
                 "gifs": [display_path(g) for g in result.gifs],
                 "frames": [display_path(f) for f in result.frames],
+                "native": [display_path(f) for f in result.native],
                 **({"scene": display_path(scene)} if scene is not None else {}),
+                **({"scene_variants": display_path(scene_variants)} if scene_variants is not None else {}),
                 **({"variants": display_path(result.variants)} if result.variants is not None else {}),
                 **({"variants_1x": display_path(result.variants_1x)} if result.variants_1x is not None else {}),
                 **({"built_1x": display_path(result.built_1x)} if result.built_1x is not None else {}),
@@ -556,9 +555,10 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
     return 0
 
 
-def _scene_preview(asset: Asset, layout_file: Path, path: Path, options: PreviewOptions) -> Path:
+def _scene_preview(asset: Asset, layout_file: Path, folder: Path, options: PreviewOptions) -> tuple[Path, Path | None]:
+    """scene.png, and scene_variants.png (the scene in the base colours and every variant) if there are variants."""
     from pagan.api import compose
-    from pagan.preview import auto_scale, upscale
+    from pagan.preview import auto_scale, upscale, variants_grid
 
     if asset.kind != "tileset":
         raise _usage_error(f"--scene needs a tileset; {asset.name} is a {asset.kind}")
@@ -570,8 +570,14 @@ def _scene_preview(asset: Asset, layout_file: Path, path: Path, options: Preview
     except ValueError as exc:
         raise _usage_error(str(exc), layout_file) from exc
     scale = options.scale or max(1, auto_scale((image.width, image.height)))
+    path = folder / "scene.png"
     upscale(image, scale, options).save(path)
-    return path
+    if not asset.variants:
+        return path, None
+    images = {variant: compose(asset, layout, variant) for variant in (None, *asset.variants)}
+    variants_path = folder / "scene_variants.png"
+    variants_grid(asset, images, options, f"scene {layout_file.name}").save(variants_path)
+    return path, variants_path
 
 
 def cmd_gallery(args: argparse.Namespace, out: Output) -> int:
@@ -637,7 +643,9 @@ def cmd_build(args: argparse.Namespace, out: Output) -> int:
     project = project_for([args.project] if args.project else [])
     if project.config_path is None:
         raise _usage_error(f"no {CONFIG_NAME} found; `pagan build` needs a project (run `pagan init`)")
+    started = time.monotonic()
     result = build(project)
+    progress.note(f"build finished in {time.monotonic() - started:.1f}s")
     if result.errors:
         out.failure(result.errors)
         if not out.as_json:
@@ -655,13 +663,16 @@ def cmd_build(args: argparse.Namespace, out: Output) -> int:
             raise _usage_error('--verify-godot needs export = ["godot"] in pagan.toml')
         if godot is None:
             raise _usage_error("--verify-godot: no Godot binary found; set GODOT=/path/to/godot or put godot on PATH")
-        check = verify_with_godot(godot, result.godot_root, res_path(result.manifest, result.godot_root))
+        if args.godot_timeout < 1:
+            raise _usage_error("--godot-timeout must be 1 or more seconds")
+        check = verify_with_godot(godot, result.godot_root, res_path(result.manifest, result.godot_root), args.godot_timeout)
         verified = check.ok
         if check.ok:
-            if check.sprite_frames + check.tilesets == 0:
+            if check.sprite_frames + check.tilesets + check.fonts == 0:
                 out.say("  Godot: nothing to check: the manifest has no Godot resources (no assets yet?)")
             else:
-                out.say(f"  Godot: all {check.sprite_frames} SpriteFrames and {check.tilesets} TileSets load")
+                fonts = f" and {check.fonts} fonts" if check.fonts else ""
+                out.say(f"  Godot: all {check.sprite_frames} SpriteFrames, {check.tilesets} TileSets{fonts} load")
         else:
             if out.as_json:
                 out.failure([Finding("E000", "Godot failed to load generated resources:\n" + check.output[-3000:])])
@@ -1126,6 +1137,7 @@ def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     # SUPPRESS: a subcommand's --json doesn't reset a --json given before the subcommand.
     common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="machine-readable JSON output")
+    common.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help="no progress lines on stderr")
 
     parser = argparse.ArgumentParser(
         prog="pagan",
@@ -1133,6 +1145,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=version_string())
     parser.add_argument("--json", action="store_true", help="machine-readable JSON output (any command)")
+    parser.add_argument("--quiet", action="store_true", help="no progress lines on stderr (any command; or PAGAN_QUIET=1)")
     commands = parser.add_subparsers(title="commands", metavar="<command>")
 
     init = commands.add_parser("init", parents=[common], help="create a PAGAN project")
@@ -1188,6 +1201,10 @@ def build_parser() -> argparse.ArgumentParser:
     build_cmd = commands.add_parser("build", parents=[common], help="lint, then write final assets to output_dir")
     build_cmd.add_argument("project", nargs="?", help="project directory (default: the one containing the cwd)")
     build_cmd.add_argument("--verify-godot", action="store_true", help="load every generated resource in headless Godot")
+    build_cmd.add_argument(
+        "--godot-timeout", type=int, default=600, metavar="SECONDS",
+        help="--verify-godot: limit for each Godot step (import, check); default 600",
+    )  # fmt: skip
     build_cmd.set_defaults(handler=cmd_build)
 
     fit_cmd = commands.add_parser("fit", parents=[common], help="smallest frame size and pivot that fit every heading and pose of a model")
@@ -1218,8 +1235,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     preview.add_argument("assets", nargs="+", help="asset files or names")
     preview.add_argument(
-        "--scene", metavar="FILE", help="tilesets: also draw FILE's layout (rows of tile names, '.' = empty) to scene.png"
-    )
+        "--scene", metavar="FILE",
+        help="tilesets: also draw FILE's layout (rows of tile names, '.' = empty) to scene.png (and scene_variants.png)",
+    )  # fmt: skip
+    preview.add_argument("--frame", metavar="NAME", help="the frame variants.png compares (default: the first with pixels)")
     preview.set_defaults(handler=cmd_preview)
 
     gallery_cmd = commands.add_parser(
@@ -1305,13 +1324,14 @@ def build_parser() -> argparse.ArgumentParser:
 Handler = Callable[[argparse.Namespace, Output], int]
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None, *, show_progress: bool = True) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     handler: Handler | None = getattr(args, "handler", None)
     if handler is None:
         parser.print_help()
         return 0
+    progress.enabled = show_progress and not getattr(args, "quiet", False) and os.environ.get("PAGAN_QUIET", "") in ("", "0")
     out = Output(as_json=getattr(args, "json", False))
     try:
         return handler(args, out)

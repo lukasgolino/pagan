@@ -46,7 +46,11 @@ def _unquoted_hex_hint(text: str) -> str:
     )
 
 
-class _Loader(yaml.SafeLoader):
+# libyaml's parser when PyYAML has it (much faster on big grids); same nodes, marks and errors otherwise.
+_Base: Any = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+class _Loader(_Base):  # type: ignore[misc]
     pass
 
 

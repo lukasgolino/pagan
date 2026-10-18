@@ -24,6 +24,7 @@ func _check() -> int:
 	var failures := 0
 	var sprite_frames_checked := 0
 	var tilesets_checked := 0
+	var fonts_checked := 0
 	for name in manifest["assets"]:
 		var entry: Dictionary = manifest["assets"][name]
 		var variants: Dictionary = entry.get("variants", {})
@@ -31,6 +32,8 @@ func _check() -> int:
 		for v in variants:
 			if variants[v].has("sheet"):
 				sheets.append(variants[v]["sheet"])
+			elif v == entry.get("base_variant"):
+				pass  # the base colours under their own name: the base sheet, an empty swap
 			elif typeof(variants[v].get("swap")) != TYPE_DICTIONARY or variants[v]["swap"].is_empty():
 				# variant_sheets = false: the variant is a swap table only
 				printerr("PAGAN_VERIFY_FAIL ", name, " variant ", v, " has neither a sheet nor a swap table")
@@ -60,6 +63,25 @@ func _check() -> int:
 				printerr("PAGAN_VERIFY_FAIL ", path, " tile size ", ts.tile_size)
 				failures += 1
 			tilesets_checked += 1
+		var font_paths: Array = []
+		if entry.has("font_file"):
+			font_paths.append(entry["font_file"])
+		for v in variants:
+			if variants[v].has("font_file"):
+				font_paths.append(variants[v]["font_file"])
+		for path in font_paths:
+			var font = load(path)
+			if font == null or not (font is FontFile):
+				printerr("PAGAN_VERIFY_FAIL font ", path)
+				failures += 1
+				continue
+			var glyphs: Dictionary = entry.get("font", {}).get("glyphs", {})
+			for ch in glyphs:
+				if not font.has_char(ch.unicode_at(0)):
+					printerr("PAGAN_VERIFY_FAIL ", path, " has no glyph for ", ch)
+					failures += 1
+					break
+			fonts_checked += 1
 		var frames_paths: Array = []
 		if entry.has("godot_sprite_frames"):
 			frames_paths.append(entry["godot_sprite_frames"])
@@ -92,5 +114,5 @@ func _check() -> int:
 	if failures > 0:
 		printerr("PAGAN_VERIFY_FAIL ", failures, " problems")
 		return 1
-	print("PAGAN_VERIFY_OK ", sprite_frames_checked, " SpriteFrames, ", tilesets_checked, " TileSets checked")
+	print("PAGAN_VERIFY_OK ", sprite_frames_checked, " SpriteFrames, ", tilesets_checked, " TileSets, ", fonts_checked, " fonts checked")
 	return 0

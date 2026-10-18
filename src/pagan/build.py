@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image
 
 from pagan import __version__
-from pagan.asset import Animation, Asset, Variant
+from pagan.asset import Animation, Asset, Variant, glyph_cells
 from pagan.exporters.godot import (
     AtlasTile,
     centered_offset,
@@ -118,6 +118,8 @@ def build(project: Project) -> BuildResult:
         size = (asset.size[0] // factor, asset.size[1] // factor)
         rects = {name: (x // factor, y // factor, w // factor, h // factor) for name, (x, y, w, h) in frame_rects(asset).items()}
         animations = _animations_for(asset) if asset.kind != "tileset" else []
+        font = font_metrics(asset, factor) if asset.font is not None else None
+        sheet_size = (max(x + w for x, _, w, _ in rects.values()), max(y + h for _, y, _, h in rects.values()))
         normal_sheet: Path | None = None
         if "normals" in exporters and asset.normal_maps is not None:
             normal_sheet = folder / f"{asset.name}.normal.png"
@@ -128,6 +130,15 @@ def build(project: Project) -> BuildResult:
             sheet = folder / f"{stem}.png"
             write_png(sheet, downsample(sheet_image(asset, variant), factor))
             info: dict[str, Any] = {"sheet": _ref(sheet, out, godot_root)}
+            if font is not None:
+                # The font gets its own copy of the sheet: an engine's font importer may claim its page image
+                # (Godot marks it importer="skip"), and the sprite's sheet must stay a plain texture.
+                page = out / "fonts" / f"{stem}.png"
+                _write(page, sheet.read_bytes(), result)
+                fnt = page.with_suffix(".fnt")
+                _write(fnt, bmfont_text(asset.name, font, page.name, sheet_size).encode("utf-8"), result)
+                produced.update((page.resolve(), fnt.resolve()))
+                info["font_file"] = _ref(fnt, out, godot_root)
             if godot_root is not None:
                 tres = folder / f"{stem}.tres"
                 if asset.kind == "tileset":
@@ -166,8 +177,14 @@ def build(project: Project) -> BuildResult:
             entry["animations"] = {
                 a.name: {"frames": list(a.frames), "fps": a.fps, "loop": a.loop} for a in animations
             }
+        if "animations" in entry:  # JSON objects are unordered (and the manifest sorts keys): the file's order
+            entry["animation_order"] = [a.name for a in (animations if asset.kind != "tileset" else asset.animations.values())]
         if asset.kind == "model":
             entry["headings"] = [a.name for a in asset.animations.values() if a.frames == (a.name,)]
+        if asset.nine_slice:
+            entry["nine_slice"] = {name: [m // factor for m in margins] for name, margins in asset.nine_slice.items()}
+        if font is not None:
+            entry["font"] = font
         if normal_sheet is not None:
             entry["normal_sheet"] = _ref(normal_sheet, out, godot_root)
         if factor > 1:
@@ -225,6 +242,53 @@ def build(project: Project) -> BuildResult:
             imported = stale.with_name(stale.name + ".import")  # Godot's sidecar for the removed file
             imported.unlink(missing_ok=True)
     return result
+
+
+def font_metrics(asset: Asset, factor: int = 1) -> dict[str, Any]:
+    """A font sprite's glyphs for the manifest: each character's rect in the sheet and its advance, in output
+    pixels, plus line metrics. Auto advance = the glyph's drawn width (to its rightmost pixel) + spacing."""
+    font = asset.font
+    assert font is not None
+    rects = frame_rects(asset)
+    cell_w, cell_h = font.cell
+    per_row = asset.size[0] // cell_w
+    glyphs: dict[str, Any] = {}
+    counters: dict[str, int] = {}
+    for char, (frame, grid) in zip(font.glyphs, glyph_cells(font, asset.frames, asset.size), strict=False):
+        index = counters.get(frame, 0)
+        counters[frame] = index + 1
+        x, y, _, _ = rects[frame]
+        left, top = x + (index % per_row) * cell_w, y + (index // per_row) * cell_h
+        drawn = max((i + 1 for row in grid for i, c in enumerate(row) if c != TRANSPARENT), default=0)
+        advance = font.advance if font.advance is not None else (drawn + font.spacing if drawn else font.space)
+        glyphs[char] = {
+            "rect": [left // factor, top // factor, cell_w // factor, cell_h // factor],
+            "advance": -(-advance // factor),
+        }
+    return {
+        "glyph_order": font.glyphs,
+        "glyphs": glyphs,
+        "cell": [cell_w // factor, cell_h // factor],
+        "ascent": font.baseline // factor,
+        "descent": (cell_h - font.baseline) // factor,
+        "line_height": font.line_height // factor,
+    }
+
+
+def bmfont_text(name: str, font: dict[str, Any], page: str, sheet_size: tuple[int, int]) -> str:
+    """The font as an AngelCode BMFont text file (.fnt): Godot imports it as a FontFile, and most engines read it."""
+    lines = [
+        f'info face="{name}" size={font["line_height"]} bold=0 italic=0 charset="" unicode=1 stretchH=100 smooth=0 aa=1 '
+        "padding=0,0,0,0 spacing=0,0 outline=0",
+        f'common lineHeight={font["line_height"]} base={font["ascent"]} scaleW={sheet_size[0]} scaleH={sheet_size[1]} '
+        "pages=1 packed=0 alphaChnl=0 redChnl=0 greenChnl=0 blueChnl=0",
+        f'page id=0 file="{page}"',
+        f"chars count={len(font['glyphs'])}",
+    ]
+    for char, glyph in sorted(font["glyphs"].items(), key=lambda item: ord(item[0])):
+        x, y, w, h = glyph["rect"]
+        lines.append(f"char id={ord(char)} x={x} y={y} width={w} height={h} xoffset=0 yoffset=0 xadvance={glyph['advance']} page=0 chnl=15")
+    return "\n".join(lines) + "\n"
 
 
 def _shrink(value: int, factor: int) -> int | float:
@@ -303,6 +367,6 @@ def _previous_outputs(out: Path) -> set[Path]:
         if not isinstance(name, str) or Path(name).is_absolute():
             continue
         path = (root / name).resolve()
-        if path.is_relative_to(root) and path != root and path.suffix in (".png", ".tres", ".json"):
+        if path.is_relative_to(root) and path != root and path.suffix in (".png", ".tres", ".json", ".fnt"):
             found.add(path)
     return found

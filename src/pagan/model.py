@@ -9,6 +9,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import sys
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,9 +36,11 @@ from pagan.asset import (
     _parse_variants,
     _resolve_palette,
     check_base_variant,
+    with_palette_variants,
 )
 from pagan.findings import Finding, has_errors
 from pagan.palette import TRANSPARENT, Palette
+from pagan.progress import note
 from pagan.project import Project, parse_render
 from pagan.yamlio import LineMap, YamlError, load_yaml
 from pagan.voxel import (
@@ -882,19 +887,85 @@ def _setup(data: Any, path: Path | None, project: Project, error: ErrorFn, findi
 def _render_jobs(
     setup: _Setup, size: tuple[int, int], pivot: tuple[int, int], full: bool = False
 ) -> dict[str, Any]:
-    """Render every job: rows of keys per frame (or Rendered objects with normals when `full`)."""
+    """Render every job: rows of keys per frame (or Rendered objects with normals when `full`).
+
+    Big models render in several processes (`render_workers`); every frame is computed exactly as it would be
+    in one process, so the output is identical either way.
+    """
+    scene = _Scene(setup.model, setup.materials, size, setup.origin, pivot, setup.camera, setup.light, full)
+    jobs = setup.jobs
+    workers = render_workers()
+    if workers <= 1 or len(jobs) < _MIN_PARALLEL_JOBS:
+        return _render_scene_jobs(scene, jobs)
+    # ~4 chunks per worker; each carries the scene (small next to the rendering) and poses its own copy.
+    size_of_chunk = max(2, -(-len(jobs) // (workers * 4)))
+    chunks = [(scene, jobs[i : i + size_of_chunk]) for i in range(0, len(jobs), size_of_chunk)]
+    try:
+        parts = list(_pool(workers).map(_render_chunk, chunks))
+    except (OSError, RuntimeError):  # no process support here (e.g. a sandbox): render in this process
+        return _render_scene_jobs(scene, jobs)
+    out: dict[str, Any] = {}
+    for part in parts:
+        out.update(part)
+    return {frame: out[frame] for frame, _, _ in jobs}
+
+
+_MIN_PARALLEL_JOBS = 24  # fewer frames render faster in this process than they'd travel to others
+_POOL: Any = None  # one process pool for the whole run, started on first use
+
+
+def _pool(workers: int) -> Any:
+    global _POOL
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+
+    if _POOL is None or _POOL._max_workers != workers:
+        if _POOL is not None:
+            _POOL.shutdown()
+        context = multiprocessing.get_context("forkserver" if sys.platform.startswith("linux") else "spawn")
+        _POOL = ProcessPoolExecutor(workers, mp_context=context)
+    return _POOL
+
+
+def render_workers() -> int:
+    """Processes for model rendering: PAGAN_JOBS if set (1 = no extra processes), else the CPU count, up to 8."""
+    raw = os.environ.get("PAGAN_JOBS", "")
+    if raw.strip().isdigit() and int(raw) >= 1:
+        return int(raw)
+    return max(1, min(8, os.cpu_count() or 1))
+
+
+@dataclass(frozen=True)
+class _Scene:
+    """Everything a render worker needs (sent once per process)."""
+
+    model: VoxelModel
+    materials: dict[str, Material]
+    size: tuple[int, int]
+    origin: tuple[float, float, float]
+    pivot: tuple[int, int]
+    camera: Camera
+    light: Light
+    full: bool
+
+
+def _render_scene_jobs(scene: _Scene, jobs: list[tuple[str, float, Pose]]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     posed_models: dict[tuple[Any, ...], VoxelModel] = {}
-    for frame_name, angle, pose in setup.jobs:
+    render = render_heading_full if scene.full else render_heading
+    for frame_name, angle, pose in jobs:
         key = (pose.moves, pose.hidden)
         if key not in posed_models:
-            posed_models[key] = setup.model.posed(dict(pose.moves), set(pose.hidden))
-        render = render_heading_full if full else render_heading
+            posed_models[key] = scene.model.posed(dict(pose.moves), set(pose.hidden))
         out[frame_name] = render(
-            posed_models[key], setup.materials, heading=angle, size=size, origin=setup.origin, pivot=pivot,
-            camera=setup.camera, light=setup.light, roll=pose.roll, pitch=pose.pitch,
+            posed_models[key], scene.materials, heading=angle, size=scene.size, origin=scene.origin, pivot=scene.pivot,
+            camera=scene.camera, light=scene.light, roll=pose.roll, pitch=pose.pitch,
         )  # fmt: skip
     return out
+
+
+def _render_chunk(work: tuple[_Scene, list[tuple[str, float, Pose]]]) -> dict[str, Any]:
+    return _render_scene_jobs(*work)
 
 
 def resolve_extends(
@@ -1013,7 +1084,10 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
         frames[frame_name] = _outline(grid, setup.outline_color) if setup.outline else grid
 
     used = {c for grid in frames.values() for row in grid for c in row if c != TRANSPARENT}
-    variants = _parse_variants(data.get("variants"), setup.palette, project, _line(data, "variants"), used, error)
+    raw_variants, inherited = with_palette_variants(data.get("variants"), setup.palette, setup.meta["tags"], _line(data, "variants"), error)
+    if inherited and setup.meta["base_variant"] is None:
+        setup.meta["base_variant"] = setup.palette.base_variant
+    variants = _parse_variants(raw_variants, setup.palette, project, _line(data, "variants"), used, error)
     variant_axes, combos = _parse_variant_axes(data.get("variant_axes"), setup.palette, project, _line(data, "variant_axes"), used, variants, error)
     variants.update(combos)
     check_base_variant(setup.meta["base_variant"], variants, _line(data, "base_variant"), error)
@@ -1021,7 +1095,7 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
     for pose_name in setup.pose_names:  # `damaged` covers damaged_<heading> and its frames
         covered = [a for a in setup.animations if a == pose_name or a.startswith(f"{pose_name}_")]
         lint_targets.setdefault(pose_name, tuple(t for a in covered for t in (a, *setup.animations[a].frames)))
-    lint_disable, lint_disable_for = _parse_lint(data.get("lint"), _line(data, "lint"), lint_targets, error)
+    lint = _parse_lint(data.get("lint"), _line(data, "lint"), lint_targets, error)
     if has_errors(findings):
         return None, findings
 
@@ -1052,8 +1126,9 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
             outline=setup.outline,
             outline_color=setup.outline_color,
             normal_maps=normal_maps,
-            lint_disable=lint_disable,
-            lint_disable_for=lint_disable_for,
+            lint_disable=lint.disable,
+            lint_disable_for=lint.disable_for,
+            lint_max_ramps=lint.max_ramps,
             template=template is True,
             variant_axes=variant_axes,
             **setup.meta,
@@ -1130,9 +1205,16 @@ def fit_model(path: Path, project: Project, margin: int = 0, even: bool = False)
     return Fit(setup.name, size, pivot, setup.size, setup.pivot, clipped, margin, grown), findings
 
 
+_SHARED_CACHE_KEEP = 8  # renders kept per model in a shared PAGAN_CACHE_DIR
+
+
 def _cached_render(project: Project, setup: _Setup, key: str) -> dict[str, Grid]:
+    """Render, or reuse an earlier render. The cache is `<project>/.pagan-cache/`, or PAGAN_CACHE_DIR (one cache
+    for several checkouts of the same art, e.g. agents' git worktrees)."""
     name, (width, height) = setup.name, setup.size
-    cache_file = project.root / ".pagan-cache" / "models" / f"{name}-{key}.json"
+    shared = os.environ.get("PAGAN_CACHE_DIR", "").strip()
+    cache_dir = Path(shared).expanduser() if shared else project.root / ".pagan-cache"
+    cache_file = cache_dir / "models" / f"{name}-{key}.json"
     if cache_file.is_file():
         try:
             cached = json.loads(cache_file.read_text(encoding="utf-8"))
@@ -1145,13 +1227,21 @@ def _cached_render(project: Project, setup: _Setup, key: str) -> dict[str, Grid]
                 return {job[0]: tuple(cached[job[0]]) for job in setup.jobs}
         except (OSError, ValueError):
             pass  # unreadable or malformed cache: render again
+    started = time.monotonic()
+    note(f"rendering {name}: {len(setup.jobs)} frames at {width}x{height} (cached afterwards)...")
     frames: dict[str, Grid] = _render_jobs(setup, setup.size, setup.pivot)
+    note(f"rendered {name} in {time.monotonic() - started:.1f}s")
     try:
         cache_file.parent.mkdir(parents=True, exist_ok=True)
-        for stale in cache_file.parent.glob(f"{name}-*.json"):
-            if stale.stem.rsplit("-", 1)[0] == name:  # not "ship-big-..." when caching "ship"
-                stale.unlink()
-        cache_file.write_text(json.dumps({f: list(rows) for f, rows in frames.items()}), encoding="utf-8")
+        # Same model, other versions ("ship-big-..." isn't "ship"). A project's own cache keeps only the latest;
+        # a shared one (several checkouts / worktrees on different branches) keeps the newest few.
+        others = [p for p in cache_file.parent.glob(f"{name}-*.json") if p.stem.rsplit("-", 1)[0] == name and p != cache_file]
+        others.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for stale in others[_SHARED_CACHE_KEEP - 1 :] if shared else others:
+            stale.unlink(missing_ok=True)
+        scratch = cache_file.with_name(f".{cache_file.name}.{os.getpid()}.tmp")
+        scratch.write_text(json.dumps({f: list(rows) for f, rows in frames.items()}), encoding="utf-8")
+        os.replace(scratch, cache_file)  # atomic: another process never reads half a file
     except OSError:
         pass  # caching is an optimisation only
     return frames

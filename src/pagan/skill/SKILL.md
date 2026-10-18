@@ -132,6 +132,11 @@ size). Small means less detail; that's the deal, so say so if a request is small
 - **Tileset** (`pagan new tiles`) for terrain; tiles must be seamless. Animated terrain (water, lava)
   is a tileset `animations:` entry, not a separate sprite. Check transitions between different tiles
   with `pagan preview <tileset> --scene layout.txt`.
+- **UI and fonts:** a 9-slice panel/button gets `nine_slice: [l, t, r, b]` (the margins reach the manifest; a
+  hollow centre may need `lint: { disable: [W001] }`); a pixel font is a sprite with `font:` (glyph order,
+  cell, baseline, advance): the build writes its metrics to the manifest and a `.fnt` Godot loads as a FontFile.
+- **2D sprites that turn** (birds, arrows, flat arcade ships) when a model isn't right: draw the shape once
+  facing east and let `api.directional_frames` + `api.rotate_points` make every heading (same names as models).
 - **Many similar assets or procedural shapes** (effect bursts, 16-tile corner sets, a family of ships,
   polygon ships with rims):
   write a generator script on `pagan.api` (reference.md) - never copy PAGAN's geometry or lint rules into
@@ -147,6 +152,7 @@ size). Small means less detail; that's the deal, so say so if a request is small
    would hide real problems everywhere. Models: `pagan fit <model>` gives a size and pivot that fit
    every heading and pose (after adding animations, run it again).
 4. `pagan preview <name>` -> **open `previews/<name>/sheet.png` with the Read tool and look at it.**
+   (It also writes 1x frames to `previews/<name>/native/` for scripted montages.)
 5. Self-review against STYLE.md and the reference assets (`pagan gallery` shows the whole set):
    silhouette readable at 1x? light from the right side? ramps used dark->light? no pillow shading?
    (flat style: clean shapes, even rims, no stray pixels.) Supersampled: judge `built_1x.png`, not the source.
@@ -156,7 +162,9 @@ size). Small means less detail; that's the deal, so say so if a request is small
    If the owner isn't around, leave it `status: draft`, note it in BRIEF.md (wishlist: "awaiting review")
    with the choices and open questions, and move on.
 7. On approval: `pagan mark <name> --status approved`, add it to BRIEF.md "Done" (and log feedback),
-   `pagan build` (add `--verify-godot` if GODOT is set).
+   `pagan build` (add `--verify-godot` if GODOT is set). Uncached models and Godot print `pagan: ...`
+   progress on stderr; a first build of many big models can take minutes, so give the command a long
+   timeout rather than assuming it hung.
 8. **Report back** what the game side needs to use it (from `manifest.json`): the sheet / `.tres` paths,
    animation names, frame size, and:
    - **Pivot:** resources can't carry it. In Godot set `centered = true` and
@@ -164,6 +172,7 @@ size). Small means less detail; that's the deal, so say so if a request is small
      elsewhere, draw the frame with its `pivot` pixel at the object's position.
    - **3D models:** one animation per heading (`e`, `ne`, ...) plus `<anim>_<heading>`; the game picks
      the heading from its movement direction.
+   - **Animation order:** `animation_order` (manifest keys are sorted alphabetically).
    - **Tilesets:** a Godot `TileSet` `.tres` (`godot_tileset`) with every tile in atlas source 0 at the
      coordinates in the manifest's `tiles` (`name -> [column, row]`); no terrains/collision yet, set those
      up in the editor if needed.
@@ -191,7 +200,10 @@ in `pagan gallery`, then delete the losers and keep the winner under the real na
   `pagan preview` writes variants.png to compare them. When the base colours are one of the set (team
   cyan + red/orange/...), name them with `base_variant: cyan` so the manifest lists all of them uniformly. Many variants of big models multiply sheet sizes:
   if the game can recolour in a shader, set `variant_sheets = false` and point it at each variant's
-  `swap` table in manifest.json.
+  `swap` table in manifest.json. **A look for a whole set** ("everything on the map gets an arctic
+  version"): put the variant in the palette file (`variants: { arctic: { ramp_swap: ..., tags: [world] } }`),
+  not into every asset; tilesets compare variants on their first drawn tile (`--frame NAME` for another, and
+  `--scene` writes scene_variants.png).
 - **A family of related assets** (character classes, unit types, building tiers): put the shared body in a
   `template: true` model and `extends:` it per member (add parts, `remove: [ids]`, override materials),
   so a fix to the base reaches all of them. **Colours that combine** (player colour × rank, team × armour

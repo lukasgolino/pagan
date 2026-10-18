@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 import string
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +30,8 @@ def is_key(text: str) -> bool:
 PALETTE_SUFFIX = ".pal.yaml"
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
-_FIELDS = ("name", "description", "colors", "ramps")
+_FIELDS = ("name", "description", "colors", "ramps", "variants", "base_variant")
+_VARIANT_FIELDS = ("ramp_swap", "key_swap", "tags")
 _COLOR_FIELDS = ("hex", "name")
 
 # error(rule, message, line, where)
@@ -49,11 +50,30 @@ class Color:
 
 
 @dataclass(frozen=True)
+class PaletteVariant:
+    """A recolour every asset using the palette gets (or only assets with one of `tags`)."""
+
+    name: str
+    ramp_swap: dict[str, str]
+    key_swap: dict[str, str]
+    tags: tuple[str, ...] = ()  # empty = every asset
+
+    def applies_to(self, asset_tags: tuple[str, ...]) -> bool:
+        return not self.tags or any(t in asset_tags for t in self.tags)
+
+    def spec(self) -> dict[str, Any]:
+        """The same recolour as an asset's own `variants:` entry."""
+        return {"ramp_swap": dict(self.ramp_swap), "key_swap": dict(self.key_swap)}
+
+
+@dataclass(frozen=True)
 class Palette:
     name: str | None  # None for an unnamed inline palette
     colors: dict[str, Color]  # in source order
     ramps: dict[str, tuple[str, ...]]  # shadow -> highlight
     path: Path | None = None
+    variants: dict[str, PaletteVariant] = field(default_factory=dict)  # palette-wide recolours, by name
+    base_variant: str | None = None  # what the base colours are called on assets that get palette variants
 
 
 def _line(data: Any, key: Any = None) -> int | None:
@@ -161,9 +181,102 @@ def parse_palette(
                     keys.append(key)
                 ramps[ramp_name] = tuple(keys)
 
+    variants = _parse_palette_variants(data.get("variants"), _line(data, "variants"), colors, ramps, error)
+    base_variant = data.get("base_variant")
+    bline = _line(data, "base_variant")
+    if base_variant is not None:
+        if not isinstance(base_variant, str) or not NAME_RE.match(base_variant):
+            error("E006", "base_variant must be a variant name (lowercase letters, digits, '_' or '-')", bline, "base_variant")
+        elif base_variant in variants:
+            error("E006", f"base_variant {base_variant!r} is also a variant's name; rename one", bline, "base_variant")
+        elif "variants" not in data:
+            error("E006", "base_variant names the base colours among the palette's variants; add variants or remove it", bline, "base_variant")
+    if inline and ("variants" in data or base_variant is not None):
+        error("E006", "inline palettes can't have variants; use the asset's own variants", _line(data, "variants") or bline, "variants")
+
     if has_errors(findings):
         return None, findings
-    return Palette(name=name, colors=colors, ramps=ramps, path=path), findings
+    return Palette(name=name, colors=colors, ramps=ramps, path=path, variants=variants, base_variant=base_variant), findings
+
+
+def _parse_palette_variants(
+    raw: Any, line: int | None, colors: dict[str, Color], ramps: dict[str, tuple[str, ...]], error: ErrorFn
+) -> dict[str, PaletteVariant]:
+    """`variants: { arctic: { ramp_swap: { grass: snow }, key_swap: { "5": "ε" }, tags: [world] } }`.
+
+    Recolours within this palette that every asset using it gets (only those with one of `tags`, if given),
+    so one palette pass reaches a whole set of assets. An asset's own variant of the same name wins.
+    """
+    variants: dict[str, PaletteVariant] = {}
+    if raw is None:
+        return variants
+    if not isinstance(raw, dict) or not raw:
+        error("E006", "variants must map a variant name to { ramp_swap, key_swap, tags }", line, "variants")
+        return variants
+    for name, spec in raw.items():
+        vline = _line(raw, name) or line
+        where = f"variants.{name}"
+        if not isinstance(name, str) or not NAME_RE.match(name):
+            error("E006", "variant name must be lowercase letters, digits, '_' or '-'", vline, where)
+            continue
+        if not isinstance(spec, dict):
+            error("E006", "a palette variant is { ramp_swap: {...}, key_swap: {...}, tags: [...] }", vline, where)
+            continue
+        ok = True
+        for key in spec:
+            if key not in _VARIANT_FIELDS:
+                hint = " (a palette variant recolours within this palette)" if key == "palette" else ""
+                error("E006", f"unknown palette variant field {key!r}; allowed: {', '.join(_VARIANT_FIELDS)}{hint}", vline, where)
+                ok = False
+        if ok and not ("ramp_swap" in spec or "key_swap" in spec):
+            error("E006", "a palette variant needs ramp_swap and/or key_swap (and optionally tags)", vline, where)
+            continue
+        ramp_swap: dict[str, str] = {}
+        raw_ramps = spec.get("ramp_swap", {})
+        if not isinstance(raw_ramps, dict):
+            error("E006", "ramp_swap must map ramp -> ramp, e.g. { grass: snow }", vline, f"{where}.ramp_swap")
+            ok = False
+            raw_ramps = {}
+        for src, dst in raw_ramps.items():
+            unknown = [r for r in (src, dst) if not isinstance(r, str) or r not in ramps]
+            if unknown:
+                error("E006", f"ramp_swap: unknown ramp {unknown[0]!r}", vline, f"{where}.ramp_swap")
+                ok = False
+            elif len(ramps[src]) != len(ramps[dst]):
+                error(
+                    "E006",
+                    f"ramp_swap: {src!r} has {len(ramps[src])} colors but {dst!r} has {len(ramps[dst])}; "
+                    "ramps must be the same length",
+                    vline,
+                    f"{where}.ramp_swap",
+                )
+                ok = False
+            else:
+                ramp_swap[src] = dst
+        key_swap: dict[str, str] = {}
+        raw_keys = spec.get("key_swap", {})
+        if not isinstance(raw_keys, dict):
+            error("E006", 'key_swap must map key -> key, e.g. { "5": "a" }', vline, f"{where}.key_swap")
+            ok = False
+            raw_keys = {}
+        for src, dst in raw_keys.items():
+            src_key, dst_key = _normalize_key(src), _normalize_key(dst)
+            if src_key is None or dst_key is None or src_key not in colors or dst_key not in colors:
+                bad = src if src_key is None or src_key not in colors else dst
+                error("E006", f"key_swap: unknown key {bad!r}", vline, f"{where}.key_swap")
+                ok = False
+            else:
+                key_swap[src_key] = dst_key
+        tags = spec.get("tags", [])
+        if isinstance(tags, str):
+            tags = [tags]
+        if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
+            error("E006", "tags must be a list of asset tags, e.g. [world]", vline, f"{where}.tags")
+            ok = False
+            tags = []
+        if ok:
+            variants[name] = PaletteVariant(name, ramp_swap, key_swap, tuple(tags))
+    return variants
 
 
 def _parse_color(key: str, raw: Any, line: int | None, where: str, error: ErrorFn) -> Color | None:

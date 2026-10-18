@@ -30,7 +30,7 @@ from pagan.model import SailCell, _Builder, hull_reach, sail_cells
 from pagan.palette import TRANSPARENT, Palette
 from pagan.project import Project, discover_project
 from pagan.render import frame_image
-from pagan.voxel import Cell, Material, VoxelModel
+from pagan.voxel import Cell, Material, VoxelModel, heading_angles
 
 API_VERSION = 2  # 2: ellipse/ring exclude pixel centres exactly on the edge
 
@@ -40,6 +40,7 @@ __all__ = [
     "SailCell",
     "compose",
     "corner_tiles",
+    "directional_frames",
     "hash01",
     "hull_reach",
     "light_2d",
@@ -49,6 +50,7 @@ __all__ = [
     "periodic_noise",
     "polygon_distance",
     "ramp_pick",
+    "rotate_points",
     "sail_cells",
     "shape_cells",
     "smoothstep",
@@ -287,6 +289,42 @@ def polygon_distance(points: Sequence[Point], x: float, y: float) -> float:
             inside = not inside
         nearest = min(nearest, _segment_distance(x, y, a, b))
     return nearest if inside else -nearest
+
+
+# --- 2D headings ------------------------------------------------------------------------------
+
+
+def rotate_points(points: Sequence[Point], degrees: float, about: Point) -> list[Point]:
+    """Turn a shape drawn facing east (right) to face heading `degrees`, counter-clockwise on screen (y down):
+    0 = east, 90 = north (up), like model headings. Rounded to 12 decimals, so output is the same everywhere."""
+    angle = math.radians(degrees)
+    cos, sin = round(math.cos(angle), 12), round(math.sin(angle), 12)
+    cx, cy = about
+    return [
+        (round(cx + (x - cx) * cos + (y - cy) * sin, 12), round(cy - (x - cx) * sin + (y - cy) * cos, 12))
+        for x, y in points
+    ]
+
+
+def directional_frames(
+    draw: Callable[[Canvas, float], None], size: tuple[int, int], directions: int = 8, heading: float = 0.0
+) -> dict[str, Canvas]:
+    """One frame per heading for a 2D (vector-drawn) sprite, named like model headings (e, ne, n, ...; h00-h31
+    for 32), so 2D and 3D assets share frame names. `draw(canvas, angle)` paints the shape turned to `angle`
+    degrees, usually through `rotate_points`:
+
+        def gull(c, angle):
+            c.polygon(api.rotate_points(WING, angle, (6, 6)), "w")
+        frames = api.directional_frames(gull, (12, 12), 8)   # {"e": Canvas, "ne": ..., ...}
+    """
+    if directions not in (1, 4, 8, 16, 32):
+        raise ValueError("directions must be 1, 4, 8, 16 or 32")
+    frames: dict[str, Canvas] = {}
+    for name, angle in heading_angles(directions, heading):
+        canvas = Canvas(*size)
+        draw(canvas, angle)
+        frames[name] = canvas
+    return frames
 
 
 # --- noise and shading ------------------------------------------------------------------------

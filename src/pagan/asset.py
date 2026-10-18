@@ -37,7 +37,11 @@ _COMMON_FIELDS = (
     "supersample",
 )  # fmt: skip
 WARNING_ID_RE = re.compile(r"^W\d{3}$")
-_SPRITE_FIELDS = (*_COMMON_FIELDS, "size", "pivot", "mirror", "outline", "outline_color", "frames", "animations")
+_SPRITE_FIELDS = (
+    *_COMMON_FIELDS, "size", "pivot", "mirror", "outline", "outline_color", "frames", "animations", "nine_slice", "font",
+)  # fmt: skip
+_FONT_FIELDS = ("glyphs", "cell", "baseline", "line_height", "advance", "spacing", "space")
+Margins = tuple[int, int, int, int]  # left, top, right, bottom
 _TILESET_FIELDS = (*_COMMON_FIELDS, "tile_size", "columns", "tiles", "animations")
 
 
@@ -47,6 +51,20 @@ class Animation:
     frames: tuple[str, ...]
     fps: float
     loop: bool
+    new_row: bool = False  # tile animations: start on a new atlas row (column 0)
+
+
+@dataclass(frozen=True)
+class Font:
+    """`font:` on a sprite: its frames (or cells cut from them) are glyphs, in `glyphs` order."""
+
+    glyphs: str
+    cell: tuple[int, int]  # glyph cell size; the frame size when each frame is one glyph
+    baseline: int  # pixels from the cell's top to the baseline (the ascent)
+    line_height: int
+    advance: int | None  # fixed advance; None = each glyph's drawn width + spacing
+    spacing: int
+    space: int  # advance of a blank glyph (" ") when advance is auto
 
 
 @dataclass(frozen=True)
@@ -83,11 +101,14 @@ class Asset:
     # `lint:` in the file: warnings off for the whole asset, and per frame/tile/animation name
     lint_disable: frozenset[str] = frozenset()
     lint_disable_for: dict[str, frozenset[str]] = field(default_factory=dict)
+    lint_max_ramps: int | None = None  # `lint: { max_ramps: N }`: W003's limit for this asset
     template: bool = False  # models: only a base for `extends`; linted, never built
     # `variant_axes`: axis -> option -> recolour; every combination is also in `variants` as "<a>+<b>"
     variant_axes: dict[str, dict[str, Variant]] = field(default_factory=dict)
     base_variant: str | None = None  # the name the base colours go by among the variants (e.g. "cyan")
     supersample: int | None = None  # authored at N x the output size; None = the project's setting
+    nine_slice: dict[str, Margins] = field(default_factory=dict)  # frame -> 9-slice margins (sprites)
+    font: Font | None = None  # sprites: the frames are a font's glyphs
     # 3D models only: renders screen-space normal maps per frame on demand (H x W x 3 arrays)
     normal_maps: Callable[[], dict[str, Any]] | None = field(default=None, compare=False, repr=False)
 
@@ -332,19 +353,26 @@ def check_base_variant(base_variant: str | None, variants: dict[str, Variant], l
         error("E006", f"base_variant {base_variant!r} is also a variant's name; rename one", line, "base_variant")
 
 
-def _parse_lint(
-    raw: Any, line: int | None, targets: dict[str, tuple[str, ...]], error: ErrorFn
-) -> tuple[frozenset[str], dict[str, frozenset[str]]]:
-    """`lint: { disable: [W007], for: { name: [W004] } }`: warnings off for this asset only.
+@dataclass(frozen=True)
+class LintSettings:
+    """An asset's `lint:` section."""
+
+    disable: frozenset[str] = frozenset()
+    disable_for: dict[str, frozenset[str]] = field(default_factory=dict)
+    max_ramps: int | None = None  # W003 budget for this asset (None = the project's)
+
+
+def _parse_lint(raw: Any, line: int | None, targets: dict[str, tuple[str, ...]], error: ErrorFn) -> LintSettings:
+    """`lint: { disable: [W007], for: { name: [W004] }, max_ramps: 9 }`: lint settings for this asset only.
 
     `targets` maps each name allowed under `for` to the frame/animation names it covers.
     """
     if raw is None:
-        return frozenset(), {}
-    usage = "lint must be { disable: [W007, ...], for: { <frame, tile or animation>: [W004, ...] } }"
+        return LintSettings()
+    usage = "lint must be { disable: [W007, ...], for: { <frame, tile or animation>: [W004, ...] }, max_ramps: N }"
     if not isinstance(raw, dict):
         error("E001", usage, line, "lint")
-        return frozenset(), {}
+        return LintSettings()
 
     def rules(value: Any, where: str) -> frozenset[str] | None:
         if isinstance(value, str):
@@ -357,15 +385,19 @@ def _parse_lint(
     disable: frozenset[str] = frozenset()
     per_name: dict[str, frozenset[str]] = {}
     for key in raw:
-        if key not in ("disable", "for"):
-            error("E001", f"unknown lint field {key!r}; allowed: disable, for", _line(raw, key) or line, f"lint.{key}")
+        if key not in ("disable", "for", "max_ramps"):
+            error("E001", f"unknown lint field {key!r}; allowed: disable, for, max_ramps", _line(raw, key) or line, f"lint.{key}")
+    max_ramps = raw.get("max_ramps")
+    if max_ramps is not None and (isinstance(max_ramps, bool) or not isinstance(max_ramps, int) or max_ramps < 1):
+        error("E001", "lint.max_ramps must be a whole number of ramps, 1 or more (W003's limit for this asset)", _line(raw, "max_ramps") or line, "lint.max_ramps")
+        max_ramps = None
     if "disable" in raw:
         disable = rules(raw["disable"], "lint.disable") or frozenset()
     if "for" in raw:
         section = raw["for"]
         if not isinstance(section, dict):
             error("E001", usage, _line(raw, "for") or line, "lint.for")
-            return disable, per_name
+            return LintSettings(disable, per_name, max_ramps)
         for name, value in section.items():
             where = f"lint.for.{name}"
             if not isinstance(name, str) or name not in targets:
@@ -376,7 +408,7 @@ def _parse_lint(
                 continue
             for target in targets[name]:
                 per_name[target] = per_name.get(target, frozenset()) | found
-    return disable, per_name
+    return LintSettings(disable, per_name, max_ramps)
 
 
 def _parse_frames(
@@ -603,6 +635,27 @@ def _parse_variants(
     return variants
 
 
+def with_palette_variants(
+    raw: Any, palette: Palette, tags: tuple[str, ...], line: int | None, error: ErrorFn
+) -> tuple[Any, bool]:
+    """The asset's `variants:` with its palette's variants added (the asset's own of the same name win;
+    `name: false` turns an inherited one off). Returns (variants, whether any palette variant applies)."""
+    inherited = {name: v.spec() for name, v in palette.variants.items() if v.applies_to(tags)}
+    if raw is None:
+        return (inherited or None), bool(inherited)
+    if not isinstance(raw, dict):
+        return raw, False  # reported by _parse_variants
+    merged: dict[Any, Any] = {**inherited}
+    for name, spec in raw.items():
+        if spec is False:
+            if name not in palette.variants:
+                error("E006", f"{name}: false turns off a palette variant, but palette {palette.name!r} has no variant {name!r}", _line(raw, name) or line, f"variants.{name}")
+            merged.pop(name, None)
+        else:
+            merged[name] = spec
+    return (merged or None), any(name in merged for name in inherited)
+
+
 MAX_VARIANT_COMBINATIONS = 256
 
 
@@ -729,8 +782,8 @@ def _parse_tile_animations(
     """Tileset `animations: { water: { frames: [water_0, water_1, ...], fps: 4 } }`: animated tiles.
 
     The animation's name becomes the tile's name; its frames are laid out side by side in the atlas
-    (engines such as Godot animate a tile by stepping through neighbouring cells). Tile animations
-    always loop. Each tile can be a frame of one animation only.
+    (engines such as Godot animate a tile by stepping through neighbouring cells), from column 0 of a
+    fresh row with `new_row: true`. Tile animations always loop. Each tile can be a frame of one animation only.
     """
     animations: dict[str, Animation] = {}
     if raw is None:
@@ -750,10 +803,14 @@ def _parse_tile_animations(
         if not isinstance(spec, dict):
             error("E001", "a tile animation is { frames: [tile, ...], fps: N }", aline, where)
             continue
-        extra = [k for k in spec if k not in ("frames", "fps")]
+        extra = [k for k in spec if k not in ("frames", "fps", "new_row")]
         if extra:
             hint = " (tile animations always loop)" if "loop" in extra else ""
-            error("E001", f"unknown tile animation field(s) {', '.join(map(str, extra))}; allowed: frames, fps{hint}", aline, where)
+            error("E001", f"unknown tile animation field(s) {', '.join(map(str, extra))}; allowed: frames, fps, new_row{hint}", aline, where)
+            continue
+        new_row = spec.get("new_row", False)
+        if not isinstance(new_row, bool):
+            error("E001", "new_row must be true (start this animation at column 0 of a new atlas row) or false", aline, where)
             continue
         frame_list = spec.get("frames")
         if not isinstance(frame_list, list) or len(frame_list) < 2 or not all(isinstance(f, str) for f in frame_list):
@@ -779,7 +836,7 @@ def _parse_tile_animations(
             continue
         for frame in frame_list:
             claimed[frame] = name
-        animations[name] = Animation(name=name, frames=tuple(frame_list), fps=float(fps), loop=True)
+        animations[name] = Animation(name=name, frames=tuple(frame_list), fps=float(fps), loop=True, new_row=new_row)
     return animations
 
 
@@ -970,7 +1027,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
     else:
         animations = _parse_tile_animations(data.get("animations"), frame_lines, _line(data, "animations"), error)
     lint_targets: dict[str, tuple[str, ...]] = {n: (n,) for n in [*frame_lines, *animations]}
-    lint_disable, lint_disable_for = _parse_lint(data.get("lint"), _line(data, "lint"), lint_targets, error)
+    lint = _parse_lint(data.get("lint"), _line(data, "lint"), lint_targets, error)
 
     frames = dict(base_frames)
     if outline and outline_color is not None:
@@ -998,10 +1055,20 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
     variant_axes: dict[str, dict[str, Variant]] = {}
     if palette is not None:
         used = {c for grid in frames.values() for row in grid for c in row if c != TRANSPARENT}
-        variants = _parse_variants(data.get("variants"), palette, project, _line(data, "variants"), used, error)
+        raw_variants, inherited = with_palette_variants(data.get("variants"), palette, meta["tags"], _line(data, "variants"), error)
+        if inherited and meta["base_variant"] is None:
+            meta["base_variant"] = palette.base_variant
+        variants = _parse_variants(raw_variants, palette, project, _line(data, "variants"), used, error)
         variant_axes, combos = _parse_variant_axes(data.get("variant_axes"), palette, project, _line(data, "variant_axes"), used, variants, error)
         variants.update(combos)
         check_base_variant(meta["base_variant"], variants, _line(data, "base_variant"), error)
+
+    nine_slice: dict[str, Margins] = {}
+    font: Font | None = None
+    if kind == "sprite":
+        nine_slice = _parse_nine_slice(data.get("nine_slice"), list(frames), size, _line(data, "nine_slice"), error)
+        if "font" in data:
+            font = _parse_font(data["font"], frames, size, _line(data, "font"), error)
 
     if has_errors(findings) or palette is None:
         return None, findings
@@ -1023,13 +1090,129 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             mirror=mirror,
             outline=outline,
             outline_color=outline_color,
-            lint_disable=lint_disable,
-            lint_disable_for=lint_disable_for,
+            lint_disable=lint.disable,
+            lint_disable_for=lint.disable_for,
+            lint_max_ramps=lint.max_ramps,
             variant_axes=variant_axes,
+            nine_slice=nine_slice,
+            font=font,
             **meta,
         ),
         findings,
     )
+
+
+def _parse_nine_slice(raw: Any, frames: list[str], size: tuple[int, int], line: int | None, error: ErrorFn) -> dict[str, Margins]:
+    """`nine_slice: [left, top, right, bottom]` (every frame) or `{ frame: [l, t, r, b], ... }` (those frames).
+
+    The margins are the fixed borders of a 9-slice (NinePatchRect) frame; the build carries them into the manifest.
+    """
+    if raw is None:
+        return {}
+    width, height = size
+    usage = "nine_slice must be [left, top, right, bottom] margins in pixels, or { frame: [l, t, r, b], ... }"
+
+    def margins(value: Any, where: str, ln: int | None) -> Margins | None:
+        if not (isinstance(value, list) and len(value) == 4 and all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in value)):
+            error("E001", usage, ln, where)
+            return None
+        left, top, right, bottom = value
+        if left + right >= width or top + bottom >= height:
+            error("E001", f"nine_slice {value} leaves no centre in a {width}x{height} frame: left + right must be under {width}, top + bottom under {height}", ln, where)
+            return None
+        return (left, top, right, bottom)
+
+    if isinstance(raw, list):
+        found = margins(raw, "nine_slice", line)
+        return {name: found for name in frames} if found is not None else {}
+    if not isinstance(raw, dict) or not raw:
+        error("E001", usage, line, "nine_slice")
+        return {}
+    out: dict[str, Margins] = {}
+    for name, value in raw.items():
+        where = f"nine_slice.{name}"
+        if name not in frames:
+            error("E001", f"nine_slice: {name!r} isn't a frame of this sprite", _line(raw, name) or line, where)
+            continue
+        found = margins(value, where, _line(raw, name) or line)
+        if found is not None:
+            out[name] = found
+    return out
+
+
+def _parse_font(raw: Any, frames: dict[str, Grid], size: tuple[int, int], line: int | None, error: ErrorFn) -> Font | None:
+    """`font: { glyphs: "ABC...", cell: [6, 8], baseline: 7, advance: auto, spacing: 1, space: 3 }`."""
+    usage = "font must be { glyphs: \"ABC...\", cell: [w, h], baseline: N, line_height: N, advance: auto | N, spacing: N, space: N }"
+    if not isinstance(raw, dict):
+        error("E001", usage, line, "font")
+        return None
+    ok = True
+    for key in raw:
+        if key not in _FONT_FIELDS:
+            error("E001", f"unknown font field {key!r}; allowed: {', '.join(_FONT_FIELDS)}", _line(raw, key) or line, f"font.{key}")
+            ok = False
+
+    def where_line(key: str) -> int | None:
+        return _line(raw, key) or line
+
+    glyphs = raw.get("glyphs")
+    if isinstance(glyphs, list) and all(isinstance(g, str) for g in glyphs):
+        glyphs = "".join(glyphs)  # rows of glyphs, e.g. one string per sheet row
+    if not isinstance(glyphs, str) or not glyphs:
+        error("E001", "font.glyphs must be the characters in glyph order: a string, or a list of strings (joined)", where_line("glyphs"), "font.glyphs")
+        return None
+    repeated = sorted({c for c in glyphs if glyphs.count(c) > 1})
+    if repeated:
+        error("E001", f"font.glyphs repeats {' '.join(repr(c) for c in repeated)}; each character needs one glyph", where_line("glyphs"), "font.glyphs")
+        ok = False
+    width, height = size
+    cell = size
+    if "cell" in raw:
+        parsed = _parse_size(raw["cell"], "font.cell", where_line("cell"), error)
+        if parsed is None:
+            return None
+        if width % parsed[0] or height % parsed[1]:
+            error("E001", f"font.cell {parsed[0]}x{parsed[1]} must divide the {width}x{height} frame into whole cells", where_line("cell"), "font.cell")
+            return None
+        cell = parsed
+    cell_w, cell_h = cell
+
+    def number(key: str, default: int, low: int, high: int) -> int:
+        nonlocal ok
+        value = raw.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+            error("E001", f"font.{key} must be a whole number {low}-{high}", where_line(key), f"font.{key}")
+            ok = False
+            return default
+        return value
+
+    baseline = number("baseline", cell_h, 1, cell_h)
+    line_height = number("line_height", cell_h, 1, 4 * cell_h)
+    spacing = number("spacing", 1, 0, cell_w)
+    space = number("space", -(-cell_w // 2), 0, 4 * cell_w)
+    advance = None if raw.get("advance") == "auto" else number("advance", cell_w, 1, 4 * cell_w)
+    cells = len(frames) * (width // cell_w) * (height // cell_h)
+    if len(glyphs) > cells:
+        error("E001", f"font.glyphs has {len(glyphs)} characters but the frames hold {cells} glyph cells", where_line("glyphs"), "font.glyphs")
+        return None
+    font = Font(glyphs, cell, baseline, line_height, advance, spacing, space)
+    for index, (frame, grid) in enumerate(glyph_cells(font, frames, size)):
+        if index >= len(glyphs) and any(c != TRANSPARENT for row in grid for c in row):
+            error("E001", f"frame {frame!r} has drawn glyph cells past the {len(glyphs)} characters in font.glyphs; add their characters", where_line("glyphs"), "font.glyphs")
+            ok = False
+            break
+    return font if ok else None
+
+
+def glyph_cells(font: Font, frames: dict[str, Grid], size: tuple[int, int]) -> list[tuple[str, Grid]]:
+    """Every glyph cell in order (frame by frame, each cut row by row): (frame name, cell pixels)."""
+    cell_w, cell_h = font.cell
+    out: list[tuple[str, Grid]] = []
+    for name, grid in frames.items():
+        for top in range(0, size[1], cell_h):
+            for left in range(0, size[0], cell_w):
+                out.append((name, tuple(row[left : left + cell_w] for row in grid[top : top + cell_h])))
+    return out
 
 
 def load_asset(path: Path, project: Project) -> tuple[Asset | None, list[Finding]]:

@@ -100,7 +100,7 @@ class Pagan:
             os.chdir(self.root)
             try:
                 with redirect_stdout(buffer):
-                    code = main(["--json", *argv])
+                    code = main(["--json", *argv], show_progress=False)
             except SystemExit as exc:  # argparse rejected the arguments
                 return _failure([Finding("E000", f"invalid arguments for `pagan {' '.join(argv)}` (exit {exc.code})")])
             finally:
@@ -414,15 +414,19 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
         scale: int | None = None,
         background: str = "checker",
         inline: bool = True,
+        frame: str | None = None,
     ) -> list[Any]:
         """Render previews (labelled contact sheet with every frame, heading and animation "changes" row;
         montage; variants side by side; built = supersampled output at 1x) and return the chosen one as an
-        image. LOOK at it before reporting. Paths to the GIFs and every file are in the result.
-        background: checker, none or #rrggbb."""
+        image. LOOK at it before reporting. Paths to the GIFs, the 1x frames (native) and every file are in
+        the result. background: checker, none or #rrggbb. frame: the frame "variants" compares (default:
+        the first one with pixels)."""
         _check_name(asset)
         argv = ["preview", asset, f"--bg={background}"]
         if scale is not None:
             argv.append(f"--scale={scale}")
+        if frame is not None:
+            argv.append(f"--frame={frame}")
         result = pagan.cli(*argv)
         outputs = result.get("outputs") or [{}]
         key = {"sheet": "sheet", "montage": "montage", "variants": "variants", "built": "built_1x"}[which]

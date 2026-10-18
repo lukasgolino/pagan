@@ -41,6 +41,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `settings.py` registry of every pagan.toml setting (default, meaning, what it refreshes) + safe `pagan config set` edits;
   - `api.py` stable Python API for generator scripts (drawing, shading, corner sets, exact hull/sail geometry, YAML writers);
   - `mcp_server.py` `pagan mcp`: MCP tools/resources/prompts over the CLI handlers (stdout captured, cwd pinned, under a lock);
+  - `progress.py` stderr progress lines for slow steps (CLI only);
   - `swatch.py` palette swatch images; `templates/` files copied by `pagan init` (STYLE.md for pixel art, STYLE_flat.md for flat art).
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
@@ -128,3 +129,9 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-17: MCP server (owner approved): official `mcp` SDK 2.x as an optional extra (`pagan[mcp]`; in dev so mypy/tests
   cover it). Tools run the CLI handlers with `--json` (stdout captured, cwd pinned, one lock) so CLI and MCP share one
   contract; errors are `ok: false` results; one server per project; paths confined to project/output/preview; stdio only.
+- 2026-10-19: R20-R29 (Age of Boom PAGAN_LOG friction, filed by PAGAN): `nine_slice` and `font` on sprites (fonts
+  export AngelCode BMFont text `.fnt`, which Godot imports as FontFile: engine-agnostic, no FontFile .tres writer);
+  palette-wide `variants`/`base_variant` (recolour within the palette only, so palettes validate on their own);
+  manifest `animation_order`. Model rendering uses one persistent process pool (forkserver on Linux, spawn
+  elsewhere; `PAGAN_JOBS`); every frame is computed as in one process, so output is byte-identical. YAML uses
+  libyaml's CSafeLoader when available (same marks/columns). Progress goes to stderr, only from the CLI (MCP off).

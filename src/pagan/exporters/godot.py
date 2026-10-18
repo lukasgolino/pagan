@@ -11,11 +11,13 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 
 from pagan.asset import Animation
+from pagan.progress import note
 
 
 def find_godot_project(start: Path) -> Path | None:
@@ -181,6 +183,7 @@ class GodotCheck:
     output: str
     sprite_frames: int = 0
     tilesets: int = 0
+    fonts: int = 0
 
 
 def find_godot_binary() -> str | None:
@@ -194,7 +197,7 @@ def find_godot_binary() -> str | None:
     return None
 
 
-def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: int = 300) -> GodotCheck:
+def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: int = 600) -> GodotCheck:
     """Import the project, then load every generated resource in a headless Godot. Needs a Godot 4 binary.
 
     The check script runs from a temp folder (by absolute path), so nothing is written into the game.
@@ -205,6 +208,8 @@ def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: 
         script_path.write_text(script, encoding="utf-8")
         stage = "import"
         try:
+            note(f"Godot: importing {godot_root.name} (big sheets can take minutes; limit {timeout}s, --godot-timeout)...")
+            started = time.monotonic()
             imported = subprocess.run(
                 [godot, "--headless", "--path", str(godot_root), "--import"],
                 capture_output=True, text=True, timeout=timeout,
@@ -214,6 +219,7 @@ def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: 
             if imported.returncode != 0 or import_errors:
                 detail = "\n".join(import_errors[-20:]) or import_output[-2000:]
                 return GodotCheck(ok=False, output=f"Godot's import step failed (exit {imported.returncode}):\n{detail}")
+            note(f"Godot: imported in {time.monotonic() - started:.1f}s; loading every generated resource...")
             stage = "check"
             result = subprocess.run(
                 [godot, "--headless", "--path", str(godot_root), "-s", str(script_path), "--", manifest_res],
@@ -225,12 +231,14 @@ def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: 
             return GodotCheck(ok=False, output=f"can't run {godot}: not executable")
         except subprocess.TimeoutExpired:
             if stage == "import":
-                return GodotCheck(ok=False, output=f"Godot's import step didn't finish within {timeout}s")
+                return GodotCheck(
+                    ok=False, output=f"Godot's import step didn't finish within {timeout}s (raise it with --godot-timeout SECONDS)"
+                )
             return GodotCheck(
                 ok=False, output=f"the Godot check script didn't finish within {timeout}s (it takes seconds: this is a hang, not a slow import)"
             )
     output = (result.stdout + result.stderr).strip()
     ok = result.returncode == 0 and "PAGAN_VERIFY_OK" in result.stdout and "SCRIPT ERROR" not in output
-    match = re.search(r"PAGAN_VERIFY_OK (\d+) SpriteFrames, (\d+) TileSets", result.stdout)
-    counts = (int(match.group(1)), int(match.group(2))) if match else (0, 0)
-    return GodotCheck(ok=ok, output=output, sprite_frames=counts[0], tilesets=counts[1])
+    match = re.search(r"PAGAN_VERIFY_OK (\d+) SpriteFrames, (\d+) TileSets, (\d+) fonts", result.stdout)
+    counts = (int(match.group(1)), int(match.group(2)), int(match.group(3))) if match else (0, 0, 0)
+    return GodotCheck(ok=ok, output=output, sprite_frames=counts[0], tilesets=counts[1], fonts=counts[2])

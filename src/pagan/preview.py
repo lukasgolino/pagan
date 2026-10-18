@@ -5,14 +5,14 @@ Previews are for humans and agents to *look at*; they are not build output and n
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
 from pagan.asset import Asset, Grid
 from pagan.palette import TRANSPARENT
-from pagan.render import downsample, frame_image
+from pagan.render import downsample, frame_image, save_png, sheet_image
 from pagan.swatch import _font
 
 BG_DARK = (30, 30, 36)
@@ -210,6 +210,7 @@ class PreviewResult:
     variants: Path | None = None  # base + every variant side by side (only when the asset has variants)
     variants_1x: Path | None = None
     built_1x: Path | None = None  # supersampled assets: the frames as built, 1x
+    native: list[Path] = field(default_factory=list)  # 1x frames and sheets (native/), as `pagan render` writes
 
 
 def base_label(asset: Asset) -> str:
@@ -228,27 +229,53 @@ def built_strip(asset: Asset, supersample: int, gap: int = 1) -> Image.Image:
 
 
 def representative_frame(asset: Asset) -> str:
-    """The frame that stands for the asset: a model's first heading, else the first frame."""
-    return next(iter(asset.frames))
+    """The frame that stands for the asset: the first one with any pixels (a model's first heading; not a
+    tileset's deliberately empty first tile), else the first frame."""
+    drawn = (name for name, grid in asset.frames.items() if any(c != TRANSPARENT for row in grid for c in row))
+    return next(drawn, next(iter(asset.frames)))
 
 
-def variants_image(asset: Asset, options: PreviewOptions) -> Image.Image:
+def variants_image(asset: Asset, options: PreviewOptions, frame: str | None = None) -> Image.Image:
     """The same frame in the base colours and every variant, labelled, at the preview scale."""
     scale = options.scale or auto_scale(asset.size)
-    frame = representative_frame(asset)
+    frame = frame or representative_frame(asset)
     cells = [(name or base_label(asset), upscale(frame_image(asset, frame, name), scale, options)) for name in (None, *asset.variants)]
-    return _labelled_grid(f"{asset.name} variants  x{scale}", f"frame {frame}", [("", cells)])
+    return _labelled_grid(f"{asset.name} variants  x{scale}", f"frame {frame} (pick another: --frame NAME)", [("", cells)])
 
 
-def variants_strip(asset: Asset, gap: int = 1) -> Image.Image:
+def variants_strip(asset: Asset, gap: int = 1, frame: str | None = None) -> Image.Image:
     """The same comparison at 1x on a transparent background (how they'll look in game)."""
-    frame = representative_frame(asset)
+    frame = frame or representative_frame(asset)
     names = (None, *asset.variants)
     width, height = asset.size
     strip = Image.new("RGBA", (len(names) * (width + gap) - gap, height), (0, 0, 0, 0))
     for i, name in enumerate(names):
         strip.alpha_composite(frame_image(asset, frame, name), (i * (width + gap), 0))
     return strip
+
+
+def variants_grid(asset: Asset, images: dict[str | None, Image.Image], options: PreviewOptions, subtitle: str) -> Image.Image:
+    """Already-drawn images (e.g. a tile scene) per variant (None = base), labelled side by side."""
+    first = next(iter(images.values()))
+    scale = options.scale or max(1, auto_scale((first.width, first.height)))
+    cells = [(name or base_label(asset), upscale(image, scale, options)) for name, image in images.items()]
+    return _labelled_grid(f"{asset.name} variants  x{scale}", subtitle, [("", cells)])
+
+
+def write_native(asset: Asset, out_dir: Path) -> list[Path]:
+    """1x PNGs of every frame and the sheet (base and each variant) in <out_dir>/<asset>/native/."""
+    base = out_dir / asset.name / "native"
+    written: list[Path] = []
+    for variant in (None, *asset.variants):
+        folder = base if variant is None else base / variant
+        for frame in asset.frames:
+            path = folder / "frames" / f"{frame}.png"
+            save_png(frame_image(asset, frame, variant), path)
+            written.append(path)
+        sheet = folder / "sheet.png"
+        save_png(sheet_image(asset, variant), sheet)
+        written.append(sheet)
+    return written
 
 
 def montage(asset: Asset, options: PreviewOptions, per_row: int = 8) -> Image.Image:
@@ -271,7 +298,11 @@ def montage(asset: Asset, options: PreviewOptions, per_row: int = 8) -> Image.Im
     return out
 
 
-def write_previews(asset: Asset, out_dir: Path, options: PreviewOptions, supersample: int = 1) -> PreviewResult:
+def write_previews(
+    asset: Asset, out_dir: Path, options: PreviewOptions, supersample: int = 1, frame: str | None = None
+) -> PreviewResult:
+    """Every preview of one asset, plus its 1x frames (as `pagan render` writes them) for scripted montages.
+    `frame`: the frame variants.png compares (default: the first one with pixels)."""
     scale = options.scale or auto_scale(asset.size)
     folder = out_dir / asset.name
     frames: list[Path] = []
@@ -291,11 +322,12 @@ def write_previews(asset: Asset, out_dir: Path, options: PreviewOptions, supersa
     montage_path = folder / "montage.png"
     montage(asset, options).save(montage_path)
     result = PreviewResult(asset=asset.name, sheet=sheet, montage=montage_path, frames=frames, gifs=gifs, scale=scale)
+    result.native = write_native(asset, out_dir)
     if asset.variants:
         result.variants = folder / "variants.png"
-        variants_image(asset, options).save(result.variants)
+        variants_image(asset, options, frame).save(result.variants)
         result.variants_1x = folder / "variants_1x.png"
-        variants_strip(asset).save(result.variants_1x)
+        variants_strip(asset, frame=frame).save(result.variants_1x)
     if supersample > 1:
         result.built_1x = folder / "built_1x.png"
         built_strip(asset, supersample).save(result.built_1x)

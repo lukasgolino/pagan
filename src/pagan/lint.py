@@ -103,11 +103,17 @@ def _check_supersample(asset: Asset, project: Project) -> list[Finding]:
     """Supersampled assets are box-filtered down by N, so the frame size must be a multiple of N."""
     factor = asset.supersample if asset.supersample is not None else project.config.supersample
     width, height = asset.size
+    found: list[Finding] = []
+    if asset.font is not None and any(v % factor for v in (*asset.font.cell, asset.font.baseline, asset.font.line_height)):
+        found.append(Finding("E003", f"font cell, baseline and line_height must be multiples of supersample ({factor})", asset.path, None, "font"))
+    if any(m % factor for margins in asset.nine_slice.values() for m in margins):
+        found.append(Finding("E003", f"nine_slice margins must be multiples of supersample ({factor})", asset.path, None, "nine_slice"))
     if width % factor == 0 and height % factor == 0:
-        return []
+        return found
     source = "its supersample" if asset.supersample is not None else "pagan.toml supersample"
     field = "tile_size" if asset.kind == "tileset" else "size"
     return [
+        *found,
         Finding(
             "E003",
             f"{field} {width}x{height} isn't a multiple of {source} ({factor}): the build shrinks every frame by "
@@ -115,7 +121,7 @@ def _check_supersample(asset: Asset, project: Project) -> list[Finding]:
             asset.path,
             None,
             field,
-        )
+        ),
     ]
 
 
@@ -169,13 +175,17 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
 
     lint_config = project.config.lint
     limit = lint_config.max_ramps_per_model if asset.kind == "model" else lint_config.max_ramps_per_sprite
+    whose = "the project limit"
+    if asset.lint_max_ramps is not None:
+        limit, whose = asset.lint_max_ramps, "this asset's lint.max_ramps"
     ramps = _ramps_used(asset)
     if len(ramps) > limit:
         add(
             Finding(
                 "W003",
-                f"uses colors from {len(ramps)} ramps ({', '.join(ramps)}); the project limit is {limit}. "
-                "Fewer ramps per asset keeps the look cohesive",
+                f"uses colors from {len(ramps)} ramps ({', '.join(ramps)}); {whose} is {limit}. "
+                "Fewer ramps per asset keeps the look cohesive (a sheet of unrelated items can raise its own "
+                "budget: lint: { max_ramps: N })",
                 asset.path,
                 None,
                 "palette",

@@ -279,3 +279,63 @@ R15-R17 (above) arrived during this work; not addressed yet.
   the same job). Preview: `pagan preview --bg none` and `pagan render` already give transparent frames for
   compositing an overlay over its parent.
 
+
+## Age of Boom PAGAN_LOG.md friction, filed by PAGAN as R20–R29 — 2026-10-19, pagan v0.6.0/v0.6.1
+
+These were logged in `age-of-boom/PAGAN_LOG.md` (2026-10-16 G4 and 2026-10-18) but never filed here; PAGAN
+filed them so each has an id and an answer.
+
+- **R20 · feature · medium · No 9-slice metadata** (G4, Q7/M10): margins of ui_panel/ui_button/ui_banner/ui_bubble
+  live only in descriptions. Want `nine_slice: [l, t, r, b]` in the manifest.
+- **R21 · feature · medium · No font export** (G4): font_small/font_big are glyph sheets; the game's
+  `font_builder.gd` hard-codes glyph order, cell size, baseline and advances. Want glyph metrics in the manifest
+  and a FontFile / BMFont `.fnt`.
+- **R22 · friction · low · Manifest `animations` keys are alphabetical** (G4): consumers need the file order.
+- **R23 · friction · high · Slow builds look hung** (V6p1, V3): re-rendering 5 ships at 32 headings took
+  ~280–305 s, past a 5-minute agent tool limit, with no output; `--verify-godot` hit its own 300 s limit.
+- **R24 · friction · low · Animated tiles pack wherever the cursor is** (V2): the game must mirror PAGAN's packing
+  rule; want a per-animation "start a new row".
+- **R25 · friction · low · Tileset variants.png shows only the first tile** (W9), which is empty by design.
+- **R26 · feature · medium · No variant for a whole set of assets** (W9): the arctic `ramp_swap` was pasted into
+  8 files and their generators.
+- **R27 · feature · low · 8-heading 2D sprites are rasterised per heading by hand** (W7 gull).
+- **R28 · friction · low · `pagan preview` writes no 1x frames** unless `pagan render` ran (V8 montages).
+- **R29 · friction · low · W003 budget for one asset** (C1/C9): a 4-kind pickup sheet needed a 9th ramp;
+  disabling W003 for one pixel felt wrong.
+
+### PAGAN responses to R20–R29 — 2026-10-19 (released in v0.7.0, see CHANGELOG.md)
+
+- **R20** done: `nine_slice: [l, t, r, b]` (every frame) or `{ frame: [l, t, r, b] }`; the manifest has
+  `nine_slice: { frame: [...] }`. Set a NinePatchRect's `patch_margin_*` from it.
+- **R21** done: `font: { glyphs, cell, baseline, line_height, advance: auto | N, spacing, space }` on a sprite. A
+  single-frame sheet works as-is: `font_small` = `glyphs:` the 96 characters, `cell: [6, 8]`, `baseline: 7`. The
+  build writes `font` (per glyph `rect` + `advance`, `ascent`, `descent`, `line_height`, `glyph_order`) and
+  `fonts/<name>.fnt` + its page `fonts/<name>.png` (`font_file`; a copy of the sheet, because Godot's font
+  importer claims its page image), which Godot imports as a FontFile; `--verify-godot` loads it. `font_builder.gd`
+  can become `load(entry.font_file)`. Fixed advance stays the default (your fonts have spacing built into the
+  cell); `advance: auto` gives proportional spacing.
+- **R22** done: `animation_order` (file order) next to `animations`.
+- **R23** done: models render in several processes (`PAGAN_JOBS`, default CPU count up to 8; byte-identical
+  output) and YAML parses with libyaml: a cold build of your art went from ~78 s to ~30 s on 6 cores. Uncached
+  renders and Godot steps print `pagan: ...` progress lines on stderr (`--quiet` to hide). `--verify-godot`
+  allows 600 s per step by default, `--godot-timeout SECONDS` to change it. Why it re-rendered: `variant_sheets`
+  isn't in the render cache key, but `.pagan-cache/` is per checkout and not committed, and your agents work in
+  fresh git worktrees (`.claude/worktrees/agent-*`), so every worktree renders every model once. Set
+  `PAGAN_CACHE_DIR` (e.g. `~/.cache/pagan-age-of-boom`) for agents to share one cache; it keeps the newest 8
+  renders per model, so branches don't evict each other.
+- **R24** done: `new_row: true` on a tile animation starts it at column 0 of a fresh row. Default packing is
+  unchanged (existing atlases keep their layout); the manifest's `tiles` remains the authoritative cell map.
+- **R25** done: variants.png compares the first tile with pixels; `pagan preview --frame NAME` picks one, and
+  `--scene layout.txt` also writes scene_variants.png (the layout in every variant).
+- **R26** done: palette-wide variants: in `naval.pal.yaml`, `variants: { arctic: { ramp_swap: {...}, tags: [world] } }`
+  (+ `base_variant: temperate`) reaches every asset using the palette with one of the tags; an asset's own
+  `arctic` wins, `variants: { arctic: false }` opts out. Recolours stay within the palette (no `palette:`).
+- **R27** done: `api.directional_frames(draw, size, directions)` + `api.rotate_points(points, angle, about)`:
+  draw the gull once facing east; frames come out named like model headings.
+- **R28** done: `pagan preview` also writes `previews/<asset>/native/` (1x frames + sheet, per variant), listed
+  as `native` in `--json`.
+- **R29** done: `lint: { max_ramps: N }` sets W003's limit for one asset.
+- **Also fixed** (found verifying your art with v0.7.0): `--verify-godot` with `variant_sheets = false` failed on
+  every asset with a `base_variant` (islands, water, ports: "variant temperate has neither a sheet nor a swap
+  table"), so with v0.6.1 it would still have failed after R18. Checked: your whole `art/` (with a `font:` on
+  font_small) builds and passes `--verify-godot` twice in a row on v0.7.0.

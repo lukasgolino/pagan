@@ -62,8 +62,8 @@ def tile_cells(asset: Asset) -> dict[str, tuple[int, int]]:
     """Atlas cell (column, row) of every tile, filled row by row in source order, `columns` wide.
 
     An animated tile's frames sit side by side in animation order (engines step through neighbouring
-    cells), starting on a new row if they wouldn't fit in the current one; an animation longer than a
-    row wraps into a block `columns` wide. Without animations this is plain source order.
+    cells), starting on a new row if they wouldn't fit in the current one (or always, with `new_row`); an
+    animation longer than a row wraps into a block `columns` wide. Without animations this is plain source order.
     """
     columns = asset.columns
     animation_of = {frame: anim for anim in asset.animations.values() for frame in anim.frames}
@@ -75,6 +75,8 @@ def tile_cells(asset: Asset) -> dict[str, tuple[int, int]]:
         anim = animation_of.get(name)
         group = anim.frames if anim is not None else (name,)
         count = len(group)
+        if anim is not None and anim.new_row and col:
+            col, row = 0, row + 1
         if count <= columns:
             if col + count > columns:
                 col, row = 0, row + 1

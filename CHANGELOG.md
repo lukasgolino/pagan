@@ -4,7 +4,7 @@ All notable changes to PAGAN are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Game projects should pin a release tag
-(e.g. `pip install "git+ssh://git@github.com/lukasgolino/pagan.git@v0.6.1"`).
+(e.g. `pip install "git+ssh://git@github.com/lukasgolino/pagan.git@v0.7.0"`).
 
 A new version (and tag) is cut for **any** change to:
 - the notation (palette, sprite, tileset or model files),
@@ -18,6 +18,49 @@ check before upgrading. Patch bumps (0.1.0 -> 0.1.1) never change existing behav
 the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change once per upgrade.
 
 ## [Unreleased]
+
+## [0.7.0] - 2026-10-19
+
+From Age of Boom reports R20-R29 (ORCHESTRATOR_PLAN.md). Existing sources build to the same pixels; the
+manifest gains keys (below), so every manifest changes once.
+
+### Added
+
+- `nine_slice: [left, top, right, bottom]` (or `{ frame: [...] }`) on sprites; the manifest carries
+  `nine_slice: { frame: [l, t, r, b] }` (R20).
+- `font:` on sprites (`glyphs`, `cell`, `baseline`, `line_height`, `advance: auto | N`, `spacing`, `space`):
+  the frames, or cells cut from them, are glyphs. The build writes `font` metrics (per glyph `rect` and
+  `advance`, `ascent`, `descent`, `line_height`) to the manifest and an AngelCode BMFont `fonts/<name>.fnt` with its own
+  page image `fonts/<name>.png` (`font_file`), which Godot imports as a FontFile; `--verify-godot` loads it (R21).
+- `animation_order` in the manifest: animation names in file order (R22).
+- Progress lines on stderr for slow steps (uncached model renders, Godot import and check); `--quiet` or
+  `PAGAN_QUIET=1` turns them off. `pagan build --godot-timeout SECONDS`. `PAGAN_CACHE_DIR` shares the model
+  render cache between checkouts (git worktrees); cache files are written atomically (R23).
+- Tileset animations take `new_row: true`: the animation starts at column 0 of a fresh atlas row (R24).
+- `pagan preview --frame NAME` picks the frame variants.png compares; `--scene` also writes
+  scene_variants.png when the tileset has variants (MCP `preview(frame=...)`) (R25).
+- Palette-wide variants: `variants:` (ramp_swap / key_swap within the palette, optional `tags`) and
+  `base_variant` in a palette file; every asset using the palette (with one of the tags) gets them, its own
+  variant of the same name wins, and `variants: { name: false }` turns one off (R26).
+- `pagan.api.directional_frames(draw, size, directions)` and `api.rotate_points(points, degrees, about)`:
+  2D sprites in every heading, named like model headings (R27).
+- `pagan preview` also writes 1x frames and sheets to `previews/<asset>/native/` (as `pagan render`), listed
+  as `native` in `--json` (R28).
+- `lint: { max_ramps: N }`: W003's limit for one asset (R29).
+
+### Changed
+
+- Models render in several processes (`PAGAN_JOBS`, default: CPU count up to 8); output is byte-identical.
+  YAML is parsed with libyaml when PyYAML has it. A cold (uncached) build of Age of Boom's art (70 assets,
+  15 models) went from ~78 s to ~30 s on 6 cores.
+- `--verify-godot`'s default limit per Godot step is 600 s (was 300 s); its summary also counts fonts.
+- variants.png / variants_1x.png show the first frame with pixels (was: the first frame, which for corner
+  tilesets is empty).
+
+### Fixed
+
+- `--verify-godot` with `variant_sheets = false` failed on every asset with a `base_variant` (its entry has
+  no sheet and an empty swap by design).
 
 ## [0.6.1] - 2026-10-18
 
@@ -229,7 +272,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/lukasgolino/pagan/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/lukasgolino/pagan/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/lukasgolino/pagan/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/lukasgolino/pagan/compare/v0.4.0...v0.5.0

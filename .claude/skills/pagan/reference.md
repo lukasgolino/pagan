@@ -25,7 +25,14 @@ colors:                       # key = ONE letter or digit ("." is transparent)
   "α": "#2f6b9a"              # past 0-9 a-z A-Z: any other single Unicode letter
 ramps:                        # dark -> light; one ramp per material
   warm: ["1", "2", "3", "4"]
+variants:                     # optional: palette-wide recolours every asset using this palette gets
+  arctic: { ramp_swap: { grass: snow }, key_swap: { "5": "ε" }, tags: [world] }   # tags: only assets with one
+base_variant: temperate       # optional: the base colours' name on assets that get these variants
 ```
+
+Palette variants recolour within the palette (ramp_swap/key_swap, no `palette:`), so one "arctic pass"
+reaches every world asset at once. An asset's own variant of the same name wins; `variants: { arctic: false }`
+in an asset turns an inherited one off.
 
 Keys: use 0-9, a-z, A-Z first (62), then Latin-1 letters (à-ÿ, À-Þ, ß) and Greek letters that don't look
 like Latin ones (α-ω, Γ Δ Θ Λ Ξ Π Σ Φ Ψ Ω); any single Unicode letter or digit is accepted. Quote keys in
@@ -71,6 +78,17 @@ supersample: 2                # optional (any asset kind): drawn at 2x the size 
 lint:                         # optional: warnings off for this asset only (any asset kind)
   disable: [W005, W007]       # e.g. expanding bursts change shape by design
   for: { idle_1: [W001] }     # ...or only for some frames/tiles/animations
+  max_ramps: 9                # W003's limit for this asset (e.g. a sheet of unrelated pickups)
+nine_slice: [4, 4, 4, 4]      # optional: 9-slice margins left, top, right, bottom (px), or per frame:
+                              # { frame: [4, 4, 4, 4] }; carried into the manifest (NinePatchRect patch margins)
+font:                         # optional: the frames are a font's glyphs (manifest metrics + <name>.fnt)
+  glyphs: " !\"#ABC..."       # characters in glyph order (or a list of strings, joined)
+  cell: [6, 8]                # glyph cell: frames are cut into cells row by row (default: one glyph per frame)
+  baseline: 7                 # rows from the cell top to the baseline (default: cell height)
+  advance: auto               # auto = drawn width + spacing | N fixed (default: cell width)
+  spacing: 1                  # auto advance: pixels after each glyph
+  space: 3                    # auto advance of blank glyphs such as " " (default: half the cell)
+  line_height: 9              # default: cell height
 ```
 
 Frame order in the file = order in the sprite sheet (generated frames of mirrored animations come
@@ -91,14 +109,16 @@ tiles:
     ...
 animations:                   # animated tiles: the animation's name is the tile's name
   water: { frames: [water_0, water_1, water_2, water_3], fps: 4 }   # always loops
+  surf: { frames: [surf_0, surf_1, surf_2, surf_3], new_row: true }  # from column 0 of a fresh row
 variants: ...                 # as for sprites
 lint: { for: { shore_0000: [W004] } }   # e.g. a corner set's fully transparent tile
 ```
 
 No mirror/outline. Tiles should be seamless (preview shows a 3x3 tiling; `pagan preview <tileset>
 --scene layout.txt` draws a layout of different tiles to check the seams between them). An animated
-tile's frames sit side by side in the atlas (a new row if they don't fit; longer than `columns`: a
-block `columns` wide); each tile is a frame of at most one animation. Godot gets an animated atlas tile.
+tile's frames sit side by side in the atlas (a new row if they don't fit, or always with `new_row: true`, so
+the layout doesn't depend on how many tiles come before; longer than `columns`: a block `columns` wide); each
+tile is a frame of at most one animation (the manifest's `tiles` gives every cell either way). Godot gets an animated atlas tile.
 
 ## 3D model - `models/<name>.model.yaml`
 
@@ -260,6 +280,9 @@ on `from pagan import api` instead of copying PAGAN's maths; it's versioned with
 - 3D: `shape_cells(shape, spec)` = the voxels a part fills; `hull_reach(x, length, beam, bow, stern, keel)`;
   `sail_cells(at, width, height, bulge, brace, rig, yard)` -> cells with their cloth position (`u`, `row`),
   e.g. to place patches or gun ports exactly on a sail or hull side.
+- 2D headings: `directional_frames(draw, size, directions=8)` -> one Canvas per heading, named like model
+  headings (e, ne, n, ...; h00-h31); `draw(canvas, angle)` paints the shape turned to `angle` degrees,
+  usually via `rotate_points(points, angle, about)` (a shape drawn facing east; counter-clockwise on screen).
 - Files: `sprite_yaml(name, size, frames, animations, **fields)`, `tileset_yaml(...)`, `write(path, text)`
   (writes only on change), `load(path)` -> parsed asset, `open_project(path)`, `palette(name, project)`.
 
@@ -302,6 +325,12 @@ require_outline = false            # E011
 
 ## Commands (all accept `--json`; non-zero exit on errors)
 
+Slow steps (a model render that isn't cached yet, Godot) print `pagan: ...` progress lines on stderr
+(`--quiet` or `PAGAN_QUIET=1` turns them off; stdout and `--json` are unaffected). Models render in
+several processes (`PAGAN_JOBS=N`, default: the CPU count up to 8; `1` = one process); output is identical.
+Renders are cached in `<project>/.pagan-cache/`; `PAGAN_CACHE_DIR=/path` shares one cache between several
+checkouts of the same art (e.g. agents' git worktrees), so a fresh checkout doesn't re-render every model.
+
 | Command | Purpose |
 |---|---|
 | `pagan init [dir] [--open] [--godot DIR] [--perspective top-down\|top-down-3/4\|side\|iso] [--style pixel\|flat]` | create a project; perspective sets `[camera] elevation` (90/42/15/30) and BRIEF.md; `--style flat` = STYLE.md for flat / vector-like arcade art |
@@ -310,7 +339,7 @@ require_outline = false            # E011
 | `pagan new tiles <name> [--size] [--frames N]` | blank tileset |
 | `pagan new model <name> [--size 64x64] [--directions 8]` | starter model |
 | `pagan lint [paths] [--warnings-as-errors]` | errors + style warnings |
-| `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb] [--scene FILE]` | sheet.png (labelled), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale; variants.png + variants_1x.png (base and every variant side by side) when the asset has variants; `--scene` (tilesets): scene.png from a layout file (rows of tile names, `.` = empty); supersampled assets also get an "as built" row and built_1x.png (what the game gets) |
+| `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb] [--scene FILE] [--frame NAME]` | sheet.png (labelled), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale, plus native/ (1x frames and sheet, as `pagan render`); variants.png + variants_1x.png (base and every variant side by side: the first frame with pixels, or `--frame`) when the asset has variants; `--scene` (tilesets): scene.png from a layout file (rows of tile names, `.` = empty) and scene_variants.png; supersampled assets also get an "as built" row and built_1x.png (what the game gets) |
 | `pagan gallery` | every asset in one image |
 | `pagan render <asset...>` | native-size PNGs |
 | `pagan palette show [palettes]` | swatches |
@@ -322,7 +351,7 @@ require_outline = false            # E011
 | `pagan config show` / `get <key>` / `set <key> <value>` / `unset <key>` | project settings: value, default, meaning; validated edits; unset = back to default |
 | `pagan mark <asset...> [--status approved] [--current] [--outdated]` | record reviews |
 | `pagan style bump "note"` | new style version; flags older assets (W006) |
-| `pagan build [--verify-godot]` | final assets + manifest (+ Godot .tres) |
+| `pagan build [--verify-godot] [--godot-timeout S]` | final assets + manifest (+ Godot .tres); each Godot step may take S seconds (default 600) |
 | `pagan skill install [dir]` | install this skill into a repo's `.claude/skills/` |
 | `pagan mcp [--project DIR] [--allow-godot]` | MCP server over stdio (needs `pagan[mcp]`) |
 
@@ -359,7 +388,10 @@ keys share a base colour but not a variant colour, so a shader swap would be wro
 `variant_sheets = false` that's error E006), `variant_axes` (per axis, per option: `swap`, `swap_exact`;
 apply one option's swap per axis together - with `variant_sheets = false` the combinations aren't listed
 in `variants`, the game composes them), and `normal_sheet` (when "normals" is exported: RGB = normal * 0.5 + 0.5, x right,
-y up, z towards the viewer). Supersampled assets: `size`, frame rects and `pivot` are in output pixels
+y up, z towards the viewer), `animation_order` (animation names in file order: JSON keys are unordered),
+`nine_slice` (frame -> [left, top, right, bottom]) and, for fonts, `font` (`glyph_order`, `glyphs`: char ->
+`rect` [x, y, w, h] in the sheet + `advance`, `cell`, `ascent`, `descent`, `line_height`) and `font_file`
+(an AngelCode BMFont `fonts/<name>.fnt` with its own copy of the sheet, `fonts/<name>.png`). Supersampled assets: `size`, frame rects and `pivot` are in output pixels
 (`pivot` may be fractional), plus `supersample` and `source_size`; their sheets blend colours at edges, so
 a shader swap by exact colour misses the blended pixels: use variant sheets for them. `base_variant` (when
 set) names the base, also listed under `variants` with its sheet and an empty swap. Pivots aren't stored
@@ -370,7 +402,9 @@ in engine resources: apply them in the game.
 `pagan build` writes `sprites/<name>.png` + `<name>.tres` (SpriteFrames, one animation per PAGAN
 animation; sprites without animations get one per frame), `tiles/<name>.png` + `<name>.tres` (TileSet:
 one atlas source, every tile created, animated tiles as atlas tile animations; add terrains/physics in
-the editor), plus `manifest.json`.
+the editor), plus `manifest.json`. Fonts: Godot imports `fonts/<name>.fnt` as a FontFile
+(`load("res://.../fonts/font_small.fnt")`; use it as a Label's `theme_override_fonts/font`). 9-slice: set a
+NinePatchRect's `patch_margin_left/top/right/bottom` from the manifest's `nine_slice`.
 Apply the pivot in code: `sprite.centered = true; sprite.offset = Vector2(godot_offset[0], godot_offset[1])`.
 Project settings for crisp pixels: Default Texture Filter = Nearest, stretch mode `viewport`, scale mode
 `integer`, snap 2D transforms to pixel.
