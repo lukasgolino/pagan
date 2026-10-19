@@ -36,3 +36,4 @@ files = ["src/pagan", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: benchmarks (a few seconds; deselect with -m 'not slow')"]

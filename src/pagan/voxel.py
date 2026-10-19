@@ -11,7 +11,9 @@ Heading 0 shows the front pointing right ("e"); headings go counter-clockwise li
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from itertools import chain
 
 import numpy as np
 
@@ -64,6 +66,9 @@ class PartMove:
     pitch: float = 0.0  # about the y axis; positive tips the front (+x) down
     yaw: float = 0.0  # about the z axis; positive turns counter-clockwise seen from above
     about: Vec | None = None  # rotation centre in model space; None = the part's bottom centre
+    # `rig:` parents' moves, applied after this one (nearest parent first), each with an explicit `about`:
+    # a child follows its parent. Empty for unrigged parts, which keeps their old (integer-offset) path.
+    then: tuple[PartMove, ...] = ()
 
 
 @dataclass
@@ -178,6 +183,12 @@ def _transpose(m: tuple[Vec, Vec, Vec]) -> tuple[Vec, Vec, Vec]:
     return ((m[0][0], m[1][0], m[2][0]), (m[0][1], m[1][1], m[2][1]), (m[0][2], m[1][2], m[2][2]))
 
 
+def cell_array(cells: Iterable[Cell]) -> np.ndarray:
+    """Cells as an (n, 3) int64 array (several times faster than np.array on a list of tuples)."""
+    items = cells if isinstance(cells, list | tuple) else list(cells)
+    return np.fromiter(chain.from_iterable(items), dtype=np.int64, count=3 * len(items)).reshape(-1, 3)
+
+
 def bottom_centre(cells: dict[Cell, VoxelData] | set[Cell]) -> Vec:
     """Centre of a part's bounding box at its lowest face: the default hinge for rotating it."""
     xs, ys, zs = ([c[i] for c in cells] for i in range(3))
@@ -187,6 +198,8 @@ def bottom_centre(cells: dict[Cell, VoxelData] | set[Cell]) -> Vec:
 def move_cells(cells: dict[Cell, VoxelData], move: PartMove) -> dict[Cell, VoxelData]:
     """Rotate a part about its hinge, then shift it. Rotated parts are resampled both ways (every voxel
     lands somewhere, and gaps the rotation opens are filled from the source), so thin parts stay solid."""
+    if move.then:
+        return _move_cells_affine(cells, move)
     dx, dy, dz = move.offset
     if not cells or (move.roll, move.pitch, move.yaw) == (0.0, 0.0, 0.0):
         return {(x + dx, y + dy, z + dz): data for (x, y, z), data in cells.items()}
@@ -214,6 +227,59 @@ def move_cells(cells: dict[Cell, VoxelData], move: PartMove) -> dict[Cell, Voxel
                 if source in cells:
                     out[(x, y, z)] = rotated(cells[source])
     return {(x + dx, y + dy, z + dz): data for (x, y, z), data in out.items()}
+
+
+def move_affine(move: PartMove, centre: Vec) -> tuple[tuple[Vec, Vec, Vec], Vec]:
+    """(R, t) with p' = R p + t for a move and its parents' (`then`); `centre` is the default hinge."""
+    def one(m: PartMove) -> tuple[tuple[Vec, Vec, Vec], Vec]:
+        r = rotation_matrix(m.roll, m.pitch, m.yaw)
+        c = m.about if m.about is not None else centre
+        rc = _apply(r, c)
+        return r, (c[0] + m.offset[0] - rc[0], c[1] + m.offset[1] - rc[1], c[2] + m.offset[2] - rc[2])
+
+    r, t = one(move)
+    for parent in move.then:
+        pr, pt = one(parent)
+        r = _matmul(pr, r)
+        moved = _apply(pr, t)
+        t = (moved[0] + pt[0], moved[1] + pt[1], moved[2] + pt[2])
+    return r, t
+
+
+def _matmul(a: tuple[Vec, Vec, Vec], b: tuple[Vec, Vec, Vec]) -> tuple[Vec, Vec, Vec]:
+    rows = [tuple(sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3)) for i in range(3)]
+    return (rows[0], rows[1], rows[2])  # type: ignore[return-value]
+
+
+def _move_cells_affine(cells: dict[Cell, VoxelData], move: PartMove) -> dict[Cell, VoxelData]:
+    """move_cells for a rigged part: its move followed by its parents' (one affine map, resampled both ways)."""
+    if not cells:
+        return {}
+    m, t = move_affine(move, bottom_centre(cells))
+    back = _transpose(m)
+
+    def rotated(data: VoxelData) -> VoxelData:
+        material, group, part, normal = data
+        return (material, group, part, _apply(m, normal) if normal is not None else None)
+
+    out: dict[Cell, VoxelData] = {}
+    for (x, y, z), data in cells.items():
+        q = _apply(m, (x + 0.5, y + 0.5, z + 0.5))
+        out[(math.floor(q[0] + t[0] + 1e-9), math.floor(q[1] + t[1] + 1e-9), math.floor(q[2] + t[2] + 1e-9))] = rotated(data)
+    if m == ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)):
+        return out
+    lo = [min(c[i] for c in out) - 1 for i in range(3)]
+    hi = [max(c[i] for c in out) + 1 for i in range(3)]
+    for x in range(lo[0], hi[0] + 1):
+        for y in range(lo[1], hi[1] + 1):
+            for z in range(lo[2], hi[2] + 1):
+                if (x, y, z) in out:
+                    continue
+                q = _apply(back, (x + 0.5 - t[0], y + 0.5 - t[1], z + 0.5 - t[2]))
+                source = (math.floor(q[0] + 1e-9), math.floor(q[1] + 1e-9), math.floor(q[2] + 1e-9))
+                if source in cells:
+                    out[(x, y, z)] = rotated(cells[source])
+    return out
 
 
 # --- normals and shading ----------------------------------------------------------------------
@@ -455,35 +521,16 @@ def render_heading_full(
     local = cells - lo
     mat_index = dense.material[local[:, 0], local[:, 1], local[:, 2]]
     n = _normals_at(dense, cells)
-    lm = np.array(light_model)
-    raw_facing = n @ lm
     two_sided = np.array([materials[name].two_sided for name in dense.material_names])[mat_index]
-    facing = np.where(two_sided, np.abs(raw_facing), raw_facing)
-    facing = np.maximum(0.0, (facing + light.wrap) / (1 + light.wrap))
     flat = np.array([len(materials[name].keys) == 1 for name in dense.material_names])[mat_index]
-    if light.shadows and light.baked:
-        test = (facing > 0) & ~flat
-        if test.any():
-            side = np.where(~two_sided[test] | (raw_facing[test] >= 0), 1.0, -1.0)
-            origins = cells[test] + 0.5 + side[:, None] * n[test] * 1.5
-            skip = dense.part[local[test, 0], local[test, 1], local[test, 2]]
-            shadowed, _ = _traverse_many(dense, origins, light_model, skip=skip)
-            factor = np.where(shadowed, 1 - light.shadow_strength, 1.0)
-            facing[np.nonzero(test)[0]] *= factor
-    intensity = light.ambient + (1 - light.ambient) * facing
+    intensity = cell_intensity(dense, cells, n, light_model, two_sided, flat, light)
 
     for i, name in enumerate(dense.material_names):
         mine = mat_index == i
         if not mine.any():
             continue
         keys = materials[name].keys
-        if len(keys) == 1:
-            chosen = np.zeros(mine.sum(), dtype=np.int64)
-        elif not light.baked:
-            chosen = np.full(mine.sum(), len(keys) // 2, dtype=np.int64)  # flat albedo: the engine lights it
-        else:
-            chosen = np.clip((intensity[mine] * len(keys)).astype(np.int64), 0, len(keys) - 1)
-        keys_out[py[mine], px[mine]] = np.array(keys)[chosen]
+        keys_out[py[mine], px[mine]] = np.array(keys)[ramp_steps(intensity[mine], len(keys), light.baked)]
 
     # Screen-space normals for engine lighting: model -> world -> view.
     (a0, a1, a2), (b0, b1, b2), (c0, c1, c2) = world
@@ -495,6 +542,44 @@ def render_heading_full(
     screen[flip] *= -1
     normals_out[py, px] = screen
     return Rendered(tuple("".join(r) for r in keys_out), normals_out)
+
+
+def light_intensity(raw_facing: np.ndarray, two_sided: np.ndarray, shadowed: np.ndarray, light: Light) -> np.ndarray:
+    """Brightness 0..1 of surfaces facing the light by `raw_facing` (normal . light direction): wrap lighting,
+    cast shadows (`shadowed`) and ambient. Sprites and baked meshes both shade with this; PAGAN's Godot ramp
+    shader computes the same formula per pixel."""
+    facing = np.where(two_sided, np.abs(raw_facing), raw_facing)
+    facing = np.maximum(0.0, (facing + light.wrap) / (1 + light.wrap))
+    facing = np.where(shadowed, facing * (1 - light.shadow_strength), facing)
+    return light.ambient + (1 - light.ambient) * facing
+
+
+def ramp_steps(intensity: np.ndarray, count: int, baked: bool = True) -> np.ndarray:
+    """The ramp step (0 = darkest of `count`) for each brightness. Unbaked: the middle step (flat albedo)."""
+    if count == 1:
+        return np.zeros(len(intensity), dtype=np.int64)
+    if not baked:
+        return np.full(len(intensity), count // 2, dtype=np.int64)  # flat albedo: the engine lights it
+    return np.clip((intensity * count).astype(np.int64), 0, count - 1)
+
+
+def cell_intensity(
+    dense: _Dense, cells: np.ndarray, n: np.ndarray, light_model: Vec, two_sided: np.ndarray, flat: np.ndarray, light: Light
+) -> np.ndarray:
+    """light_intensity for voxels `cells` with normals `n`, testing cast shadows towards `light_model`
+    (model space) for lit, shaded voxels when the light casts shadows."""
+    raw_facing = n @ np.array(light_model)
+    shadowed = np.zeros(len(cells), dtype=bool)
+    if light.shadows and light.baked:
+        facing = np.where(two_sided, np.abs(raw_facing), raw_facing)
+        test = (np.maximum(0.0, (facing + light.wrap) / (1 + light.wrap)) > 0) & ~flat
+        if test.any():
+            local = cells - dense.lo
+            side = np.where(~two_sided[test] | (raw_facing[test] >= 0), 1.0, -1.0)
+            origins = cells[test] + 0.5 + side[:, None] * n[test] * 1.5
+            skip = dense.part[local[test, 0], local[test, 1], local[test, 2]]
+            shadowed[np.nonzero(test)[0]], _ = _traverse_many(dense, origins, light_model, skip=skip)
+    return light_intensity(raw_facing, two_sided, shadowed, light)
 
 
 def heading_name(angle: float, directions: int) -> str:

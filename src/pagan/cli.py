@@ -668,11 +668,12 @@ def cmd_build(args: argparse.Namespace, out: Output) -> int:
         check = verify_with_godot(godot, result.godot_root, res_path(result.manifest, result.godot_root), args.godot_timeout)
         verified = check.ok
         if check.ok:
-            if check.sprite_frames + check.tilesets + check.fonts == 0:
+            if check.sprite_frames + check.tilesets + check.fonts + check.meshes == 0:
                 out.say("  Godot: nothing to check: the manifest has no Godot resources (no assets yet?)")
             else:
-                fonts = f" and {check.fonts} fonts" if check.fonts else ""
-                out.say(f"  Godot: all {check.sprite_frames} SpriteFrames, {check.tilesets} TileSets{fonts} load")
+                fonts = f", {check.fonts} fonts" if check.fonts else ""
+                meshes = f", {check.meshes} meshes" if check.meshes else ""
+                out.say(f"  Godot: all {check.sprite_frames} SpriteFrames, {check.tilesets} TileSets{fonts}{meshes} load")
         else:
             if out.as_json:
                 out.failure([Finding("E000", "Godot failed to load generated resources:\n" + check.output[-3000:])])
@@ -958,14 +959,18 @@ def cmd_palette_adjust(args: argparse.Namespace, out: Output) -> int:
 def cmd_config_show(args: argparse.Namespace, out: Output) -> int:
     project = _require_project()
     has_models = project.models_dir.is_dir() and any(project.models_dir.rglob(f"*{MODEL_SUFFIX}"))
-    rows = [{**row, "used": has_models or row["refreshes"] != "models"} for row in describe(project.config)]
+    meshes = "mesh" in project.config.export
+    rows = [
+        {**row, "used": (has_models or row["refreshes"] != "models") and (meshes or row["refreshes"] != "meshes")}
+        for row in describe(project.config)
+    ]
     if out.as_json:
         print(json.dumps({"ok": True, "config": display_path(project.config_path or project.root), "settings": rows}, indent=2))
         return 0
     print(f"{display_path(project.config_path or project.root)}  (change with `pagan config set <key> <value>`)")
     for row in rows:
         marker = " " if row["is_default"] else "*"
-        unused = "" if row["used"] else "(unused: no 3D models) "
+        unused = "" if row["used"] else ("(unused: export has no \"mesh\") " if row["refreshes"] == "meshes" else "(unused: no 3D models) ")
         print(f"{marker} {row['key']:<26} = {json.dumps(row['value']):<22} {unused}{row['meaning']}")
     print("* = changed from the default. 'models' settings re-render every 3D model on the next build/preview.")
     return 0
@@ -1021,6 +1026,11 @@ def _report_change(change: Change, project: Project, out: Output) -> int:
     elif change.refresh == "all":
         following = [e.name for e in entries if not _names_own_palette(e.path)]
         out.say(f"  {len(following)} assets don't name a palette and follow the default: {', '.join(following) or 'none'}.")
+    elif change.refresh == "meshes":
+        if "mesh" in updated.config.export:
+            out.say(f"  {len(models)} 3D models re-export as meshes on the next `pagan build`; sprites don't change.")
+        else:
+            out.say('  only used for meshes: add "mesh" to export (`pagan config set export png,mesh`).')
     elif change.refresh == "build":
         out.say("  takes effect on the next `pagan build`.")
     light, exports = updated.config.light, updated.config.export

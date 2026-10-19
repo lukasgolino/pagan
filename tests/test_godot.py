@@ -77,3 +77,16 @@ def test_godot_mipmaps_and_filter(copies: tuple[Path, Path], tmp_path: Path) -> 
         [GODOT, "--headless", "--path", str(godot_root), "-s", str(script)], capture_output=True, text=True, timeout=300
     )
     assert "FILTER 4 MIPMAPS true" in run.stdout, run.stdout + run.stderr
+
+
+def test_meshes_load_in_godot(copies: tuple[Path, Path]) -> None:
+    """With "mesh" exported: every .glb and .tscn loads, with the manifest's nodes, metadata, visibility,
+    animations (loop flags) and PAGAN materials on every surface."""
+    demo, godot_root = copies
+    config = demo / "pagan.toml"
+    config.write_text(config.read_text().replace('export = ["png", "godot"]', 'export = ["png", "godot", "mesh"]'))
+    result = build(load_project(demo))
+    assert not result.errors
+    assert GODOT is not None
+    check = verify_with_godot(GODOT, godot_root, "res://assets/generated/manifest.json")
+    assert check.ok and check.meshes == 2, check.output

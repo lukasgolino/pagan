@@ -19,6 +19,32 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+From 3D games (3D_Bugsandfeaturerequests.md D1-D4, MESH_PLAN.md). Opt-in: without "mesh" in `export`, every output is
+byte-identical to 0.7.0.
+
+### Added
+
+- `export` "mesh": every 3D model also builds `models/<name>.glb` (binary glTF 2.0: greedy-meshed voxels without
+  T-junctions, flat normals, one node per part, animations) and `models/<name>.ramp.png` (palette ramp texture, one row
+  per material ramp; plus `<name>.<variant>.ramp.png` per variant). The manifest's `mesh` per model: glb, ramp,
+  voxel_size, shading, bounds and part AABBs (metres, glTF axes: front +Z, left +X, up +Y), triangles, parts (node path,
+  parent, pivot, aabb, voxels, meta, collision, hidden), animations (gltf_name, fps, loop, frames, interpolation,
+  duration), variants (ramp).
+- `[mesh]` settings: `voxel_size` (metres per voxel, default 0.0625), `shading` (`ramp` | `baked` | `flat`),
+  `collision_suffixes` (Godot `-convcol` / `-colonly` names).
+- Models: `directions: 0` (mesh only, no sprites; `size` optional), `voxel_size` (per-model override), `rig:` (per part id:
+  `pivot`, `parent`, `meta`, `collision: box | convex | none`), animation `interpolation: step | linear` (meshes).
+  Rig children follow their parents' pose moves and hiding, in sprites too.
+- With "godot" and "mesh": `models/pagan_ramp.tres` (palette-locked ramp shader), `<name>[.<variant>][.two_sided].material.tres`
+  and `<name>.tscn` (the glb with PAGAN's materials applied); `--verify-godot` loads every glb and tscn and checks part
+  nodes, metadata, visibility, animations and materials against the manifest.
+- Lint: E014 (rig / mesh problems), and with mesh export W009 (model overrides voxel_size), W010 (part in several
+  pieces), W011 (rig pivot outside its part); W012 (mesh-only model without mesh export).
+
+### Changed
+
+- Building big boxes is several times faster (bulk voxel insertion); renders are unchanged.
+
 ## [0.7.0] - 2026-10-19
 
 From Age of Boom reports R20-R29 (ORCHESTRATOR_PLAN.md). Existing sources build to the same pixels; the

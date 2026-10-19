@@ -276,5 +276,5 @@ def test_reference_lists_every_rule() -> None:
 
     for rule in WARNING_RULES:
         assert rule in reference
-    for number in range(14):
+    for number in range(15):
         assert f"E{number:03d}" in reference

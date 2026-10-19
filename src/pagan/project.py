@@ -16,7 +16,8 @@ from pagan.voxel import Camera, Light
 
 CONFIG_NAME = "pagan.toml"
 PALETTE_MODES = ("strict", "open")
-EXPORTERS = ("png", "godot", "normals")
+EXPORTERS = ("png", "godot", "normals", "mesh")
+MESH_SHADINGS = ("ramp", "baked", "flat")
 GODOT_FILTERS = ("inherit", "nearest", "linear")
 MAX_SUPERSAMPLE = 8
 
@@ -40,6 +41,15 @@ class GodotConfig:
 
 
 @dataclass(frozen=True)
+class MeshConfig:
+    """`[mesh]`: how 3D models export as meshes (`export` has "mesh")."""
+
+    voxel_size: float = 0.0625  # metres per voxel (16 voxels per metre), chosen per game
+    shading: str = "ramp"  # ramp: palette-locked engine lighting (shader); baked: steps baked per face; flat: middle step
+    collision_suffixes: bool = False  # name collision parts with Godot's -col / -convcol / -colonly suffixes
+
+
+@dataclass(frozen=True)
 class Config:
     palette_mode: PaletteMode = "strict"
     default_palette: str | None = None
@@ -53,6 +63,7 @@ class Config:
     camera: Camera = field(default_factory=Camera)
     light: Light = field(default_factory=Light)
     godot: GodotConfig = field(default_factory=GodotConfig)
+    mesh: MeshConfig = field(default_factory=MeshConfig)
 
 
 @dataclass(frozen=True)
@@ -149,7 +160,7 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
     defaults = Config()
     allowed = (
         "palette_mode", "default_palette", "output_dir", "preview_dir", "export", "style_version", "variant_sheets",
-        "supersample", "lint", "camera", "light", "godot",
+        "supersample", "lint", "camera", "light", "godot", "mesh",
     )  # fmt: skip
     for key in data:
         if key not in allowed:
@@ -194,6 +205,7 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         supersample = defaults.supersample
 
     godot = _parse_godot(data.get("godot", {}), error)
+    mesh = _parse_mesh(data.get("mesh", {}), error)
     lint = _parse_lint(data.get("lint", {}), error)
     camera, light = parse_render(data.get("camera", {}), data.get("light", {}), error)
 
@@ -212,7 +224,39 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         camera=camera,
         light=light,
         godot=godot,
+        mesh=mesh,
     )
+
+
+MIN_VOXEL_SIZE, MAX_VOXEL_SIZE = 0.001, 10.0
+
+
+def valid_voxel_size(value: Any) -> bool:
+    return _number(value) and MIN_VOXEL_SIZE <= value <= MAX_VOXEL_SIZE
+
+
+def _parse_mesh(data: Any, error: Callable[[str, str], None]) -> MeshConfig:
+    defaults = MeshConfig()
+    if not isinstance(data, dict):
+        error("[mesh] must be a table", "mesh")
+        return defaults
+    allowed = ("voxel_size", "shading", "collision_suffixes")
+    for key in data:
+        if key not in allowed:
+            error(f"unknown mesh setting {key!r}; allowed: {', '.join(allowed)}", f"mesh.{key}")
+    voxel_size = data.get("voxel_size", defaults.voxel_size)
+    if not valid_voxel_size(voxel_size):
+        error(f"mesh.voxel_size must be metres per voxel, {MIN_VOXEL_SIZE}-{MAX_VOXEL_SIZE} (0.0625 = 16 voxels per metre)", "mesh.voxel_size")
+        voxel_size = defaults.voxel_size
+    shading = data.get("shading", defaults.shading)
+    if shading not in MESH_SHADINGS:
+        error(f"mesh.shading must be one of {', '.join(MESH_SHADINGS)}", "mesh.shading")
+        shading = defaults.shading
+    suffixes = data.get("collision_suffixes", defaults.collision_suffixes)
+    if not isinstance(suffixes, bool):
+        error("mesh.collision_suffixes must be true or false", "mesh.collision_suffixes")
+        suffixes = defaults.collision_suffixes
+    return MeshConfig(voxel_size=float(voxel_size), shading=shading, collision_suffixes=suffixes)
 
 
 def _parse_godot(data: Any, error: Callable[[str, str], None]) -> GodotConfig:

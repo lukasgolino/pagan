@@ -35,8 +35,9 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `preview.py` upscaled frames, contact sheets (with animation "changes" rows), GIFs, tiling check, gallery;
   - `color.py` OKLab/OKLCh conversions + gamut mapping; `importer.py` PNG -> sprite (scale detection, snapping);
   - `voxel.py` voxel model + renderer (grid ray traversal, smoothed/exact normals, wrap light, soft shadows);
-  - `model.py` `.model.yaml` parsing (materials, primitives, poses) -> Asset, with a render cache in `.pagan-cache/`;
-  - `build.py` `pagan build` (sheets, manifest.json, stale cleanup); `exporters/godot.py` SpriteFrames .tres + headless verify;
+  - `model.py` `.model.yaml` parsing (materials, primitives, poses, `rig:`) -> Asset (+ `MeshSource`), with a render cache in `.pagan-cache/`;
+  - `mesh.py` voxel model -> `.glb` (greedy meshing without T-junctions, ramp texture, rig nodes, animations); `gltf.py` deterministic glb writer/reader/validator;
+  - `build.py` `pagan build` (sheets, meshes, manifest.json, stale cleanup); `exporters/godot.py` SpriteFrames/TileSet .tres, mesh materials + .tscn, headless verify;
   - `manage.py` long-term management: catalogue (`pagan status`), palette adjust, `mark`, `style bump` (text edits keep comments);
   - `settings.py` registry of every pagan.toml setting (default, meaning, what it refreshes) + safe `pagan config set` edits;
   - `api.py` stable Python API for generator scripts (drawing, shading, corner sets, exact hull/sail geometry, YAML writers);
@@ -135,3 +136,34 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   manifest `animation_order`. Model rendering uses one persistent process pool (forkserver on Linux, spawn
   elsewhere; `PAGAN_JOBS`); every frame is computed as in one process, so output is byte-identical. YAML uses
   libyaml's CSafeLoader when available (same marks/columns). Progress goes to stderr, only from the CLI (MCP off).
+- 2026-10-20: Mesh export (MESH_PLAN, D1-D4): `export` "mesh" writes `models/<name>.glb` per model; opt-in, 2D output byte-identical
+  (tested against the committed demo build). glTF = (y, z, x) * voxel_size (front +Z, left +X, up +Y; a rotation, not the
+  plan's (-y, z, x), which mirrors). Mesh-only models: `directions: 0` (owner question 1's recommended default).
+- 2026-10-20: Greedy meshing per node and surface, then every quad corner lying inside another quad's edge is inserted
+  (centre fan): watertight, no T-junction cracks (tested: every directed edge has its reverse). Flat face normals; exact
+  normals (sails) are ignored for meshes. Voxel slabs are closed solids, so two_sided only changes shading: a second
+  glTF material `<name>_two_sided` (the ramp shader uses |N.L|), no doubleSided.
+- 2026-10-20: Ramp texture per model (`<name>.ramp.png` + `<name>.<variant>.ramp.png`), not per palette: variants are per
+  asset, so one texture per palette+variant would be ambiguous. Rows = material ramps in file order; width = lcm of ramp
+  lengths (<= 256), so u = brightness picks floor(brightness * steps) exactly (the sprite renderer's step). The glb references
+  the PNG by uri (not embedded): Godot extracts embedded images into the project, which would dirty committed output.
+- 2026-10-20: Shading shares voxel.light_intensity/ramp_steps/cell_intensity with the sprite renderer (refactor kept renders
+  byte-identical). `baked` = per-voxel step at heading 0 (smoothed normals + shadows), KHR_materials_unlit; `flat`/`ramp` = middle
+  step in UV.x. The Godot ramp shader locks every DirectionalLight3D to the palette (max over suns; ATTENUATION = shadow);
+  omni/spot lights add unlocked; environment ambient off (`ambient` uniform instead).
+- 2026-10-20: `rig:` parents also apply to sprite poses (children follow parents' moves and hiding): consistent with the
+  mesh hierarchy; models without `rig` parents keep the old code path. Root node = `body` (voxels without an id or id body).
+  Part metadata -> node `extras` (Godot: `get_meta("extras")`); PAGAN's own keys are `pagan_*`.
+- 2026-10-20: Hidden parts = `KHR_node_visibility` (visible false); per-pose visibility = `KHR_animation_pointer` STEP
+  channels. Godot 4.7.2 imports both (`visible` + a `:visible` track). Scale 0 was rejected: Godot's importer errors
+  ("Basis must be normalized") on it. Every animation keys every animated node (switching never leaves a part astray).
+- 2026-10-20: Looping animations are named `<name>-loop` in the glTF: Godot 4.7.2's importer loops them and strips the
+  suffix, so Godot names = PAGAN names; manifest `gltf_name` records it. Godot's `-col`/`-convcol`/`-colonly` suffixes
+  work (behind `[mesh] collision_suffixes`, default off); `-colonly` on an empty node is ignored, so box colliders are a
+  box mesh child `<id>_box-colonly`.
+- 2026-10-20: Godot mesh extras: shader as a `Shader` `.tres` (`pagan_ramp.tres`), not a `.gdshader` (Godot writes a `.uid`
+  sidecar with a random id for it, dirtying committed output); a material `.tres` per variant (+ two-sided);
+  `<name>.tscn` = hand-written inherited scene of the glb with surface_material_override per surface (verified in 4.7.2).
+- 2026-10-20: Khronos glTF validator 2.0.0-dev.3.10 on the demo ship, sailor and a 400x40x120 wall: 0 errors, 0 warnings
+  (infos: NPOT ramp textures, URI in GLB, extensions it can't fully validate).
+

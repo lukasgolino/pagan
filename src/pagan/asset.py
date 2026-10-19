@@ -111,6 +111,9 @@ class Asset:
     font: Font | None = None  # sprites: the frames are a font's glyphs
     # 3D models only: renders screen-space normal maps per frame on demand (H x W x 3 arrays)
     normal_maps: Callable[[], dict[str, Any]] | None = field(default=None, compare=False, repr=False)
+    # 3D models only: what mesh export needs (pagan.model.MeshSource); mesh_only = `directions: 0` (no sprites)
+    mesh: Any = field(default=None, compare=False, repr=False)
+    mesh_only: bool = False
 
 
 def asset_kind(path: Path) -> Kind | None:

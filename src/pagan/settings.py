@@ -15,7 +15,7 @@ from typing import Any, Literal
 from pagan.findings import Finding, PaganError
 from pagan.project import Config, Project, parse_config
 
-Refresh = Literal["all", "models", "build", "lint", "none"]
+Refresh = Literal["all", "models", "meshes", "build", "lint", "none"]
 
 
 @dataclass(frozen=True)
@@ -39,7 +39,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("default_palette", None, "palette for assets that don't name one; switching it recolors all of them", "all"),
     Setting("output_dir", "build", "where `pagan build` writes final assets (e.g. a game engine's asset folder)", "build"),
     Setting("preview_dir", "previews", "scratch folder for previews", "none"),
-    Setting("export", ["png"], 'extra build outputs: "godot" (SpriteFrames/TileSet .tres), "normals" (normal maps for 3D models); "png" sheets + manifest are always written', "build"),
+    Setting("export", ["png"], 'extra build outputs: "godot" (SpriteFrames/TileSet .tres), "normals" (normal maps for 3D models), "mesh" (3D models as .glb meshes for 3D games); "png" sheets + manifest are always written', "build"),
     Setting("variant_sheets", True, "build a sheet (+ .tres) per variant; false: variants are only colour swap tables in manifest.json, for games that recolour in a shader", "build"),
     Setting("supersample", 1, "sources are drawn at N x the size the game gets; build box-filters them down to smooth, anti-aliased PNGs (for freely rotated, non-pixel-art sprites; 1 = off, pixel-exact)", "build"),
     Setting("style_version", 1, "current style version; assets made under older ones get W006 (use `pagan style bump`)", "lint"),
@@ -53,6 +53,9 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("light.baked", True, "true: shading baked into the pixels; false: flat colors for engines with their own lighting (add \"normals\" to export)", "models"),
     Setting("godot.mipmaps", False, "Godot imports the PNGs with mipmaps (for sprites drawn scaled down or rotated); written into each PNG's .import", "build"),
     Setting("godot.filter", "inherit", 'SpriteFrames texture filter: "inherit" (node/project setting decides), "nearest" (crisp pixels), "linear" (smooth)', "build"),
+    Setting("mesh.voxel_size", 0.0625, "metres per voxel when 3D models export as meshes (0.0625 = 16 voxels per metre); pick it per game from the closest camera distance", "meshes"),
+    Setting("mesh.shading", "ramp", '"ramp": palette-locked lighting in the engine (PAGAN ramp shader); "baked": project light baked per face (no shader); "flat": middle ramp step, engine lights it', "meshes"),
+    Setting("mesh.collision_suffixes", False, "name collision parts with Godot's -col/-convcol/-colonly suffixes (changes node names)", "meshes"),
     Setting("lint.max_ramps_per_sprite", 3, "W003: most ramps one 2D sprite/tileset may use", "lint"),
     Setting("lint.max_ramps_per_model", 6, "W003: most ramps one 3D model may use (more materials: hull, sails, team colours)", "lint"),
     Setting("lint.max_frame_change", 0.4, "W007: share of pixels that may change between animation frames", "lint"),

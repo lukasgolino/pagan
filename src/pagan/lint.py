@@ -21,6 +21,10 @@ WARNING_RULES = {
     "W006": "made under an older style version",
     "W007": "too much change between animation frames",
     "W008": "too many shades from one ramp",
+    "W009": "model overrides the project's mesh voxel_size",
+    "W010": "a part's voxels are separate pieces (mesh export)",
+    "W011": "rig pivot outside its part (mesh export)",
+    "W012": "mesh-only model, but meshes aren't exported",
 }
 
 

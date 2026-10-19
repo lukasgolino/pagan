@@ -7,6 +7,7 @@ PAGAN generated before but no longer produces (recorded in the previous manifest
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,9 @@ from pagan.exporters.godot import (
     centered_offset,
     find_godot_project,
     import_mipmaps,
+    mesh_scene_tscn,
+    ramp_material_tres,
+    ramp_shader_tres,
     res_path,
     sprite_frames_tres,
     texture_filter,
@@ -112,7 +116,25 @@ def build(project: Project) -> BuildResult:
             if imported is not None:
                 result.written.append(imported)
 
+    def write_file(path: Path, data: bytes) -> None:
+        _write(path, data, result)
+        produced.add(path.resolve())
+
+    meshes = "mesh" in exporters
     for asset in sorted((a for a in lint.assets if not a.template), key=lambda a: a.name):
+        if asset.mesh_only:
+            entries[asset.name] = {
+                "kind": asset.kind,
+                "description": asset.description,
+                "tags": list(asset.tags),
+                "status": asset.status,
+                "style_version": asset.style_version,
+                "palette": asset.palette.name,
+                "mesh_only": True,
+            }
+            if meshes:
+                entries[asset.name]["mesh"] = _mesh_outputs(asset, project, out, godot_root, write_png, write_file)
+            continue
         folder = out / ("tiles" if asset.kind == "tileset" else "sprites")
         factor = supersample_factor(asset, project)
         size = (asset.size[0] // factor, asset.size[1] // factor)
@@ -181,6 +203,8 @@ def build(project: Project) -> BuildResult:
             entry["animation_order"] = [a.name for a in (animations if asset.kind != "tileset" else asset.animations.values())]
         if asset.kind == "model":
             entry["headings"] = [a.name for a in asset.animations.values() if a.frames == (a.name,)]
+            if meshes:
+                entry["mesh"] = _mesh_outputs(asset, project, out, godot_root, write_png, write_file)
         if asset.nine_slice:
             entry["nine_slice"] = {name: [m // factor for m in margins] for name, margins in asset.nine_slice.items()}
         if font is not None:
@@ -242,6 +266,70 @@ def build(project: Project) -> BuildResult:
             imported = stale.with_name(stale.name + ".import")  # Godot's sidecar for the removed file
             imported.unlink(missing_ok=True)
     return result
+
+
+def _mesh_outputs(
+    asset: Asset,
+    project: Project,
+    out: Path,
+    godot_root: Path | None,
+    write_png: Callable[[Path, Image.Image], None],
+    write_file: Callable[[Path, bytes], None],
+) -> dict[str, Any]:
+    """A model's mesh files (`export` has "mesh"): <name>.glb + <name>.ramp.png (+ one ramp per variant), and with
+    "godot" the ramp shader, a material per variant (and sidedness) and <name>.tscn. Returns the manifest's `mesh`."""
+    from pagan.mesh import export_mesh, ramp_image  # local import: numpy-heavy, only needed for meshes
+
+    source = asset.mesh
+    config = project.config.mesh
+    folder = out / "models"
+    voxel_size = source.voxel_size if source.voxel_size is not None else config.voxel_size
+    exported = export_mesh(
+        source, asset.palette, voxel_size, config.shading, f"pagan {__version__}", config.collision_suffixes, f"{asset.name}.ramp.png"
+    )
+    glb = folder / f"{asset.name}.glb"
+    write_file(glb, exported.glb)
+    ramp = folder / f"{asset.name}.ramp.png"
+    write_png(ramp, exported.ramp)
+    info: dict[str, Any] = {"glb": _ref(glb, out, godot_root), "ramp": _ref(ramp, out, godot_root), **exported.info}
+    ramps: dict[str | None, Path] = {None: ramp}
+    variants: dict[str, Any] = {}
+    if asset.base_variant is not None:
+        variants[asset.base_variant] = {"ramp": info["ramp"]}
+    for name, variant in asset.variants.items():
+        path = folder / f"{asset.name}.{name}.ramp.png"
+        write_png(path, ramp_image(exported.rows, variant.palette, variant.keys))
+        ramps[name] = path
+        variants[name] = {"ramp": _ref(path, out, godot_root)}
+    info["variants"] = variants
+    if godot_root is not None:
+        shader = folder / "pagan_ramp.tres"
+        write_file(shader, ramp_shader_tres().encode("utf-8"))
+        sides = sorted({two for kinds in exported.surfaces.values() for two in kinds})
+        separate = config.shading == "ramp"  # only the ramp shader lights two-sided surfaces differently
+        materials: dict[str | None, list[str]] = {}
+        index: dict[bool, int] = {}
+        for variant_name, ramp_path in ramps.items():
+            stem = asset.name if variant_name is None else f"{asset.name}.{variant_name}"
+            materials[variant_name] = []
+            for two_sided in sides:
+                path = folder / f"{stem}{'.two_sided' if two_sided and separate else ''}.material.tres"
+                text = ramp_material_tres(res_path(shader, godot_root), res_path(ramp_path, godot_root), config.shading, source.light, two_sided)
+                write_file(path, text.encode("utf-8"))
+                if res_path(path, godot_root) not in materials[variant_name]:
+                    materials[variant_name].append(res_path(path, godot_root))
+                index[two_sided] = materials[variant_name].index(res_path(path, godot_root))
+        base_materials = materials[None]
+        scene = folder / f"{asset.name}.tscn"
+        surfaces = {path: [index[two] for two in kinds] for path, kinds in exported.surfaces.items()}
+        write_file(scene, mesh_scene_tscn(asset.name, res_path(glb, godot_root), base_materials, surfaces).encode("utf-8"))
+        info["godot_scene"] = res_path(scene, godot_root)
+        info["godot_materials"] = base_materials
+        for variant_name in asset.variants:
+            variants[variant_name]["godot_materials"] = materials[variant_name]
+        if asset.base_variant is not None:
+            variants[asset.base_variant]["godot_materials"] = base_materials
+    return info
 
 
 def font_metrics(asset: Asset, factor: int = 1) -> dict[str, Any]:
@@ -367,6 +455,6 @@ def _previous_outputs(out: Path) -> set[Path]:
         if not isinstance(name, str) or Path(name).is_absolute():
             continue
         path = (root / name).resolve()
-        if path.is_relative_to(root) and path != root and path.suffix in (".png", ".tres", ".json", ".fnt"):
+        if path.is_relative_to(root) and path != root and path.suffix in (".png", ".tres", ".json", ".fnt", ".glb", ".tscn", ".gdshader"):
             found.add(path)
     return found

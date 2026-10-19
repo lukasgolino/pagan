@@ -14,6 +14,7 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +42,7 @@ from pagan.asset import (
 from pagan.findings import Finding, has_errors
 from pagan.palette import TRANSPARENT, Palette
 from pagan.progress import note
-from pagan.project import Project, parse_render
+from pagan.project import Project, parse_render, valid_voxel_size
 from pagan.yamlio import LineMap, YamlError, load_yaml
 from pagan.voxel import (
     DIRECTION_NAMES,
@@ -51,8 +52,11 @@ from pagan.voxel import (
     Material,
     Overlay,
     PartMove,
+    Vec,
     VoxelData,
     VoxelModel,
+    bottom_centre,
+    cell_array,
     heading_angles,
     render_heading,
     render_heading_full,
@@ -64,11 +68,11 @@ _MODEL_FIELDS = (
     "name", "description", "palette", "variants", "tags", "status", "style_version",
     "size", "pivot", "origin", "outline", "outline_color", "directions", "heading",
     "camera", "light", "materials", "parts", "animations", "lint", "variant_axes",
-    "extends", "remove", "template", "base_variant", "supersample",
+    "extends", "remove", "template", "base_variant", "supersample", "rig", "voxel_size",
 )  # fmt: skip
 # Not inherited through `extends`: what the asset is, and how it's built/reviewed.
 _OWN_FIELDS = ("name", "description", "tags", "status", "style_version", "lint", "template", "extends", "remove")
-_MERGED_FIELDS = ("materials", "animations", "variants", "variant_axes")  # merged by name, the extending file wins
+_MERGED_FIELDS = ("materials", "animations", "variants", "variant_axes", "rig")  # merged by name, the extending file wins
 MAX_EXTENDS_DEPTH = 8
 
 ErrorFn = Callable[[str, str, int | None, str | None], None]
@@ -233,17 +237,40 @@ class _Builder:
                 # A hidden part is a layer of its own: shown (or carved) by poses, never touching the normal frames.
                 layer: dict[Cell, VoxelData] = {c: (m, part_id, index, shape_normals.get(c)) for c, m in cells.items()}
                 self.model.overlays.append(Overlay(part_id, layer, carve))
-            for cell, material in cells.items() if not hidden else ():
-                if carve:  # removes everything placed before it, hidden layers included
+            if hidden:
+                pass
+            elif carve:  # removes everything placed before it, hidden layers included
+                for cell in cells:
                     self.model._remove(cell)
                     for overlay in self.model.overlays:
                         overlay.cells.pop(cell, None)
-                else:
-                    self.model._put(cell, (material, part_id, index, shape_normals.get(cell)))
+            else:
+                self._put_all(cells, part_id, index, shape_normals)
             total = len(self.model.voxels) + sum(len(o.cells) for o in self.model.overlays)
             if total > MAX_MODEL_VOXELS:
                 self.error("E013", f"the model has over {MAX_MODEL_VOXELS:,} voxels; make it smaller", pline, where)
                 return
+
+    def _put_all(self, cells: dict[Cell, str], part_id: str | None, index: int, normals: dict[Cell, Vec]) -> None:
+        """VoxelModel._put for every cell, in bulk (same dict contents and order; big shapes fill fast)."""
+        model = self.model
+        model.voxels.update(cells)
+        if part_id is not None:
+            model.groups.update(dict.fromkeys(cells, part_id))
+        elif model.groups:
+            for cell in cells.keys() & model.groups.keys():
+                del model.groups[cell]
+        model.parts.update(dict.fromkeys(cells, index))
+        if normals:
+            for cell in cells:
+                normal = normals.get(cell)
+                if normal is None:
+                    model.normals.pop(cell, None)
+                else:
+                    model.normals[cell] = normal
+        elif model.normals:
+            for cell in cells.keys() & model.normals.keys():
+                del model.normals[cell]
 
     # Each shape returns {cell: material} or None after reporting an error.
 
@@ -271,7 +298,7 @@ class _Builder:
         rim = self._material(spec, "rim", line, where, required=False)
         if ("top" in spec and top is None) or ("rim" in spec and rim is None):
             return None
-        out = {c: material for c in cells}
+        out = dict.fromkeys(cells, material)
         if top is not None or rim is not None:
             tops = {c for c in cells if (c[0], c[1], c[2] + 1) not in cells}
             for c in tops:
@@ -295,12 +322,7 @@ class _Builder:
             return None
         lo = [min(a[i], b[i]) for i in range(3)]
         hi = [max(a[i], b[i]) for i in range(3)]
-        cells = {
-            (x, y, z)
-            for x in range(lo[0], hi[0] + 1)
-            for y in range(lo[1], hi[1] + 1)
-            for z in range(lo[2], hi[2] + 1)
-        }
+        cells = set(product(range(lo[0], hi[0] + 1), range(lo[1], hi[1] + 1), range(lo[2], hi[2] + 1)))
         return self._with_top_and_rim(cells, material, spec, line, where)
 
     def _hull(self, spec: dict[str, Any], line: int | None, where: str) -> dict[Cell, str] | None:
@@ -634,6 +656,17 @@ class Pose:
 
 
 _MOVE_FIELDS = ("offset", "roll", "pitch", "yaw", "about")
+INTERPOLATIONS = ("step", "linear")
+
+
+@dataclass(frozen=True)
+class PoseAnimation:
+    """A model animation as written: one Pose per frame. `interpolation` only affects meshes (sprites step)."""
+
+    fps: float
+    loop: bool
+    poses: list[Pose]
+    interpolation: str = "step"
 
 
 def _angle(value: Any) -> bool:
@@ -642,14 +675,14 @@ def _angle(value: Any) -> bool:
 
 def _parse_poses(
     raw: Any, line: int | None, ids: set[str], error: ErrorFn, hidden_by_default: set[str] | None = None
-) -> dict[str, tuple[float, bool, list[Pose]]]:
+) -> dict[str, PoseAnimation]:
     """animations: { name: { fps, loop, poses: [ { roll, pitch, part_id: { offset, roll, pitch, yaw, about },
     hide: [ids], show: [ids] } ] } }
 
     Each pose's hidden set = parts hidden by default, minus `show`, plus `hide`.
     """
     hidden_by_default = hidden_by_default or set()
-    out: dict[str, tuple[float, bool, list[Pose]]] = {}
+    out: dict[str, PoseAnimation] = {}
     if raw is None:
         return out
     if not isinstance(raw, dict):
@@ -668,6 +701,14 @@ def _parse_poses(
         fps, loop = _get(spec, "fps", 8), _get(spec, "loop", True)
         if not _num(fps) or not 0 < fps <= 120 or not isinstance(loop, bool):
             error("E013", "fps must be 0-120 and loop true/false", aline, where)
+            continue
+        unknown = [k for k in spec if k not in ("fps", "loop", "poses", "interpolation")]
+        if unknown:
+            error("E013", f"unknown animation field(s) {', '.join(map(str, unknown))}; allowed: fps, loop, poses, interpolation", aline, where)
+            continue
+        interpolation = _get(spec, "interpolation", "step")
+        if interpolation not in INTERPOLATIONS:
+            error("E013", "interpolation must be step (pixel-art timing) or linear (smooth mesh motion; sprites still step)", aline, where)
             continue
         poses: list[Pose] = []
         for index, pose in enumerate(spec["poses"]):
@@ -702,7 +743,7 @@ def _parse_poses(
                 if move is not None:
                     moves[part_id] = move
             poses.append(Pose(tuple(sorted(moves.items())), frozenset((hidden_by_default - show) | hide), tilt["roll"], tilt["pitch"]))
-        out[name] = (float(fps), loop, poses)
+        out[name] = PoseAnimation(float(fps), loop, poses, interpolation)
     return out
 
 
@@ -763,8 +804,12 @@ class _Setup:
     jobs: list[tuple[str, float, Pose]]  # frame name, heading angle, pose
     animations: dict[str, Animation]
     pose_names: list[str]  # the file's animation names (each rendered per heading)
-    directions: int
+    directions: int  # 0 = mesh only (no sprite frames)
     heading: float
+    poses: dict[str, PoseAnimation]  # the file's animations, rig parents applied
+    rig: dict[str, RigPart]
+    voxel_size: float | None  # the model's own `voxel_size` (overrides [mesh] voxel_size)
+    hidden: frozenset[str]  # parts hidden by default (hidden parts and their rig children)
 
 
 def _setup(data: Any, path: Path | None, project: Project, error: ErrorFn, findings: list[Finding]) -> _Setup | None:
@@ -785,10 +830,14 @@ def _setup(data: Any, path: Path | None, project: Project, error: ErrorFn, findi
 
     palette = _resolve_palette(data, path, project, error, findings)
     meta = _parse_metadata(data, error)
-    if "size" not in data:
+    directions = data.get("directions", 8)
+    if isinstance(directions, bool) or not isinstance(directions, int) or (directions not in DIRECTION_NAMES and directions != 0):
+        error("E013", "directions must be 1, 4, 8, 16 or 32 (or 0: a mesh only, no sprites)", _line(data, "directions"), "directions")
+        directions = 8
+    if "size" not in data and directions != 0:
         error("E001", "missing required field 'size' (the frame size in pixels)", _line(data), "size")
         return None
-    size = _parse_size(data["size"], "size", _line(data, "size"), error)
+    size = _parse_size(data["size"], "size", _line(data, "size"), error) if "size" in data else (0, 0)
     if size is None or palette is None:
         return None
     width, height = size
@@ -801,11 +850,7 @@ def _setup(data: Any, path: Path | None, project: Project, error: ErrorFn, findi
         else:
             pivot = (raw_pivot[0], raw_pivot[1])
 
-    directions = data.get("directions", 8)
-    if isinstance(directions, bool) or not isinstance(directions, int) or directions not in DIRECTION_NAMES:
-        error("E013", "directions must be 1, 4, 8, 16 or 32", _line(data, "directions"), "directions")
-        directions = 8
-    heading = data.get("heading", 0 if directions > 1 else 270)
+    heading = data.get("heading", 0 if directions != 1 else 270)
     if not _num(heading):
         error("E013", "heading must be degrees (0 = front faces right, 90 = away, 270 = towards the camera)", _line(data, "heading"), "heading")
         heading = 0
@@ -840,7 +885,14 @@ def _setup(data: Any, path: Path | None, project: Project, error: ErrorFn, findi
         if not model.voxels and not has_errors(findings):
             error("E013", "the model has no voxels (everything was carved away?)", _line(data, "parts"), "parts")
     poses = _parse_poses(data.get("animations"), _line(data, "animations"), model.part_ids(), error, model.hidden_by_default)
-    heading_names = {n for n, _ in heading_angles(directions, float(heading))} if _num(heading) else set()
+    rig = _parse_rig(data.get("rig"), _line(data, "rig"), model.part_ids(), error)
+    voxel_size: float | None = None
+    if "voxel_size" in data:
+        if not valid_voxel_size(data["voxel_size"]):
+            error("E013", "voxel_size must be metres per voxel, e.g. 0.0625 (16 per metre); it overrides [mesh] voxel_size", _line(data, "voxel_size"), "voxel_size")
+        else:
+            voxel_size = float(data["voxel_size"])
+    heading_names = {n for n, _ in heading_angles(directions, float(heading))} if _num(heading) and directions else set()
     for anim_name in poses:
         if anim_name in heading_names:
             error("E013", f"animation name {anim_name!r} is also a heading name; pick another", _line(data, "animations"), f"animations.{anim_name}")
@@ -858,20 +910,21 @@ def _setup(data: Any, path: Path | None, project: Project, error: ErrorFn, findi
         return None
 
     if origin is None:  # the centre of everything the file builds, hidden parts included
-        cells = [*model.voxels, *(c for o in model.overlays for c in o.cells)]
-        lo = tuple(min(c[i] for c in cells) for i in range(3))
-        hi = tuple(max(c[i] for c in cells) for i in range(3))
+        cells = cell_array([*model.voxels, *(c for o in model.overlays for c in o.cells)])
+        lo, hi = cells.min(axis=0).tolist(), cells.max(axis=0).tolist()
         origin = ((lo[0] + hi[0] + 1) / 2, (lo[1] + hi[1] + 1) / 2, float(lo[2]))
 
-    base = Pose(hidden=frozenset(model.hidden_by_default))
+    poses, hidden = _apply_rig(poses, rig, model)
+    base = Pose(hidden=hidden)
     jobs: list[tuple[str, float, Pose]] = []
     animations: dict[str, Animation] = {}
-    for direction_name, angle in heading_angles(directions, float(heading)):
+    for direction_name, angle in heading_angles(directions, float(heading)) if directions else []:
         jobs.append((direction_name, angle, base))
         animations[direction_name] = Animation(direction_name, (direction_name,), 1.0, True)
-        for anim_name, (fps, loop, pose_list) in poses.items():
+        for anim_name, anim in poses.items():
+            fps, loop = anim.fps, anim.loop
             frame_names = []
-            for index, pose in enumerate(pose_list):
+            for index, pose in enumerate(anim.poses):
                 frame = f"{anim_name}_{direction_name}_{index}" if directions > 1 else f"{anim_name}_{index}"
                 jobs.append((frame, angle, pose))
                 frame_names.append(frame)
@@ -880,8 +933,232 @@ def _setup(data: Any, path: Path | None, project: Project, error: ErrorFn, findi
 
     return _Setup(
         name, data, palette, meta, size, pivot, origin, outline, outline_color, camera, light, materials, model,
-        jobs, animations, list(poses), directions, float(heading),
+        jobs, animations, list(poses), directions, float(heading), poses, rig, voxel_size, hidden,
     )  # fmt: skip
+
+
+# --- rig: parts as a node hierarchy (meshes), children follow their parents ------------------------
+
+ROOT_ID = "body"  # the mesh root node: voxels without an id (and any with id "body")
+COLLISIONS = ("none", "box", "convex")
+
+
+@dataclass(frozen=True)
+class RigPart:
+    """`rig: { id: { pivot, parent, meta, collision } }`: how a part becomes a mesh node."""
+
+    pivot: tuple[float, float, float] | None = None  # model space, voxels; None = the part's bottom centre
+    parent: str | None = None  # None = under the root (body)
+    meta: tuple[tuple[str, str | int | float | bool], ...] = ()  # sorted by key
+    collision: str = "none"
+
+
+def _parse_rig(raw: Any, line: int | None, ids: set[str], error: ErrorFn) -> dict[str, RigPart]:
+    rig: dict[str, RigPart] = {}
+    if raw is None:
+        return rig
+    if not isinstance(raw, dict):
+        error("E014", "rig maps part ids to { pivot: [x, y, z], parent: id, meta: { key: value }, collision: box|convex|none }", line, "rig")
+        return rig
+    known = ", ".join(sorted(ids | {ROOT_ID}))
+    for part_id, spec in raw.items():
+        rline = _line(raw, part_id) or line
+        where = f"rig.{part_id}"
+        if part_id not in ids and part_id != ROOT_ID:
+            error("E014", f"rig: no part has id {part_id!r} (ids: {known})", rline, where)
+            continue
+        spec = spec if spec is not None else {}
+        if not isinstance(spec, dict):
+            error("E014", "a rig entry is { pivot, parent, meta, collision }", rline, where)
+            continue
+        bad = [k for k in spec if k not in ("pivot", "parent", "meta", "collision")]
+        if bad:
+            error("E014", f"unknown rig field(s) {', '.join(map(str, bad))}; allowed: pivot, parent, meta, collision", rline, where)
+            continue
+        if part_id == ROOT_ID and ("pivot" in spec or "parent" in spec):
+            error("E014", f"{ROOT_ID!r} is the root node: its pivot is the model's origin and it has no parent", rline, where)
+            continue
+        pivot = _vec(spec["pivot"]) if "pivot" in spec else None
+        if "pivot" in spec and pivot is None:
+            error("E014", "pivot must be [x, y, z] in model voxels (the node's origin, e.g. a hinge or joint)", rline, where)
+            continue
+        parent = spec.get("parent")
+        if parent is not None and (not isinstance(parent, str) or (parent not in ids and parent != ROOT_ID) or parent == part_id):
+            error("E014", f"parent must be another part id ({known})", rline, where)
+            continue
+        meta = spec.get("meta", {})
+        if not isinstance(meta, dict) or not all(
+            isinstance(k, str) and k and isinstance(v, str | bool) or (isinstance(k, str) and k and _num(v)) for k, v in meta.items()
+        ):
+            error("E014", "meta maps names to plain values (text, numbers, true/false), e.g. { hitzone: eye, damage: 2 }", rline, where)
+            continue
+        collision = spec.get("collision", "none")
+        if collision not in COLLISIONS:
+            error("E014", "collision must be box, convex or none", rline, where)
+            continue
+        rig[part_id] = RigPart(
+            (pivot[0], pivot[1], pivot[2]) if pivot is not None else None,
+            None if parent in (None, ROOT_ID) else str(parent),
+            tuple(sorted(meta.items())),
+            str(collision),
+        )
+    for part_id in rig:  # parent chains must end at the root
+        seen = [part_id]
+        parent = rig[part_id].parent
+        while parent is not None:
+            if parent in seen:
+                error("E014", f"rig parents form a cycle: {' -> '.join([*seen, parent])}", _line(raw, part_id) or line, f"rig.{part_id}")
+                break
+            seen.append(parent)
+            parent = rig[parent].parent if parent in rig else None
+    return rig
+
+
+def part_cells(model: VoxelModel) -> dict[str, set[Cell]]:
+    """Rest voxels of every part id (hidden parts included); voxels without an id are ROOT_ID's.
+    Computed once per model (models don't change after parsing)."""
+    cached = getattr(model, "_part_cells", None)
+    if isinstance(cached, dict):
+        return cached
+    cells: dict[str, set[Cell]] = {}
+    for cell, group in model.groups.items():
+        cells.setdefault(group, set()).add(cell)
+    root = model.voxels.keys() - model.groups.keys()
+    if root:
+        cells.setdefault(ROOT_ID, set()).update(root)
+    for overlay in model.overlays:
+        if not overlay.carve:
+            cells.setdefault(overlay.part_id, set()).update(overlay.cells)
+    object.__setattr__(model, "_part_cells", cells)
+    return cells
+
+
+def rig_ancestors(rig: dict[str, RigPart], part_id: str) -> list[str]:
+    """A part's rig parents, nearest first (not the root)."""
+    chain: list[str] = []
+    parent = rig[part_id].parent if part_id in rig else None
+    while parent is not None and parent not in chain:
+        chain.append(parent)
+        parent = rig[parent].parent if parent in rig else None
+    return chain
+
+
+def _apply_rig(poses: dict[str, PoseAnimation], rig: dict[str, RigPart], model: VoxelModel) -> tuple[dict[str, PoseAnimation], frozenset[str]]:
+    """With rig parents, a pose moves and hides children with their parents (sprites and meshes alike).
+    Returns the poses and the parts hidden by default. Models without parents are returned unchanged."""
+    default_hidden = frozenset(model.hidden_by_default)
+    if not any(r.parent for r in rig.values()):
+        return poses, default_hidden
+    ancestors = {part_id: rig_ancestors(rig, part_id) for part_id in model.part_ids()}
+    centres = {part_id: bottom_centre(cells) for part_id, cells in part_cells(model).items() if cells}
+
+    def descendants_hidden(hidden: frozenset[str]) -> frozenset[str]:
+        return hidden | {p for p, chain in ancestors.items() if any(a in hidden for a in chain)}
+
+    out: dict[str, PoseAnimation] = {}
+    for name, anim in poses.items():
+        posed: list[Pose] = []
+        for pose in anim.poses:
+            moves = dict(pose.moves)
+            composed: dict[str, PartMove] = {}
+            for part_id in sorted(ancestors):
+                chain = [a for a in ancestors[part_id] if a in moves]
+                if not chain:
+                    if part_id in moves:
+                        composed[part_id] = moves[part_id]
+                    continue
+                own = moves.get(part_id, PartMove())
+                then = tuple(
+                    PartMove(moves[a].offset, moves[a].roll, moves[a].pitch, moves[a].yaw, moves[a].about or centres[a]) for a in chain
+                )
+                composed[part_id] = PartMove(own.offset, own.roll, own.pitch, own.yaw, own.about, then)
+            posed.append(Pose(tuple(sorted(composed.items())), descendants_hidden(pose.hidden), pose.roll, pose.pitch))
+        out[name] = PoseAnimation(anim.fps, anim.loop, posed, anim.interpolation)
+    return out, descendants_hidden(default_hidden)
+
+
+@dataclass
+class MeshSource:
+    """What mesh export needs from a parsed model (attached to its Asset as `mesh`)."""
+
+    name: str
+    model: VoxelModel
+    materials: dict[str, Material]
+    origin: tuple[float, float, float]
+    light: Light
+    rig: dict[str, RigPart]
+    animations: dict[str, PoseAnimation]
+    voxel_size: float | None
+    hidden: frozenset[str]
+
+
+def _mesh_findings(setup: _Setup, project: Project, path: Path | None) -> list[Finding]:
+    """Lint for mesh export (only when `export` has "mesh", so 2D projects never see these)."""
+    data = setup.data
+    found: list[Finding] = []
+    if setup.directions == 0 and "mesh" not in project.config.export:
+        found.append(Finding("W012", 'directions: 0 makes a mesh-only model, but export has no "mesh": nothing is built for it', path, _line(data, "directions"), "directions"))
+    if "mesh" not in project.config.export:
+        return found
+    if setup.voxel_size is not None and setup.voxel_size != project.config.mesh.voxel_size:
+        found.append(
+            Finding(
+                "W009",
+                f"voxel_size {setup.voxel_size} overrides the project's {project.config.mesh.voxel_size}: voxels of this "
+                "model will look bigger or smaller than every other model's (fine for distant, huge structures)",
+                path, _line(data, "voxel_size"), "voxel_size",
+            )
+        )  # fmt: skip
+    for overlay in setup.model.overlays:
+        if overlay.carve:
+            found.append(
+                Finding(
+                    "E014",
+                    f"hidden carving part {overlay.part_id!r} can't become a mesh (a mesh can't cut holes per pose): "
+                    "use a hidden part that adds the damaged shape instead, and hide the intact one in that pose",
+                    path, _line(data, "parts"), "parts",
+                )
+            )  # fmt: skip
+    cells = part_cells(setup.model)
+    for part_id in sorted(cells):
+        if part_id == ROOT_ID:
+            continue
+        pieces = _connected_pieces(cells[part_id])
+        if pieces > 1:
+            found.append(
+                Finding("W010", f"part {part_id!r} is {pieces} separate pieces: its mesh node would move them together; "
+                        "check for a typo in a coordinate, or give each piece its own id", path, _line(data, "parts"), "parts")
+            )  # fmt: skip
+    for part_id, rig in sorted(setup.rig.items()):
+        if rig.pivot is None or part_id not in cells:
+            continue
+        lo = [min(c[i] for c in cells[part_id]) for i in range(3)]
+        hi = [max(c[i] for c in cells[part_id]) + 1 for i in range(3)]
+        if not all(lo[i] <= rig.pivot[i] <= hi[i] for i in range(3)):
+            found.append(
+                Finding("W011", f"rig pivot {list(rig.pivot)} of {part_id!r} is outside the part ({lo} to {hi}): it would "
+                        "swing around a point in the air", path, _line(data.get("rig"), part_id), f"rig.{part_id}.pivot")
+            )  # fmt: skip
+    return found
+
+
+def _connected_pieces(cells: set[Cell]) -> int:
+    """Pieces of a voxel set, counting voxels that touch at a face, edge or corner as connected."""
+    left = set(cells)
+    pieces = 0
+    while left:
+        pieces += 1
+        stack = [left.pop()]
+        while stack:
+            x, y, z = stack.pop()
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    for dz in (-1, 0, 1):
+                        n = (x + dx, y + dy, z + dz)
+                        if n in left:
+                            left.remove(n)
+                            stack.append(n)
+    return pieces
 
 
 def _render_jobs(
@@ -1064,7 +1341,8 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
             default=str,
         ).encode()
     ).hexdigest()[:24]
-    base_frames = _cached_render(project, setup, cache_key)
+    base_frames = _cached_render(project, setup, cache_key) if setup.jobs else {}
+    findings.extend(_mesh_findings(setup, project, path))
 
     frames: dict[str, Grid] = {}
     clipped = [name for name, grid in base_frames.items() if setup.outline and _edge_pixel(grid) is not None]
@@ -1084,6 +1362,8 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
         frames[frame_name] = _outline(grid, setup.outline_color) if setup.outline else grid
 
     used = {c for grid in frames.values() for row in grid for c in row if c != TRANSPARENT}
+    if "mesh" in project.config.export or setup.directions == 0:  # a mesh shows every step of its materials
+        used |= {k for name in set(setup.model.voxels.values()) for k in setup.materials[name].keys}
     raw_variants, inherited = with_palette_variants(data.get("variants"), setup.palette, setup.meta["tags"], _line(data, "variants"), error)
     if inherited and setup.meta["base_variant"] is None:
         setup.meta["base_variant"] = setup.palette.base_variant
@@ -1131,6 +1411,10 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
             lint_max_ramps=lint.max_ramps,
             template=template is True,
             variant_axes=variant_axes,
+            mesh=MeshSource(
+                setup.name, setup.model, setup.materials, setup.origin, light, setup.rig, setup.poses, setup.voxel_size, setup.hidden
+            ),
+            mesh_only=setup.directions == 0,
             **setup.meta,
         ),
         findings,
@@ -1171,10 +1455,13 @@ def fit_model(path: Path, project: Project, margin: int = 0, even: bool = False)
     setup = _setup(data, path, project, error, findings)
     if setup is None:
         return None, findings
+    if setup.directions == 0:
+        return None, [*findings, Finding("E013", "directions: 0 is a mesh-only model: it has no sprite frames to fit", path, _line(data, "directions"), "directions")]
     cells = [*setup.model.voxels, *(c for o in setup.model.overlays for c in o.cells)]
     reach = max(math.dist((x + dx, y + dy, z + dz), setup.origin) for x, y, z in cells for dx in (0, 1) for dy in (0, 1) for dz in (0, 1))
-    reach += max((abs(o) for _, _, pose in setup.jobs for _, move in pose.moves for o in move.offset), default=0)
-    reach *= 2 if any(m.roll or m.pitch or m.yaw for _, _, pose in setup.jobs for _, m in pose.moves) else 1
+    chains = [(move, *move.then) for _, _, pose in setup.jobs for _, move in pose.moves]  # a rigged part adds its parents' moves
+    reach += max((sum(max(abs(o) for o in m.offset) for m in chain) for chain in chains), default=0)
+    reach *= 2 if any(m.roll or m.pitch or m.yaw for chain in chains for m in chain) else 1
     half = math.ceil(reach * setup.camera.scale) + 4
     canvas, centre = (2 * half, 2 * half), (half, half)
     border = (1 if setup.outline else 0) + margin

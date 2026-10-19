@@ -17,6 +17,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from pagan.asset import Animation
+from pagan.voxel import Light
 from pagan.progress import note
 
 
@@ -169,6 +170,68 @@ def tileset_tres(atlas_res: str, tile_size: tuple[int, int], tiles: list[AtlasTi
     return "\n".join(lines)
 
 
+def ramp_material_tres(shader_res: str, ramp_res: str, shading: str, light: Light, two_sided: bool) -> str:
+    """The material for a PAGAN mesh: the ramp shader (shading "ramp", palette-locked lighting from [light]),
+    or a StandardMaterial3D over the ramp texture: unshaded for "baked", engine-lit for "flat"."""
+    if shading != "ramp":
+        lines = [
+            '[gd_resource type="StandardMaterial3D" format=3]',
+            "",
+            f'[ext_resource type="Texture2D" path={_string(ramp_res)} id="1_ramp"]',
+            "",
+            "[resource]",
+        ]
+        if shading == "baked":
+            lines.append("shading_mode = 0")
+        lines += ['albedo_texture = ExtResource("1_ramp")', "roughness = 1.0", "texture_filter = 0", ""]
+        return "\n".join(lines)
+    return "\n".join(
+        [
+            '[gd_resource type="ShaderMaterial" format=3]',
+            "",
+            f'[ext_resource type="Shader" path={_string(shader_res)} id="1_shader"]',
+            f'[ext_resource type="Texture2D" path={_string(ramp_res)} id="2_ramp"]',
+            "",
+            "[resource]",
+            'shader = ExtResource("1_shader")',
+            'shader_parameter/ramp = ExtResource("2_ramp")',
+            f"shader_parameter/ambient = {float(light.ambient)!r}",
+            f"shader_parameter/wrap = {float(light.wrap)!r}",
+            f"shader_parameter/shadow_strength = {float(light.shadow_strength)!r}",
+            f"shader_parameter/shadows = {'true' if light.shadows else 'false'}",
+            f"shader_parameter/two_sided = {'true' if two_sided else 'false'}",
+            "shader_parameter/other_lights = 1.0",
+            "",
+        ]
+    )
+
+
+def mesh_scene_tscn(name: str, glb_res: str, materials: list[str], surfaces: dict[str, list[int]]) -> str:
+    """A scene inheriting the imported .glb with PAGAN's materials on every surface, so games instantiate one
+    file. `surfaces`: node path (from the glb's root) -> material index (into `materials`) per surface."""
+    lines = [
+        f'[gd_scene load_steps={len(materials) + 2} format=3]',
+        "",
+        f'[ext_resource type="PackedScene" path={_string(glb_res)} id="1_glb"]',
+    ]
+    lines += [f'[ext_resource type="Material" path={_string(m)} id="{i + 2}_material"]' for i, m in enumerate(materials)]
+    lines += ["", f"[node name={_string(name)} instance=ExtResource(\"1_glb\")]"]
+    for path, indices in surfaces.items():
+        node, _, parent = path.rpartition("/")[2], None, path.rpartition("/")[0] or "."
+        lines += ["", f"[node name={_string(node)} parent={_string(parent)}]"]
+        lines += [f'surface_material_override/{i} = ExtResource("{m + 2}_material")' for i, m in enumerate(indices)]
+    lines.append("")
+    return "\n".join(lines)
+
+
+def ramp_shader_tres() -> str:
+    """PAGAN's ramp shader as a Shader resource. A .tres, not a .gdshader: Godot gives a .gdshader a `.uid` sidecar
+    with a random id on import, which would make every fresh checkout's build output differ."""
+    code = files("pagan").joinpath("templates", "pagan_ramp.gdshader").read_text(encoding="utf-8")
+    return f'[gd_resource type="Shader" format=3]\n\n[resource]\ncode = {_string(code)}\n'
+
+
+
 def centered_offset(size: tuple[int, int], pivot: tuple[float, float]) -> tuple[float, float]:
     """`offset` for an AnimatedSprite2D/Sprite2D with centered = true, putting the pivot on the node origin."""
     return (size[0] / 2 - pivot[0], size[1] / 2 - pivot[1])
@@ -184,6 +247,7 @@ class GodotCheck:
     sprite_frames: int = 0
     tilesets: int = 0
     fonts: int = 0
+    meshes: int = 0
 
 
 def find_godot_binary() -> str | None:
@@ -239,6 +303,6 @@ def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: 
             )
     output = (result.stdout + result.stderr).strip()
     ok = result.returncode == 0 and "PAGAN_VERIFY_OK" in result.stdout and "SCRIPT ERROR" not in output
-    match = re.search(r"PAGAN_VERIFY_OK (\d+) SpriteFrames, (\d+) TileSets, (\d+) fonts", result.stdout)
-    counts = (int(match.group(1)), int(match.group(2)), int(match.group(3))) if match else (0, 0, 0)
-    return GodotCheck(ok=ok, output=output, sprite_frames=counts[0], tilesets=counts[1], fonts=counts[2])
+    match = re.search(r"PAGAN_VERIFY_OK (\d+) SpriteFrames, (\d+) TileSets, (\d+) fonts, (\d+) meshes", result.stdout)
+    counts = tuple(int(g) for g in match.groups()) if match else (0, 0, 0, 0)
+    return GodotCheck(ok=ok, output=output, sprite_frames=counts[0], tilesets=counts[1], fonts=counts[2], meshes=counts[3])

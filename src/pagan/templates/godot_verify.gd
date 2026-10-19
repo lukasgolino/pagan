@@ -25,6 +25,7 @@ func _check() -> int:
 	var sprite_frames_checked := 0
 	var tilesets_checked := 0
 	var fonts_checked := 0
+	var meshes_checked := 0
 	for name in manifest["assets"]:
 		var entry: Dictionary = manifest["assets"][name]
 		var variants: Dictionary = entry.get("variants", {})
@@ -110,9 +111,70 @@ func _check() -> int:
 						printerr("PAGAN_VERIFY_FAIL ", path, " ", anim, " frame ", i, " has the wrong size")
 						failures += 1
 			sprite_frames_checked += 1
+		if entry.has("mesh"):
+			failures += _check_mesh(name, entry["mesh"])
+			meshes_checked += 1
 	finished = true
 	if failures > 0:
 		printerr("PAGAN_VERIFY_FAIL ", failures, " problems")
 		return 1
-	print("PAGAN_VERIFY_OK ", sprite_frames_checked, " SpriteFrames, ", tilesets_checked, " TileSets, ", fonts_checked, " fonts checked")
+	print("PAGAN_VERIFY_OK ", sprite_frames_checked, " SpriteFrames, ", tilesets_checked, " TileSets, ", fonts_checked, " fonts, ", meshes_checked, " meshes checked")
 	return 0
+
+# A model's .glb (and .tscn): every part node where the manifest says, with its metadata and visibility,
+# every animation with its loop flag, and PAGAN's materials on every surface of the .tscn.
+func _check_mesh(name: String, mesh: Dictionary) -> int:
+	var failures := 0
+	var materials: Array = mesh.get("godot_materials", []).duplicate()
+	var variants: Dictionary = mesh.get("variants", {})
+	for v in variants:
+		materials.append_array(variants[v].get("godot_materials", []))
+	for path in materials:
+		var material = load(path)
+		if material == null or not (material is Material):
+			printerr("PAGAN_VERIFY_FAIL ", name, " material ", path)
+			failures += 1
+	var scenes: Array = [mesh["glb"]]
+	if mesh.has("godot_scene"):
+		scenes.append(mesh["godot_scene"])
+	for path in scenes:
+		var packed = load(path)
+		if packed == null or not (packed is PackedScene):
+			printerr("PAGAN_VERIFY_FAIL ", name, " can't load ", path)
+			failures += 1
+			continue
+		var root: Node = packed.instantiate()
+		var parts: Dictionary = mesh.get("parts", {})
+		for part in parts:
+			var info: Dictionary = parts[part]
+			var node = root.get_node_or_null(NodePath(info["node"]))
+			if node == null:
+				printerr("PAGAN_VERIFY_FAIL ", path, " has no node ", info["node"])
+				failures += 1
+				continue
+			var extras: Dictionary = node.get_meta("extras", {})
+			for key in info.get("meta", {}):
+				if not extras.has(key) or extras[key] != info["meta"][key]:
+					printerr("PAGAN_VERIFY_FAIL ", path, " node ", info["node"], " metadata ", key, " is ", extras.get(key), ", expected ", info["meta"][key])
+					failures += 1
+			if node is Node3D and node.visible == info.get("hidden", false):
+				printerr("PAGAN_VERIFY_FAIL ", path, " node ", info["node"], " visible is ", node.visible, ", expected ", not info.get("hidden", false))
+				failures += 1
+			if path == mesh.get("godot_scene") and node is MeshInstance3D and node.mesh != null:
+				for i in node.mesh.get_surface_count():
+					if node.get_surface_override_material(i) == null:
+						printerr("PAGAN_VERIFY_FAIL ", path, " node ", info["node"], " surface ", i, " has no PAGAN material")
+						failures += 1
+		var animations: Dictionary = mesh.get("animations", {})
+		var player = root.find_child("AnimationPlayer", true, false)
+		for anim in animations:
+			if player == null or not player.has_animation(anim):
+				printerr("PAGAN_VERIFY_FAIL ", path, " missing animation ", anim)
+				failures += 1
+				continue
+			var looping: bool = player.get_animation(anim).loop_mode != Animation.LOOP_NONE
+			if looping != animations[anim]["loop"]:
+				printerr("PAGAN_VERIFY_FAIL ", path, " animation ", anim, " loop is ", looping)
+				failures += 1
+		root.free()
+	return failures
