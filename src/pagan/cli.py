@@ -399,6 +399,8 @@ def cmd_bake(args: argparse.Namespace, out: Output) -> int:
     asset = load_asset_or_raise(resolve_asset_path(args.model, project), project)
     if asset.kind != "model":
         raise _usage_error(f"{asset.name} is a {asset.kind}, not a model")
+    if asset.mesh_only:
+        raise _usage_error(f"{asset.name} is mesh-only (directions: 0): it has no sprite frames to bake; set directions first")
     name = args.name or f"{asset.name}_baked"  # asset names must be unique: don't clash with the model
     if not NAME_RE.match(name):
         raise _usage_error(f"invalid name {name!r}")
@@ -482,6 +484,10 @@ def cmd_render(args: argparse.Namespace, out: Output) -> int:
     assets, findings = _load_targets(args.assets, project)
     outputs: list[dict[str, Any]] = []
     for asset in assets:
+        if asset.mesh_only:
+            findings.append(Finding("E000", f"{asset.name} is mesh-only (directions: 0): no frames to render; "
+                                    "look at it with `pagan preview` (orbit) or build its .glb", asset.path))  # fmt: skip
+            continue
         written = [display_path(p) for p in write_native(asset, project.preview_dir)]
         out.say(f"{asset.name}: wrote {len(written)} PNGs to {display_path(project.preview_dir / asset.name / 'native')}")
         outputs.append({"asset": asset.name, "files": written})
@@ -548,10 +554,11 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
             out.say(f"  variants side by side: {display_path(result.variants)} (1x: {display_path(result.variants_1x)})")
         if result.built_1x is not None:
             out.say(f"  as built (supersampled down, what the game gets): {display_path(result.built_1x)}")
-        out.say(
-            f"  frames: {display_path(result.sheet.parent / 'frames')}/ ({len(result.frames)} PNGs at x{result.scale}; "
-            f"1x frames and sheet: {display_path(result.sheet.parent / 'native')}/)"
-        )
+        if result.frames:
+            out.say(
+                f"  frames: {display_path(result.sheet.parent / 'frames')}/ ({len(result.frames)} PNGs at x{result.scale}; "
+                f"1x frames and sheet: {display_path(result.sheet.parent / 'native')}/)"
+            )
         scene: Path | None = None
         scene_variants: Path | None = None
         if args.scene:
@@ -920,7 +927,7 @@ def cmd_status(args: argparse.Namespace, out: Output) -> int:
     if is_editable():
         print("  note: PAGAN is an editable dev checkout; if this project pins a release, install that instead")
     for e in entries:
-        size = f"{e.size[0]}x{e.size[1]}" if e.size else "?"
+        size = "mesh" if e.size == (0, 0) and e.kind == "model" else (f"{e.size[0]}x{e.size[1]}" if e.size else "?")
         flags = ", ".join(e.needs(current)) or "ok"
         description = (e.description or "").replace("\n", " ")
         print(f"  {e.name:<20} {e.kind:<8} {size:>7}  {e.status:<8} v{e.style_version}  [{flags}]")

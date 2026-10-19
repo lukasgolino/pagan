@@ -127,3 +127,16 @@ def test_engine_preview_renders_through_godot(tmp_path: Path) -> None:
     assert result["ok"], result
     sheet = Image.open(tmp_path / "demo" / result["outputs"][0]["engine"])
     assert sheet.width > 1000 and len(colours(sheet)) > 10
+
+
+def test_mesh_only_models_in_other_commands(tmp_path: Path) -> None:
+    project = make_project(tmp_path, 'default_palette = "test"\nexport = ["png", "mesh"]\n')
+    tower(project, directions=0, size="")
+    render = cli(project.root, "render", "tower")
+    assert not render["ok"] and "mesh-only" in render["findings"][0]["message"]
+    bake = cli(project.root, "bake", "tower")
+    assert not bake["ok"] and "mesh-only" in bake["findings"][0]["message"]
+    assert not (project.sprites_dir / "tower_baked.sprite.yaml").exists()
+    status = cli(project.root, "status")
+    assert status["ok"]
+    assert cli(project.root, "build")["ok"]
