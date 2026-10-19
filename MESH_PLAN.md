@@ -4,7 +4,7 @@ Brief for the agent adding mesh export to PAGAN. Read [CLAUDE.md](CLAUDE.md) (co
 decisions log) and [PLAN.md](PLAN.md) §Milestone 4b first. Bug reports and feature requests from 3D games
 arrive in [3D_Bugsandfeaturerequests.md](3D_Bugsandfeaturerequests.md). Triage them there and answer each one.
 
-## Status (2026-10-20): M1–M8 done, release v0.8.0 prepared (tag awaits the owner)
+## Status (2026-10-20): M1–M8 done, released as v0.8.0 (owner accepted all defaults)
 
 | | Milestone | Notes / deviations from the brief (all in CLAUDE.md's decisions log) |
 |---|---|---|

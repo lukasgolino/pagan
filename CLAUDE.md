@@ -172,5 +172,5 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   world scale = texture pixels x [mesh] voxel_size, the meshes' texel density). Terrain heightmaps investigated, not
   built (MESH_PLAN M7 findings). Previews: `--orbit`/`--closeup` use PAGAN's renderer (any elevation, incl. below);
   `--engine` renders the built .tscn through Godot in a SubViewport (needs a display; orthographic camera).
-- 2026-10-20: Release v0.8.0 prepared (MESH_PLAN M1-M8); tag awaits the owner (QUESTIONS.md 11).
+- 2026-10-20: Release v0.8.0 tagged and pushed (owner approved; all mesh defaults in QUESTIONS.md 11-18 accepted).
 
