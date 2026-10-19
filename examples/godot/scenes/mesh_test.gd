@@ -48,8 +48,13 @@ func _ready() -> void:
 	var ground := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(width + 8.0, 12.0)
-	var ground_material := StandardMaterial3D.new()
+	var ground_material: Material = StandardMaterial3D.new()
 	ground_material.albedo_color = Color(0.16, 0.22, 0.3)
+	for asset_name in manifest["assets"]:  # a tileset's exported texture (triplanar), if there is one
+		var textures: Dictionary = manifest["assets"][asset_name].get("textures", {})
+		for texture_name in textures:
+			if ground_material is StandardMaterial3D and ground_material.albedo_texture == null and textures[texture_name].has("godot_material"):
+				ground_material = load(textures[texture_name]["godot_material"])
 	plane.material = ground_material
 	ground.mesh = plane
 	ground.position = Vector3(width / 2.0, 0, 0)

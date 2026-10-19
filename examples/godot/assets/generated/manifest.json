@@ -82,6 +82,47 @@
         "terrain",
         "overworld"
       ],
+      "textures": {
+        "grass": {
+          "godot_material": "res://assets/generated/textures/meadow.grass.material.tres",
+          "metres": [
+            1.0,
+            1.0
+          ],
+          "png": "res://assets/generated/textures/meadow.grass.png",
+          "size": [
+            16,
+            16
+          ],
+          "tiles": [
+            [
+              "grass"
+            ]
+          ]
+        },
+        "meadow_mix": {
+          "godot_material": "res://assets/generated/textures/meadow.meadow_mix.material.tres",
+          "metres": [
+            2.0,
+            2.0
+          ],
+          "png": "res://assets/generated/textures/meadow.meadow_mix.png",
+          "size": [
+            32,
+            32
+          ],
+          "tiles": [
+            [
+              "grass",
+              "grass_flowers"
+            ],
+            [
+              "grass_flowers",
+              "grass"
+            ]
+          ]
+        }
+      },
       "tiles": {
         "grass": [
           0,
@@ -1882,6 +1923,10 @@
     "sprites/ship.tres",
     "sprites/slime.png",
     "sprites/slime.tres",
+    "textures/meadow.grass.material.tres",
+    "textures/meadow.grass.png",
+    "textures/meadow.meadow_mix.material.tres",
+    "textures/meadow.meadow_mix.png",
     "tiles/meadow.png",
     "tiles/meadow.tres",
     "tiles/water.png",

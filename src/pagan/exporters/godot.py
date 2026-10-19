@@ -206,6 +206,26 @@ def ramp_material_tres(shader_res: str, ramp_res: str, shading: str, light: Ligh
     )
 
 
+def texture_material_tres(texture_res: str, size_metres: tuple[float, float], triplanar: bool, transparent: bool) -> str:
+    """A StandardMaterial3D repeating a tile texture with crisp pixels. Triplanar: projected in world space at
+    the texture's size in metres (the same texel density as the meshes), so any surface can use it without UVs."""
+    lines = [
+        '[gd_resource type="StandardMaterial3D" format=3]',
+        "",
+        f'[ext_resource type="Texture2D" path={_string(texture_res)} id="1_texture"]',
+        "",
+        "[resource]",
+    ]
+    if transparent:
+        lines.append("transparency = 2")  # alpha scissor: crisp holes, no sorting problems
+    lines += ['albedo_texture = ExtResource("1_texture")', "roughness = 1.0"]
+    if triplanar:
+        w, h = size_metres
+        lines += [f"uv1_scale = Vector3({1 / w!r}, {1 / h!r}, {1 / w!r})", "uv1_triplanar = true", "uv1_world_triplanar = true"]
+    lines += ["texture_filter = 0", ""]
+    return "\n".join(lines)
+
+
 def mesh_scene_tscn(name: str, glb_res: str, materials: list[str], surfaces: dict[str, list[int]]) -> str:
     """A scene inheriting the imported .glb with PAGAN's materials on every surface, so games instantiate one
     file. `surfaces`: node path (from the glb's root) -> material index (into `materials`) per surface."""

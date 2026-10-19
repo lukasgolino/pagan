@@ -137,6 +137,15 @@ def contact_sheet(asset: Asset, options: PreviewOptions, supersample: int = 1) -
         rows.append((f"as built: 1/{supersample} size, box-filtered (shown x{scale * supersample}; 1x: built_1x.png)", cells))
     if asset.kind == "tileset":
         rows.append(("tiled 3x3 (check seams)", [(name, upscale(tiled(asset, name, 3), max(1, scale // 2), options)) for name in asset.frames]))
+    if asset.textures is not None and asset.textures.groups:
+        from pagan.api import compose  # local import: api builds on most modules
+
+        cells = []
+        for name, group in asset.textures.groups.items():
+            layout = [" ".join(row) for row in group] * 2
+            image = compose(asset, [f"{row} {row}" for row in layout])
+            cells.append((name, upscale(image, max(1, scale // 2), options)))
+        rows.append(("texture groups tiled 2x2 (check seams)", cells))
     for anim in asset.animations.values():
         if len(anim.frames) < 2:
             continue

@@ -42,7 +42,7 @@ _SPRITE_FIELDS = (
 )  # fmt: skip
 _FONT_FIELDS = ("glyphs", "cell", "baseline", "line_height", "advance", "spacing", "space")
 Margins = tuple[int, int, int, int]  # left, top, right, bottom
-_TILESET_FIELDS = (*_COMMON_FIELDS, "tile_size", "columns", "tiles", "animations")
+_TILESET_FIELDS = (*_COMMON_FIELDS, "tile_size", "columns", "tiles", "animations", "export_textures")
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,16 @@ class Animation:
     fps: float
     loop: bool
     new_row: bool = False  # tile animations: start on a new atlas row (column 0)
+
+
+@dataclass(frozen=True)
+class Textures:
+    """`export_textures` on a tileset: tiles (and groups of tiles) built as their own repeatable PNGs, for 3D
+    surfaces (an atlas region can't repeat). A group is rows of tile names laid out as one texture."""
+
+    tiles: tuple[str, ...]
+    groups: dict[str, tuple[tuple[str, ...], ...]]
+    triplanar: bool = False
 
 
 @dataclass(frozen=True)
@@ -109,6 +119,7 @@ class Asset:
     supersample: int | None = None  # authored at N x the output size; None = the project's setting
     nine_slice: dict[str, Margins] = field(default_factory=dict)  # frame -> 9-slice margins (sprites)
     font: Font | None = None  # sprites: the frames are a font's glyphs
+    textures: Textures | None = None  # tilesets: `export_textures` (repeatable PNGs for 3D surfaces)
     # 3D models only: renders screen-space normal maps per frame on demand (H x W x 3 arrays)
     normal_maps: Callable[[], dict[str, Any]] | None = field(default=None, compare=False, repr=False)
     # 3D models only: what mesh export needs (pagan.model.MeshSource); mesh_only = `directions: 0` (no sprites)
@@ -1068,6 +1079,9 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
 
     nine_slice: dict[str, Margins] = {}
     font: Font | None = None
+    textures: Textures | None = None
+    if kind == "tileset" and data.get("export_textures") not in (None, False):
+        textures = _parse_textures(data["export_textures"], frames, animations, _line(data, "export_textures"), error)
     if kind == "sprite":
         nine_slice = _parse_nine_slice(data.get("nine_slice"), list(frames), size, _line(data, "nine_slice"), error)
         if "font" in data:
@@ -1099,10 +1113,66 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             variant_axes=variant_axes,
             nine_slice=nine_slice,
             font=font,
+            textures=textures,
             **meta,
         ),
         findings,
     )
+
+
+def _parse_textures(raw: Any, frames: dict[str, Grid], animations: dict[str, Animation], line: int | None, error: ErrorFn) -> Textures | None:
+    """export_textures: true (every tile) | { tiles: all | none | [names], groups: { name: "rows of tile names" },
+    triplanar: bool }. Animation frames aren't tiles of their own, so `all` leaves them out."""
+    usage = 'export_textures is true, or { tiles: all | none | [tile, ...], groups: { name: "rows of tile names" }, triplanar: true }'
+    in_animations = {f for a in animations.values() for f in a.frames}
+    every = tuple(name for name in frames if name not in in_animations)
+    if raw is True:
+        return Textures(every, {})
+    if not isinstance(raw, dict):
+        error("E001", usage, line, "export_textures")
+        return None
+    bad = [k for k in raw if k not in ("tiles", "groups", "triplanar")]
+    if bad:
+        error("E001", f"unknown export_textures field(s) {', '.join(map(str, bad))}; {usage}", line, "export_textures")
+        return None
+    tiles_raw = raw.get("tiles", "all" if "groups" not in raw else "none")
+    if tiles_raw == "all":
+        tiles = every
+    elif tiles_raw == "none":
+        tiles = ()
+    elif isinstance(tiles_raw, list) and all(isinstance(t, str) for t in tiles_raw):
+        unknown = [t for t in tiles_raw if t not in frames]
+        if unknown:
+            error("E001", f"export_textures.tiles: no tile(s) {', '.join(unknown)}", line, "export_textures.tiles")
+            return None
+        tiles = tuple(tiles_raw)
+    else:
+        error("E001", usage, line, "export_textures.tiles")
+        return None
+    groups: dict[str, tuple[tuple[str, ...], ...]] = {}
+    raw_groups = raw.get("groups", {})
+    if not isinstance(raw_groups, dict):
+        error("E001", usage, line, "export_textures.groups")
+        return None
+    for name, layout in raw_groups.items():
+        where = f"export_textures.groups.{name}"
+        if not isinstance(name, str) or not NAME_RE.match(name) or name in frames:
+            error("E001", "a group name is lowercase letters, digits, '_' or '-', and not a tile's name", line, where)
+            continue
+        rows = tuple(tuple(r.split()) for r in layout.split("\n") if r.strip()) if isinstance(layout, str) else ()
+        if not rows or len({len(r) for r in rows}) != 1:
+            error("E001", "a group is rows of tile names separated by spaces, every row the same length", line, where)
+            continue
+        unknown = sorted({t for r in rows for t in r if t not in frames})
+        if unknown:
+            error("E001", f"no tile(s) {', '.join(unknown)} (a texture can't have holes: no '.')", line, where)
+            continue
+        groups[name] = rows
+    triplanar = raw.get("triplanar", False)
+    if not isinstance(triplanar, bool):
+        error("E001", "triplanar must be true or false (Godot: project the texture in world space, no UVs needed)", line, "export_textures.triplanar")
+        return None
+    return Textures(tiles, groups, triplanar)
 
 
 def _parse_nine_slice(raw: Any, frames: list[str], size: tuple[int, int], line: int | None, error: ErrorFn) -> dict[str, Margins]:

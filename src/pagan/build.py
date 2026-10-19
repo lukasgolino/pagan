@@ -28,6 +28,7 @@ from pagan.exporters.godot import (
     res_path,
     sprite_frames_tres,
     texture_filter,
+    texture_material_tres,
     tileset_tres,
 )
 from pagan.findings import Finding
@@ -185,6 +186,8 @@ def build(project: Project) -> BuildResult:
             **emit(None),
             "frames": {name: list(rect) for name, rect in rects.items()},
         }
+        if asset.textures is not None:
+            entry["textures"] = _texture_outputs(asset, project, out, godot_root, write_png, write_file, factor)
         if asset.kind == "tileset":
             entry["columns"] = asset.columns
             entry["tiles"] = {name: list(cell) for name, cell in _tile_names(asset).items()}
@@ -266,6 +269,53 @@ def build(project: Project) -> BuildResult:
             imported = stale.with_name(stale.name + ".import")  # Godot's sidecar for the removed file
             imported.unlink(missing_ok=True)
     return result
+
+
+def _texture_outputs(
+    asset: Asset,
+    project: Project,
+    out: Path,
+    godot_root: Path | None,
+    write_png: Callable[[Path, Image.Image], None],
+    write_file: Callable[[Path, bytes], None],
+    factor: int,
+) -> dict[str, Any]:
+    """`export_textures`: each tile / tile group as its own PNG (`textures/<tileset>.<name>.png`, plus one per variant
+    when variant_sheets is on) that engines can repeat; with "godot", a StandardMaterial3D per texture."""
+    from pagan.api import compose  # local import: api builds on most modules
+
+    textures = asset.textures
+    assert textures is not None
+    folder = out / "textures"
+    layouts = {name: ((name,),) for name in textures.tiles} | textures.groups
+    voxel_size = project.config.mesh.voxel_size
+    info: dict[str, Any] = {}
+    for name, rows in layouts.items():
+        layout = [" ".join(row) for row in rows]
+        entry: dict[str, Any] = {}
+        for variant in (None, *(asset.variants if project.config.variant_sheets else ())):
+            image = downsample(compose(asset, layout, variant), factor)
+            stem = f"{asset.name}.{name}" if variant is None else f"{asset.name}.{name}.{variant}"
+            path = folder / f"{stem}.png"
+            write_png(path, image)
+            if variant is None:
+                entry = {
+                    "png": _ref(path, out, godot_root),
+                    "size": [image.width, image.height],
+                    "metres": [image.width * voxel_size, image.height * voxel_size],
+                    "tiles": [list(row) for row in rows],
+                }
+                transparent = bool((np.array(image.convert("RGBA"))[..., 3] < 255).any())
+            else:
+                entry.setdefault("variants", {})[variant] = {"png": _ref(path, out, godot_root)}
+            if godot_root is not None:
+                material = folder / f"{stem}.material.tres"
+                metres = (image.width * voxel_size, image.height * voxel_size)
+                write_file(material, texture_material_tres(res_path(path, godot_root), metres, textures.triplanar, transparent).encode("utf-8"))
+                target = entry if variant is None else entry["variants"][variant]
+                target["godot_material"] = res_path(material, godot_root)
+        info[name] = entry
+    return info
 
 
 def _mesh_outputs(

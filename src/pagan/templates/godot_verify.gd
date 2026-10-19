@@ -114,6 +114,20 @@ func _check() -> int:
 		if entry.has("mesh"):
 			failures += _check_mesh(name, entry["mesh"])
 			meshes_checked += 1
+		var textures: Dictionary = entry.get("textures", {})
+		for texture_name in textures:
+			var texture_entries: Array = [textures[texture_name]]
+			texture_entries.append_array(textures[texture_name].get("variants", {}).values())
+			for item in texture_entries:
+				var image = load(item["png"])
+				if image == null or not (image is Texture2D):
+					printerr("PAGAN_VERIFY_FAIL texture ", item["png"])
+					failures += 1
+				if item.has("godot_material"):
+					var material = load(item["godot_material"])
+					if material == null or not (material is StandardMaterial3D) or material.albedo_texture == null:
+						printerr("PAGAN_VERIFY_FAIL texture material ", item["godot_material"])
+						failures += 1
 	finished = true
 	if failures > 0:
 		printerr("PAGAN_VERIFY_FAIL ", failures, " problems")
