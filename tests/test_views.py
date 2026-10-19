@@ -140,3 +140,12 @@ def test_mesh_only_models_in_other_commands(tmp_path: Path) -> None:
     status = cli(project.root, "status")
     assert status["ok"]
     assert cli(project.root, "build")["ok"]
+
+
+def test_new_mesh_only_model_is_valid(tmp_path: Path) -> None:
+    project = make_project(tmp_path, 'default_palette = "test"\nexport = ["png", "mesh"]\n')
+    assert cli(project.root, "new", "model", "crate", "--directions", "0")["ok"]
+    text = (project.models_dir / "crate.model.yaml").read_text()
+    assert "directions: 0" in text and "size:" not in text
+    lint = cli(project.root, "lint")
+    assert lint["ok"] and lint["findings"] == []

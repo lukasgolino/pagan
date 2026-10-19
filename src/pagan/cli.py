@@ -352,16 +352,24 @@ def cmd_new_model(args: argparse.Namespace, out: Output) -> int:
   ramps:
     main: ["1", "2", "3"]
     accent: ["4", "5"]"""
-    if args.directions not in (1, 4, 8, 16, 32):
-        raise _usage_error("--directions must be 1, 4, 8, 16 or 32")
+    if args.directions not in (0, 1, 4, 8, 16, 32):
+        raise _usage_error("--directions must be 1, 4, 8, 16 or 32 (or 0: a mesh only, for 3D games)")
     description = args.description or "TODO: what this is and what it should look like"
+    framing = (
+        f"""size: [{width}, {height}]
+pivot: [{width // 2}, {round(height * 0.62)}]     # where `origin` lands in each frame
+origin: [0, 0, 0]                 # model point (x forward, y left, z up) placed on the pivot
+directions: {args.directions}                     # 1, 4, 8, 16 or 32 headings -> frames e, ne, n, ... (32: h00..h31)"""
+        if args.directions
+        else """origin: [0, 0, 0]                 # the mesh origin (x forward, y left, z up), e.g. between the feet
+directions: 0                     # a mesh only (export "mesh"): no sprites
+# rig:                            # parts as mesh nodes: pivot (joint), parent, meta (hit zones...), collision
+#   lid: { pivot: [-4, 0, 6], meta: { detachable: true } }"""
+    )
     text = f"""name: {name}
 description: {json.dumps(description)}
 {palette_block}
-size: [{width}, {height}]
-pivot: [{width // 2}, {round(height * 0.62)}]     # where `origin` lands in each frame
-origin: [0, 0, 0]                 # model point (x forward, y left, z up) placed on the pivot
-directions: {args.directions}                     # 1, 4, 8, 16 or 32 headings -> frames e, ne, n, ... (32: h00..h31)
+{framing}
 outline: auto
 status: draft
 style_version: {project.config.style_version}
@@ -1269,7 +1277,7 @@ def build_parser() -> argparse.ArgumentParser:
     new_model.add_argument("name", help="model name, e.g. ship")
     new_model.add_argument("--size", default="64x64", help="frame size WIDTHxHEIGHT (default 64x64)")
     new_model.add_argument("--palette", help="palette name (default: the project's default_palette)")
-    new_model.add_argument("--directions", type=int, default=8, help="headings to render: 1, 4, 8, 16 or 32 (default 8)")
+    new_model.add_argument("--directions", type=int, default=8, help="headings to render: 1, 4, 8, 16 or 32 (default 8); 0 = a mesh only (3D games)")
     new_model.add_argument("--description", help="what the asset is; kept in the file for future reference")
     new_model.set_defaults(handler=cmd_new_model)
 

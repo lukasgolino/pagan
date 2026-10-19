@@ -415,7 +415,7 @@ checkouts of the same art (e.g. agents' git worktrees), so a fresh checkout does
 | `pagan new palette <name>` | starter palette |
 | `pagan new sprite <name> [--size 16x16] [--frames N] [--directions 1\|4\|8] [--mirror] [--outline] [--palette P] [--description D]` | blank sprite; `--directions 4` scaffolds down/up/left frames + a mirrored right animation |
 | `pagan new tiles <name> [--size] [--frames N]` | blank tileset |
-| `pagan new model <name> [--size 64x64] [--directions 8]` | starter model |
+| `pagan new model <name> [--size 64x64] [--directions 8]` | starter model (`--directions 0`: a mesh-only model for 3D games) |
 | `pagan lint [paths] [--warnings-as-errors]` | errors + style warnings |
 | `pagan preview <model> --orbit \| --closeup PART \| --engine [--all-previews]` | 3D review: orbit.png (8 headings x elevations -30, 0, 30, 60, 90: undersides too), closeup_<PART>.png (one part filling the view, in place and alone), engine.png (the built .tscn through Godot: needs a display); only these unless `--all-previews` |
 | `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb] [--scene FILE] [--frame NAME]` | sheet.png (labelled), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale, plus native/ (1x frames and sheet, as `pagan render`); variants.png + variants_1x.png (base and every variant side by side: the first frame with pixels, or `--frame`) when the asset has variants; `--scene` (tilesets): scene.png from a layout file (rows of tile names, `.` = empty) and scene_variants.png; supersampled assets also get an "as built" row and built_1x.png (what the game gets) |
