@@ -83,10 +83,22 @@ def test_meshes_load_in_godot(copies: tuple[Path, Path]) -> None:
     """With "mesh" exported: every .glb and .tscn loads, with the manifest's nodes, metadata, visibility,
     animations (loop flags) and PAGAN materials on every surface."""
     demo, godot_root = copies
-    config = demo / "pagan.toml"
-    config.write_text(config.read_text().replace('export = ["png", "godot"]', 'export = ["png", "godot", "mesh"]'))
+    assert '"mesh"' in (demo / "pagan.toml").read_text()  # the demo exports meshes
     result = build(load_project(demo))
     assert not result.errors
     assert GODOT is not None
     check = verify_with_godot(GODOT, godot_root, "res://assets/generated/manifest.json")
     assert check.ok and check.meshes == 2, check.output
+
+
+def test_mesh_scene_shows_every_mesh(copies: tuple[Path, Path]) -> None:
+    demo, godot_root = copies
+    build(load_project(demo))
+    assert GODOT is not None
+    subprocess.run([GODOT, "--headless", "--path", str(godot_root), "--import"], capture_output=True, timeout=300)
+    run = subprocess.run(
+        [GODOT, "--headless", "--path", str(godot_root), "-s", "res://tests/check_mesh_scene.gd"],
+        capture_output=True, text=True, timeout=300,
+    )  # fmt: skip
+    output = run.stdout + run.stderr
+    assert run.returncode == 0 and "CHECK_OK 2 meshes" in output, output

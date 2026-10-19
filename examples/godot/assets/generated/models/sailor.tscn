@@ -1,0 +1,30 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/generated/models/sailor.glb" id="1_glb"]
+[ext_resource type="Material" path="res://assets/generated/models/sailor.material.tres" id="2_material"]
+
+[node name="sailor" instance=ExtResource("1_glb")]
+
+[node name="body" parent="."]
+surface_material_override/0 = ExtResource("2_material")
+
+[node name="left_arm" parent="body"]
+surface_material_override/0 = ExtResource("2_material")
+
+[node name="left_leg" parent="body"]
+surface_material_override/0 = ExtResource("2_material")
+
+[node name="right_arm" parent="body"]
+surface_material_override/0 = ExtResource("2_material")
+
+[node name="right_leg" parent="body"]
+surface_material_override/0 = ExtResource("2_material")
+
+[node name="sword_down" parent="body"]
+surface_material_override/0 = ExtResource("2_material")
+
+[node name="sword_mid" parent="body"]
+surface_material_override/0 = ExtResource("2_material")
+
+[node name="sword_up" parent="body"]
+surface_material_override/0 = ExtResource("2_material")

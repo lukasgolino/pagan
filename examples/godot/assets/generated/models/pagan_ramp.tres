@@ -1,0 +1,50 @@
+[gd_resource type="Shader" format=3]
+
+[resource]
+code = "// PAGAN ramp shader (written by `pagan build`; don't edit, it's replaced on every build).
+// Palette-locked lighting for PAGAN meshes ([mesh] shading = \"ramp\"): the sun (each DirectionalLight3D)
+// picks a step of the surface's palette ramp exactly as PAGAN's sprite renderer does:
+//   brightness = ambient + (1 - ambient) * max(0, (N.L + wrap) / (1 + wrap)) * (shadowed ? 1 - shadow_strength : 1)
+// so every lit pixel is a palette colour (before fog or post effects; use the Linear tonemapper).
+// The light's colour and energy don't change the sun's result. Omni and spot lights add on top, unlocked.
+// The environment's ambient light is ignored: `ambient` below is the palette-locked ambient.
+shader_type spatial;
+render_mode ambient_light_disabled, specular_disabled;
+
+// One row per material ramp (UV.y), columns dark -> light (filtered nearest).
+uniform sampler2D ramp : source_color, filter_nearest, repeat_disable;
+uniform float ambient : hint_range(0.0, 1.0) = 0.2;
+uniform float wrap : hint_range(0.0, 1.0) = 0.3;
+uniform float shadow_strength : hint_range(0.0, 1.0) = 0.65;
+uniform bool shadows = true;
+// Thin surfaces (cloth, leaves): lit from either side.
+uniform bool two_sided = false;
+// How strongly omni and spot lights add their (unlocked) light.
+uniform float other_lights : hint_range(0.0, 4.0) = 1.0;
+
+vec3 ramp_at(float brightness, float row) {
+	return texture(ramp, vec2(clamp(brightness, 0.0, 0.9999), row)).rgb;
+}
+
+void fragment() {
+	ALBEDO = vec3(1.0);
+	ROUGHNESS = 1.0;
+	METALLIC = 0.0;
+}
+
+void light() {
+	float facing = dot(NORMAL, LIGHT);
+	if (two_sided) {
+		facing = abs(facing);
+	}
+	facing = max(0.0, (facing + wrap) / (1.0 + wrap));
+	if (LIGHT_IS_DIRECTIONAL) {
+		if (shadows) {
+			facing *= mix(1.0 - shadow_strength, 1.0, ATTENUATION);
+		}
+		DIFFUSE_LIGHT = max(DIFFUSE_LIGHT, ramp_at(ambient + (1.0 - ambient) * facing, UV.y));
+	} else {
+		DIFFUSE_LIGHT += ramp_at(facing, UV.y) * LIGHT_COLOR * ATTENUATION * facing * other_lights;
+	}
+}
+"

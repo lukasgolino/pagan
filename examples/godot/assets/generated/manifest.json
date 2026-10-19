@@ -840,6 +840,272 @@
         "se"
       ],
       "kind": "model",
+      "mesh": {
+        "animation_order": [
+          "walk",
+          "swing"
+        ],
+        "animations": {
+          "swing": {
+            "duration": 0.4,
+            "fps": 10.0,
+            "frames": 4,
+            "gltf_name": "swing",
+            "interpolation": "step",
+            "loop": false
+          },
+          "walk": {
+            "duration": 0.5,
+            "fps": 8.0,
+            "frames": 4,
+            "gltf_name": "walk-loop",
+            "interpolation": "step",
+            "loop": true
+          }
+        },
+        "bounds": {
+          "max": [
+            0.3125,
+            1.3125,
+            0.5
+          ],
+          "min": [
+            -0.3125,
+            0.0,
+            -0.125
+          ]
+        },
+        "glb": "res://assets/generated/models/sailor.glb",
+        "godot_materials": [
+          "res://assets/generated/models/sailor.material.tres"
+        ],
+        "godot_scene": "res://assets/generated/models/sailor.tscn",
+        "parts": {
+          "body": {
+            "aabb": {
+              "max": [
+                0.25,
+                1.3125,
+                0.25
+              ],
+              "min": [
+                -0.1875,
+                0.4375,
+                -0.125
+              ]
+            },
+            "collision": "none",
+            "hidden": false,
+            "meta": {},
+            "node": "body",
+            "parent": null,
+            "pivot": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "triangles": 176,
+            "voxels": 324
+          },
+          "left_arm": {
+            "aabb": {
+              "max": [
+                0.3125,
+                0.8125,
+                0.0625
+              ],
+              "min": [
+                0.25,
+                0.4375,
+                -0.0625
+              ]
+            },
+            "collision": "none",
+            "hidden": false,
+            "meta": {},
+            "node": "body/left_arm",
+            "parent": "body",
+            "pivot": [
+              0.28125,
+              0.4375,
+              0.0
+            ],
+            "triangles": 20,
+            "voxels": 12
+          },
+          "left_leg": {
+            "aabb": {
+              "max": [
+                0.1875,
+                0.4375,
+                0.0625
+              ],
+              "min": [
+                0.0625,
+                0.0,
+                -0.0625
+              ]
+            },
+            "collision": "none",
+            "hidden": false,
+            "meta": {},
+            "node": "body/left_leg",
+            "parent": "body",
+            "pivot": [
+              0.125,
+              0.0,
+              0.0
+            ],
+            "triangles": 20,
+            "voxels": 28
+          },
+          "right_arm": {
+            "aabb": {
+              "max": [
+                -0.1875,
+                0.8125,
+                0.0625
+              ],
+              "min": [
+                -0.25,
+                0.4375,
+                -0.0625
+              ]
+            },
+            "collision": "none",
+            "hidden": false,
+            "meta": {},
+            "node": "body/right_arm",
+            "parent": "body",
+            "pivot": [
+              -0.21875,
+              0.4375,
+              0.0
+            ],
+            "triangles": 20,
+            "voxels": 12
+          },
+          "right_leg": {
+            "aabb": {
+              "max": [
+                0.0,
+                0.4375,
+                0.0625
+              ],
+              "min": [
+                -0.125,
+                0.0,
+                -0.0625
+              ]
+            },
+            "collision": "none",
+            "hidden": false,
+            "meta": {},
+            "node": "body/right_leg",
+            "parent": "body",
+            "pivot": [
+              -0.0625,
+              0.0,
+              0.0
+            ],
+            "triangles": 20,
+            "voxels": 28
+          },
+          "sword_down": {
+            "aabb": {
+              "max": [
+                -0.25,
+                0.5625,
+                0.5
+              ],
+              "min": [
+                -0.3125,
+                0.3125,
+                0.0625
+              ]
+            },
+            "collision": "none",
+            "hidden": true,
+            "meta": {},
+            "node": "body/sword_down",
+            "parent": "body",
+            "pivot": [
+              -0.28125,
+              0.3125,
+              0.28125
+            ],
+            "triangles": 76,
+            "voxels": 10
+          },
+          "sword_mid": {
+            "aabb": {
+              "max": [
+                -0.25,
+                1.0,
+                0.4375
+              ],
+              "min": [
+                -0.3125,
+                0.6875,
+                0.0625
+              ]
+            },
+            "collision": "none",
+            "hidden": true,
+            "meta": {},
+            "node": "body/sword_mid",
+            "parent": "body",
+            "pivot": [
+              -0.28125,
+              0.6875,
+              0.25
+            ],
+            "triangles": 96,
+            "voxels": 10
+          },
+          "sword_up": {
+            "aabb": {
+              "max": [
+                -0.25,
+                1.3125,
+                0.0625
+              ],
+              "min": [
+                -0.3125,
+                0.8125,
+                0.0
+              ]
+            },
+            "collision": "none",
+            "hidden": true,
+            "meta": {},
+            "node": "body/sword_up",
+            "parent": "body",
+            "pivot": [
+              -0.28125,
+              0.8125,
+              0.03125
+            ],
+            "triangles": 12,
+            "voxels": 8
+          }
+        },
+        "ramp": "res://assets/generated/models/sailor.ramp.png",
+        "ramp_rows": [
+          "mn",
+          "ijk",
+          "123",
+          "01",
+          "0",
+          "jk"
+        ],
+        "root": "body",
+        "shading": "ramp",
+        "triangles": 440,
+        "variants": {},
+        "vertices": 706,
+        "voxel_size": 0.0625
+      },
       "palette": "ember",
       "pivot": [
         16,
@@ -1274,6 +1540,143 @@
         "se"
       ],
       "kind": "model",
+      "mesh": {
+        "animation_order": [
+          "sail"
+        ],
+        "animations": {
+          "sail": {
+            "duration": 0.666667,
+            "fps": 6.0,
+            "frames": 4,
+            "gltf_name": "sail-loop",
+            "interpolation": "step",
+            "loop": true
+          }
+        },
+        "bounds": {
+          "max": [
+            0.6875,
+            3.0,
+            2.8125
+          ],
+          "min": [
+            -0.625,
+            0.0,
+            -2.25
+          ]
+        },
+        "glb": "res://assets/generated/models/ship.glb",
+        "godot_materials": [
+          "res://assets/generated/models/ship.material.tres",
+          "res://assets/generated/models/ship.two_sided.material.tres"
+        ],
+        "godot_scene": "res://assets/generated/models/ship.tscn",
+        "parts": {
+          "body": {
+            "aabb": {
+              "max": [
+                0.6875,
+                2.9375,
+                2.8125
+              ],
+              "min": [
+                -0.625,
+                0.0,
+                -2.25
+              ]
+            },
+            "collision": "none",
+            "hidden": false,
+            "meta": {},
+            "node": "body",
+            "parent": null,
+            "pivot": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "triangles": 6690,
+            "voxels": 13447
+          },
+          "fore_pennant": {
+            "aabb": {
+              "max": [
+                0.0625,
+                2.625,
+                1.375
+              ],
+              "min": [
+                0.0,
+                2.5,
+                1.1875
+              ]
+            },
+            "collision": "none",
+            "hidden": false,
+            "meta": {},
+            "node": "body/fore_pennant",
+            "parent": "body",
+            "pivot": [
+              0.03125,
+              2.5,
+              1.28125
+            ],
+            "triangles": 12,
+            "voxels": 6
+          },
+          "pennant": {
+            "aabb": {
+              "max": [
+                0.0625,
+                3.0,
+                0.5
+              ],
+              "min": [
+                0.0,
+                2.875,
+                0.125
+              ]
+            },
+            "collision": "none",
+            "hidden": false,
+            "meta": {},
+            "node": "body/pennant",
+            "parent": "body",
+            "pivot": [
+              0.03125,
+              2.875,
+              0.3125
+            ],
+            "triangles": 12,
+            "voxels": 12
+          }
+        },
+        "ramp": "res://assets/generated/models/ship.ramp.png",
+        "ramp_rows": [
+          "6789",
+          "789",
+          "12",
+          "123",
+          "345",
+          "lmn",
+          "a"
+        ],
+        "root": "body",
+        "shading": "ramp",
+        "triangles": 6714,
+        "variants": {
+          "blue": {
+            "godot_materials": [
+              "res://assets/generated/models/ship.blue.material.tres",
+              "res://assets/generated/models/ship.blue.two_sided.material.tres"
+            ],
+            "ramp": "res://assets/generated/models/ship.blue.ramp.png"
+          }
+        },
+        "vertices": 10332,
+        "voxel_size": 0.0625
+      },
       "palette": "ember",
       "pivot": [
         48,
@@ -1454,6 +1857,19 @@
     }
   },
   "files": [
+    "models/pagan_ramp.tres",
+    "models/sailor.glb",
+    "models/sailor.material.tres",
+    "models/sailor.ramp.png",
+    "models/sailor.tscn",
+    "models/ship.blue.material.tres",
+    "models/ship.blue.ramp.png",
+    "models/ship.blue.two_sided.material.tres",
+    "models/ship.glb",
+    "models/ship.material.tres",
+    "models/ship.ramp.png",
+    "models/ship.tscn",
+    "models/ship.two_sided.material.tres",
     "sprites/barrel.png",
     "sprites/barrel.tres",
     "sprites/potion.png",

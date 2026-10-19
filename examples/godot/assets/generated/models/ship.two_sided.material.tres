@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/generated/models/pagan_ramp.tres" id="1_shader"]
+[ext_resource type="Texture2D" path="res://assets/generated/models/ship.ramp.png" id="2_ramp"]
+
+[resource]
+shader = ExtResource("1_shader")
+shader_parameter/ramp = ExtResource("2_ramp")
+shader_parameter/ambient = 0.2
+shader_parameter/wrap = 0.3
+shader_parameter/shadow_strength = 0.65
+shader_parameter/shadows = true
+shader_parameter/two_sided = true
+shader_parameter/other_lights = 1.0

@@ -450,23 +450,32 @@ def test_model_voxel_size_overrides_the_project(mproject: Project) -> None:
 
 
 def test_demo_2d_output_is_unchanged_with_mesh_export(tmp_path: Path) -> None:
-    """Turning meshes on adds files and `mesh` keys; every sprite, tileset and Godot resource stays byte-identical."""
+    """The demo exports meshes. Turning them off removes the mesh files and `mesh` keys and nothing else: every
+    sprite, tileset and Godot resource is byte-identical either way (and identical to 0.7.0's)."""
     demo = tmp_path / "demo"
     shutil.copytree(ROOT / "examples" / "demo", demo, ignore=shutil.ignore_patterns("previews", ".pagan-cache"))
     shutil.copytree(ROOT / "examples" / "godot", tmp_path / "godot", ignore=shutil.ignore_patterns(".godot", "*.import"))
     committed = ROOT / "examples" / "godot" / "assets" / "generated"
     config = demo / "pagan.toml"
-    config.write_text(config.read_text().replace('export = ["png", "godot"]', 'export = ["png", "godot", "mesh"]'))
+    assert 'export = ["png", "godot", "mesh"]' in config.read_text()
     result = build(load_project(demo))
     assert not result.errors
     generated = tmp_path / "godot" / "assets" / "generated"
     for path in committed.rglob("*"):
         if path.is_file() and path.name != "manifest.json" and path.suffix != ".import":
             assert (generated / path.relative_to(committed)).read_bytes() == path.read_bytes(), path
-    old = json.loads((committed / "manifest.json").read_text())
     new = json.loads((generated / "manifest.json").read_text())
+    assert new == json.loads((committed / "manifest.json").read_text())
+    config.write_text(config.read_text().replace('export = ["png", "godot", "mesh"]', 'export = ["png", "godot"]'))
+    shutil.rmtree(generated)
+    assert not build(load_project(demo)).errors
+    for path in committed.rglob("*"):  # meshes off: the same sprites, tilesets and Godot resources
+        if path.is_file() and path.suffix in (".png", ".tres") and "models" not in path.parts:
+            assert (generated / path.relative_to(committed)).read_bytes() == path.read_bytes(), path
+    old = json.loads((generated / "manifest.json").read_text())
     for name, entry in old["assets"].items():
         assert {k: v for k, v in new["assets"][name].items() if k != "mesh"} == entry
+    assert not (generated / "models").exists()
     assert set(new["assets"]["ship"]["mesh"]) >= {"glb", "ramp", "parts", "animations", "godot_scene", "godot_materials"}
 
 
