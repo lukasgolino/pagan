@@ -203,3 +203,16 @@ def test_cli_entry_without_project(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     monkeypatch.chdir(tmp_path)
     assert main(["--json", "mcp"]) == 1
     assert "pagan init" in capsys.readouterr().out
+
+
+def test_preview_orbit_and_closeup(root: Path) -> None:
+    (root / "models").mkdir()
+    (root / "models" / "post.model.yaml").write_text(
+        "name: post\nsize: [24, 24]\ndirections: 4\nmaterials:\n  red: { ramp: red }\nparts:\n"
+        "  - box: { from: [0, 0, 0], to: [1, 1, 5], material: red }\n  - box: { from: [0, 0, 6], to: [0, 0, 7], material: red }\n    id: tip\n"
+    )
+    orbit = call(root, "preview", {"asset": "post", "which": "orbit"})
+    assert data(orbit)["ok"] and len(images(orbit)) == 1
+    closeup = call(root, "preview", {"asset": "post", "which": "closeup", "part": "tip"})
+    assert data(closeup)["outputs"][0]["closeup"] == {"tip": "previews/post/closeup_tip.png"} and len(images(closeup)) == 1
+    assert not data(call(root, "preview", {"asset": "post", "which": "closeup"}))["ok"]

@@ -24,7 +24,8 @@ from pagan.lint import lint_paths
 from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_style, catalogue, mark, outdated
 from pagan.palette import KEY_ORDER, NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
-from pagan.preview import PreviewOptions, gallery, write_native, write_previews
+from pagan.model import part_cells
+from pagan.preview import PreviewOptions, gallery, write_closeup, write_native, write_orbit, write_previews
 from pagan.render import supersample_factor
 from pagan.settings import BY_KEY, Change, describe, set_in_toml, set_setting, unset_setting
 from pagan.swatch import render_swatch
@@ -512,7 +513,33 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
         if args.frame is not None and args.frame not in asset.frames:
             findings.append(Finding("E000", f"--frame: {asset.name} has no frame {args.frame!r}", asset.path))
             continue
-        result = write_previews(asset, project.preview_dir, options, supersample_factor(asset, project), args.frame)
+        if (args.orbit or args.closeup or args.engine) and asset.kind != "model":
+            findings.append(Finding("E000", f"--orbit, --closeup and --engine need a 3D model; {asset.name} is a {asset.kind}", asset.path))
+            continue
+        views: dict[str, Any] = {}
+        if args.orbit:
+            views["orbit"] = display_path(write_orbit(asset, project.preview_dir, options, project.config.camera.scale))
+            out.say(f"{asset.name} orbit (every heading, from below to straight down): {views['orbit']}")
+        for part in args.closeup or []:
+            try:
+                views.setdefault("closeup", {})[part] = display_path(write_closeup(asset, part, project.preview_dir, options))
+                out.say(f"{asset.name} closeup on {part}: {views['closeup'][part]}")
+            except KeyError:
+                known = ", ".join(sorted(part_cells(asset.mesh.model))) if asset.mesh is not None else "none"
+                findings.append(Finding("E000", f"--closeup: {asset.name} has no part {part!r} (parts: {known})", asset.path))
+        if args.engine:
+            engine, problem = _engine_preview(asset, project, options)
+            if engine is None:
+                findings.append(Finding("E000", f"--engine: {problem}", asset.path))
+            else:
+                views["engine"] = display_path(engine)
+                out.say(f"{asset.name} in Godot (ramp shader, shadows): {views['engine']}")
+        if views and not args.all_previews:
+            outputs.append({"asset": asset.name, **views})
+            continue
+        result = write_previews(
+            asset, project.preview_dir, options, supersample_factor(asset, project), args.frame, project.config.camera
+        )
         out.say(f"{asset.name}: {display_path(result.sheet)}  (x{result.scale})")
         out.say(f"  montage (no labels, on the background): {display_path(result.montage)}")
         for gif in result.gifs:
@@ -546,6 +573,7 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
                 **({"variants": display_path(result.variants)} if result.variants is not None else {}),
                 **({"variants_1x": display_path(result.variants_1x)} if result.variants_1x is not None else {}),
                 **({"built_1x": display_path(result.built_1x)} if result.built_1x is not None else {}),
+                **views,
             }
         )
     if findings:
@@ -553,6 +581,47 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
         return 1
     out.result({"outputs": outputs})
     return 0
+
+
+def _engine_preview(asset: Asset, project: Project, options: PreviewOptions) -> tuple[Path | None, str]:
+    """engine.png: the built .tscn rendered by Godot from 8 sides, above and below. Needs a build with "godot" and
+    "mesh" exported, a Godot binary and a display."""
+    from PIL import Image
+
+    from pagan.exporters.godot import render_views
+    from pagan.preview import views_sheet
+    from pagan.views import View
+    from pagan.voxel import heading_angles
+
+    manifest_path = project.output_dir / "manifest.json"
+    try:
+        entry = json.loads(manifest_path.read_text(encoding="utf-8"))["assets"][asset.name]["mesh"]
+        scene_res = entry["godot_scene"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None, 'no Godot scene for this model: export ["png", "godot", "mesh"] and run `pagan build` first'
+    godot = find_godot_binary()
+    godot_root = find_godot_project(project.output_dir)
+    if godot is None or godot_root is None:
+        return None, "needs a Godot 4 binary (GODOT=/path/to/godot) and output_dir inside a Godot project"
+    low, high = entry["bounds"]["min"], entry["bounds"]["max"]
+    centre_y = (low[1] + high[1]) / 2
+    radius = max(((x * x + z * z) ** 0.5 for x in (low[0], high[0]) for z in (low[2], high[2])), default=1.0)
+    radius = (radius * radius + ((high[1] - low[1]) / 2) ** 2) ** 0.5
+    headings = heading_angles(8)
+    rows_spec = [(30.0, "above, +30°"), (-20.0, "below, -20°")]
+    views = [(270.0 - angle, elevation) for elevation, _ in rows_spec for _, angle in headings]  # camera yaw for each heading
+    images, output = render_views(godot, godot_root, scene_res, radius, centre_y, views)
+    if not images:
+        return None, "Godot couldn't render (it needs a display; headless servers can't): " + output[-500:]
+    loaded = [Image.open(p).convert("RGBA") for p in images]
+    rows = [
+        (f"Godot, {label}", [View(name, loaded[r * len(headings) + i]) for i, (name, _) in enumerate(headings)])
+        for r, (_, label) in enumerate(rows_spec)
+    ]
+    path = project.preview_dir / asset.name / "engine.png"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    views_sheet(asset, rows, options, "in the engine", engine=True).save(path)
+    return path, ""
 
 
 def _scene_preview(asset: Asset, layout_file: Path, folder: Path, options: PreviewOptions) -> tuple[Path, Path | None]:
@@ -586,7 +655,7 @@ def cmd_gallery(args: argparse.Namespace, out: Output) -> int:
     result = lint_paths(project)
     path = Path(args.out) if args.out else project.preview_dir / "gallery.png"
     path.parent.mkdir(parents=True, exist_ok=True)
-    gallery(result.assets, options, f"{project.root.name} gallery").save(path)
+    gallery(result.assets, options, f"{project.root.name} gallery", project.config.camera).save(path)
     out.say(f"wrote {display_path(path)} ({len(result.assets)} assets)")
     if result.errors:
         out.say(f"{len(result.errors)} errors: assets with errors are missing; run `pagan lint`")
@@ -1249,6 +1318,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="tilesets: also draw FILE's layout (rows of tile names, '.' = empty) to scene.png (and scene_variants.png)",
     )  # fmt: skip
     preview.add_argument("--frame", metavar="NAME", help="the frame variants.png compares (default: the first with pixels)")
+    preview.add_argument("--orbit", action="store_true", help="3D models: orbit.png, every heading from below (-30) to straight down (90)")
+    preview.add_argument("--closeup", metavar="PART", action="append", help="3D models: closeup_<PART>.png, one part filling the view (repeatable)")
+    preview.add_argument("--engine", action="store_true", help="3D models: engine.png, the built mesh rendered by Godot (needs a display)")
+    preview.add_argument("--all-previews", action="store_true", help="with --orbit/--closeup/--engine: also write the usual sprite previews")
     preview.set_defaults(handler=cmd_preview)
 
     gallery_cmd = commands.add_parser(

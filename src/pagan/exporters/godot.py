@@ -306,3 +306,37 @@ def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: 
     match = re.search(r"PAGAN_VERIFY_OK (\d+) SpriteFrames, (\d+) TileSets, (\d+) fonts, (\d+) meshes", result.stdout)
     counts = tuple(int(g) for g in match.groups()) if match else (0, 0, 0, 0)
     return GodotCheck(ok=ok, output=output, sprite_frames=counts[0], tilesets=counts[1], fonts=counts[2], meshes=counts[3])
+
+
+def render_views(
+    godot: str, godot_root: Path, scene_res: str, radius: float, centre_y: float, views: list[tuple[float, float]], size: int = 128, timeout: int = 300
+) -> tuple[list[Path], str]:
+    """Render a mesh scene through Godot's real renderer (ramp shader, shadows) from each (yaw, elevation) in
+    degrees, with an orthographic camera fitted to `radius` metres. Needs a display. Returns (PNGs, output); the
+    PNGs live in a temp folder until the next call, so copy or load them before calling again."""
+    global _VIEWS_DIR
+    script = files("pagan").joinpath("templates", "godot_views.gd").read_text(encoding="utf-8")
+    if _VIEWS_DIR is not None:
+        _VIEWS_DIR.cleanup()
+    _VIEWS_DIR = tempfile.TemporaryDirectory(prefix="pagan-views-")
+    scratch = Path(_VIEWS_DIR.name)
+    script_path = scratch / "pagan_views.gd"
+    script_path.write_text(script, encoding="utf-8")
+    pairs = [f"{yaw:g}:{elevation:g}" for yaw, elevation in views]
+    try:
+        subprocess.run([godot, "--headless", "--path", str(godot_root), "--import"], capture_output=True, text=True, timeout=timeout)
+        run = subprocess.run(
+            [godot, "--path", str(godot_root), "-s", str(script_path), "--", scene_res, str(scratch), str(size), f"{radius:g}", f"{centre_y:g}", *pairs],
+            capture_output=True, text=True, timeout=timeout,
+        )  # fmt: skip
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return [], f"couldn't run Godot: {exc}"
+    output = (run.stdout + run.stderr).strip()
+    images = [scratch / f"view_{i:02d}.png" for i in range(len(views))]
+    if "PAGAN_VIEWS_OK" not in run.stdout or not all(p.is_file() for p in images):
+        return [], output
+    return images, output
+
+
+_VIEWS_DIR: tempfile.TemporaryDirectory[str] | None = None
+

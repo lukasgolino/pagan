@@ -410,27 +410,40 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
     @_results
     def preview(
         asset: str,
-        which: Literal["sheet", "montage", "variants", "built"] = "sheet",
+        which: Literal["sheet", "montage", "variants", "built", "orbit", "closeup", "engine"] = "sheet",
         scale: int | None = None,
         background: str = "checker",
         inline: bool = True,
         frame: str | None = None,
+        part: str | None = None,
     ) -> list[Any]:
         """Render previews (labelled contact sheet with every frame, heading and animation "changes" row;
         montage; variants side by side; built = supersampled output at 1x) and return the chosen one as an
         image. LOOK at it before reporting. Paths to the GIFs, the 1x frames (native) and every file are in
         the result. background: checker, none or #rrggbb. frame: the frame "variants" compares (default:
-        the first one with pixels)."""
+        the first one with pixels). 3D models (for 3D games): orbit = every heading from below (-30 degrees)
+        to straight down; closeup = one `part` (id) filling the view; engine = the built mesh rendered by
+        Godot (needs a display)."""
         _check_name(asset)
         argv = ["preview", asset, f"--bg={background}"]
         if scale is not None:
             argv.append(f"--scale={scale}")
         if frame is not None:
             argv.append(f"--frame={frame}")
+        if which == "orbit":
+            argv.append("--orbit")
+        elif which == "closeup":
+            if part is None:
+                raise _error("closeup needs part: a part id of the model")
+            argv.append(f"--closeup={part}")
+        elif which == "engine":
+            argv.append("--engine")
         result = pagan.cli(*argv)
         outputs = result.get("outputs") or [{}]
-        key = {"sheet": "sheet", "montage": "montage", "variants": "variants", "built": "built_1x"}[which]
+        key = {"sheet": "sheet", "montage": "montage", "variants": "variants", "built": "built_1x", "orbit": "orbit", "closeup": "closeup", "engine": "engine"}[which]
         chosen = outputs[0].get(key)
+        if isinstance(chosen, dict):
+            chosen = chosen.get(part or "")
         if result.get("ok") and chosen is None:
             result["image_note"] = f"no {which} preview for {asset} (variants: needs variants; built: needs supersample)"
         if not inline or chosen is None:

@@ -14,6 +14,8 @@ from pagan.asset import Asset, Grid
 from pagan.palette import TRANSPARENT
 from pagan.render import downsample, frame_image, save_png, sheet_image
 from pagan.swatch import _font
+from pagan.views import View, closeup_views, orbit_views, thumbnail
+from pagan.voxel import Camera
 
 BG_DARK = (30, 30, 36)
 TEXT = (230, 230, 230)
@@ -298,13 +300,50 @@ def montage(asset: Asset, options: PreviewOptions, per_row: int = 8) -> Image.Im
     return out
 
 
+def views_sheet(
+    asset: Asset, rows: list[tuple[str, list[View]]], options: PreviewOptions, title: str, engine: bool = False
+) -> Image.Image:
+    """Labelled rows of 3D views (orbit, closeup, engine) at one scale."""
+    biggest = max((max(v.image.size) for _, views in rows for v in views), default=1)
+    scale = options.scale or max(1, min(8, 128 // biggest))
+    cells = [(heading, [(v.label, upscale(v.image, scale, options)) for v in views]) for heading, views in rows]
+    how = "Godot's renderer: PAGAN ramp shader, one sun, shadows" if engine else "PAGAN's renderer with the project light (no engine needed)"
+    subtitle = f"headings: the way the model's front faces (e = right); {how}"
+    return _labelled_grid(f"{asset.name}  {title}  x{scale}", subtitle, cells)
+
+
+def write_orbit(asset: Asset, out_dir: Path, options: PreviewOptions, camera_scale: float) -> Path:
+    """orbit.png: every heading at elevations from below (-30) to straight down (90)."""
+    path = out_dir / asset.name / "orbit.png"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    views_sheet(asset, orbit_views(asset, camera_scale), options, "orbit").save(path)
+    return path
+
+
+def write_closeup(asset: Asset, part_id: str, out_dir: Path, options: PreviewOptions) -> Path:
+    """closeup_<part>.png: one part filling the view (KeyError if the model has no such part)."""
+    path = out_dir / asset.name / f"closeup_{part_id}.png"
+    rows = closeup_views(asset, part_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    views_sheet(asset, rows, options, f"closeup {part_id}").save(path)
+    return path
+
+
 def write_previews(
-    asset: Asset, out_dir: Path, options: PreviewOptions, supersample: int = 1, frame: str | None = None
+    asset: Asset, out_dir: Path, options: PreviewOptions, supersample: int = 1, frame: str | None = None, camera: Camera | None = None
 ) -> PreviewResult:
     """Every preview of one asset, plus its 1x frames (as `pagan render` writes them) for scripted montages.
-    `frame`: the frame variants.png compares (default: the first one with pixels)."""
-    scale = options.scale or auto_scale(asset.size)
+    `frame`: the frame variants.png compares (default: the first one with pixels). A mesh-only model (no
+    frames) gets its orbit sheet as `sheet` and a 3/4 view as `montage`."""
     folder = out_dir / asset.name
+    if asset.mesh_only:
+        camera = camera or Camera()
+        sheet = write_orbit(asset, out_dir, options, camera.scale)
+        montage_path = folder / "montage.png"
+        view = thumbnail(asset, camera, 256)
+        upscale(view, options.scale or auto_scale(view.size), options).save(montage_path)
+        return PreviewResult(asset=asset.name, sheet=sheet, montage=montage_path, frames=[], gifs=[], scale=options.scale or 1)
+    scale = options.scale or auto_scale(asset.size)
     frames: list[Path] = []
     for variant in (None, *asset.variants):
         for name in asset.frames:
@@ -334,16 +373,21 @@ def write_previews(
     return result
 
 
-def gallery(assets: list[Asset], options: PreviewOptions, title: str) -> Image.Image:
+def gallery(assets: list[Asset], options: PreviewOptions, title: str, camera: Camera | None = None) -> Image.Image:
     """Every asset's first frame side by side at a common scale: checks the set looks cohesive."""
     if not assets:
         return _labelled_grid(title, "no assets", [])
-    biggest = max(max(a.size) for a in assets)
+    biggest = max((max(a.size) for a in assets if not a.mesh_only), default=64)
     scale = options.scale or max(2, min(8, 192 // biggest))  # common scale, so relative sizes stay true
     rows: list[tuple[str, list[tuple[str, Image.Image]]]] = []
+    meshes = sorted((a for a in assets if a.mesh_only), key=lambda a: a.name)
+    if meshes:  # no sprite frames: a 3/4 view at the project camera's elevation, fitted to the biggest frame
+        camera = camera or Camera()
+        cells = [(f"{a.name}{'' if a.status == 'approved' else ' (draft)'}", upscale(thumbnail(a, camera, biggest), scale, options)) for a in meshes]
+        rows.append(("3D meshes (mesh only)", cells))
     for kind, heading in (("model", "3D models"), ("sprite", "sprites"), ("tileset", "tilesets")):
         cells = []
-        for asset in sorted((a for a in assets if a.kind == kind), key=lambda a: a.name):
+        for asset in sorted((a for a in assets if a.kind == kind and not a.mesh_only), key=lambda a: a.name):
             first = next(iter(asset.frames))
             marker = "" if asset.status == "approved" else " (draft)"
             cells.append((f"{asset.name}{marker}", upscale(frame_image(asset, first), scale, options)))
