@@ -33,6 +33,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `asset.py` sprite + tileset parsing (grids, mirror, derived frames, outline, animations, variants, metadata);
   - `render.py` frames/sheets to RGBA images + deterministic PNG saving; `lint.py` warnings W001-W006;
   - `preview.py` upscaled frames, contact sheets (with animation "changes" rows), GIFs, tiling check, gallery;
+  - `views.py` 3D review views of models (orbit from below to straight down, part closeups, gallery thumbnails);
   - `color.py` OKLab/OKLCh conversions + gamut mapping; `importer.py` PNG -> sprite (scale detection, snapping);
   - `voxel.py` voxel model + renderer (grid ray traversal, smoothed/exact normals, wrap light, soft shadows);
   - `model.py` `.model.yaml` parsing (materials, primitives, poses, `rig:`) -> Asset (+ `MeshSource`), with a render cache in `.pagan-cache/`;
@@ -50,7 +51,8 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - `src/pagan/skill/` — the Claude skill (SKILL.md workflow + reference.md notation); `pagan skill install` copies it.
   `.claude/skills/pagan/` is this repo's installed copy: after editing the skill run `pagan skill install` (a test checks they match).
 - `examples/demo/` — an example PAGAN project (palettes: ember, tide, arcade); tests keep it valid
-- `examples/godot/` — Godot 4.7 project receiving the demo's build output; `scenes/art_test.tscn` shows everything
+- `examples/godot/` — Godot 4.7 project receiving the demo's build output; `scenes/art_test.tscn` shows everything 2D,
+  `scenes/mesh_test.tscn` the meshes (turntables, moving sun; `tests/check_mesh_scene.gd` in CI)
 - `.github/workflows/` — CI
 
 ## Conventions
@@ -166,4 +168,9 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   `<name>.tscn` = hand-written inherited scene of the glb with surface_material_override per surface (verified in 4.7.2).
 - 2026-10-20: Khronos glTF validator 2.0.0-dev.3.10 on the demo ship, sailor and a 400x40x120 wall: 0 errors, 0 warnings
   (infos: NPOT ramp textures, URI in GLB, extensions it can't fully validate).
+- 2026-10-20: Tileset `export_textures`: tiles / tile groups as their own PNGs + Godot StandardMaterial3D (triplanar
+  world scale = texture pixels x [mesh] voxel_size, the meshes' texel density). Terrain heightmaps investigated, not
+  built (MESH_PLAN M7 findings). Previews: `--orbit`/`--closeup` use PAGAN's renderer (any elevation, incl. below);
+  `--engine` renders the built .tscn through Godot in a SubViewport (needs a display; orthographic camera).
+- 2026-10-20: Release v0.8.0 prepared (MESH_PLAN M1-M8); tag awaits the owner (QUESTIONS.md 11).
 

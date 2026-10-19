@@ -35,6 +35,21 @@ func _process(_delta: float) -> bool:
 		if body.get_surface_override_material(0) == null:
 			printerr("CHECK_FAIL ", model.name, " has no PAGAN material")
 			problems += 1
+	# What README.md tells games to do: face a target, read part metadata, knock a part off.
+	for model in _scene.models:
+		model.look_at(model.global_position + Vector3(1, 0, 0), Vector3.UP, true)
+		var mesh: Dictionary = manifest["assets"][String(model.name)]["mesh"]
+		for part in mesh["parts"]:
+			var info: Dictionary = mesh["parts"][part]
+			var node: Node3D = model.get_node(NodePath(info["node"]))
+			if info["meta"].get("detachable", false) and node.get_meta("extras").get("detachable", false):
+				var before := node.global_position
+				node.reparent(_scene)
+				if node.global_position.distance_to(before) > 0.001 or node.get_parent() != _scene:
+					printerr("CHECK_FAIL ", model.name, " part ", part, " moved when detached")
+					problems += 1
+				else:
+					print("detached ", model.name, "/", part)
 	if _scene.models.size() != expected or expected == 0:
 		printerr("CHECK_FAIL showed ", _scene.models.size(), " meshes, manifest has ", expected)
 		problems += 1

@@ -4,7 +4,7 @@ All notable changes to PAGAN are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Game projects should pin a release tag
-(e.g. `pip install "git+ssh://git@github.com/lukasgolino/pagan.git@v0.7.0"`).
+(e.g. `pip install "git+ssh://git@github.com/lukasgolino/pagan.git@v0.8.0"`).
 
 A new version (and tag) is cut for **any** change to:
 - the notation (palette, sprite, tileset or model files),
@@ -19,8 +19,11 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
-From 3D games (3D_Bugsandfeaturerequests.md D1-D4, MESH_PLAN.md). Opt-in: without "mesh" in `export`, every output is
-byte-identical to 0.7.0.
+## [0.8.0] - 2026-10-20
+
+From 3D games (3D_Bugsandfeaturerequests.md D1-D4, MESH_PLAN.md). Opt-in: without "mesh" in `export` and
+`export_textures`, every sprite, tileset and Godot resource is byte-identical to 0.7.0 (the manifest's
+`generator` changes, as with every release).
 
 ### Added
 
@@ -40,6 +43,18 @@ byte-identical to 0.7.0.
   nodes, metadata, visibility, animations and materials against the manifest.
 - Lint: E014 (rig / mesh problems), and with mesh export W009 (model overrides voxel_size), W010 (part in several
   pieces), W011 (rig pivot outside its part); W012 (mesh-only model without mesh export).
+- `pagan preview <model> --orbit` (orbit.png: 8 headings x elevations -30, 0, 30, 60, 90), `--closeup PART`
+  (closeup_<PART>.png: one part filling the view, in place and alone), `--engine` (engine.png: the built .tscn
+  rendered by Godot; needs a display), `--all-previews`; JSON keys `orbit`, `closeup`, `engine`. MCP
+  `preview(which="orbit" | "closeup" | "engine", part=...)`. Mesh-only models preview as orbit sheets and
+  appear in the gallery.
+- Tilesets: `export_textures` (`true`, or `tiles`, `groups` of tiles laid out as one texture, `triplanar`):
+  `textures/<tileset>.<name>.png` per tile/group (+ per variant), and with "godot" a StandardMaterial3D `.tres`
+  each (nearest, repeat, optional world triplanar at the meshes' texel density); manifest `textures`; the
+  preview tiles each group 2x2.
+- `pagan init`'s pagan.toml has a commented `[mesh]` section; the skill has a "3D games" section.
+- Demo: the ship and sailor export as meshes (the sailor has a `rig`: head hit zone, detachable hat), the
+  meadow exports textures, and `examples/godot/scenes/mesh_test.tscn` shows them under a moving sun (CI runs it).
 
 ### Changed
 
@@ -298,7 +313,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/lukasgolino/pagan/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lukasgolino/pagan/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/lukasgolino/pagan/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/lukasgolino/pagan/compare/v0.5.0...v0.6.0

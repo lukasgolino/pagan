@@ -80,6 +80,8 @@ Ask once, in ONE compact message, each question with a recommended default so th
    Does the game rotate or scale sprites freely? (then: supersample, below)
 6. **Look rules** (pixel art) - dark 1px outline (default) or none; light from the top-left (default).
 7. **Engine** - Godot 4 (default; give the path to the Godot project) or plain PNGs.
+8. **2D or 3D game?** - a 2D game (incl. top-down 3/4) uses sprites (default). A game with a free 3D camera
+   (it flies, goes below things, gets close) needs meshes: see section 3b and settle `voxel_size` now.
 
 Recipes per rendering style:
 - **Pixel art** - the rest of this skill's defaults: outline, light from the top-left, ramps dark -> light,
@@ -210,6 +212,46 @@ in `pagan gallery`, then delete the losers and keep the winner under the real na
   tint): `variant_axes`, not one variant per combination.
 - **Out of palette keys** (62 ASCII letters/digits used): keep going with Unicode letters (à, é, ß, α, Ω...);
   see reference.md. Don't alias existing keys or copy the palette.
+
+## 3b. 3D games (meshes)
+
+When the game's camera moves freely in 3D, pre-rendered headings can't serve it: models must also build as
+meshes (`.glb`). Same model files, no edits; sprites still build too unless a model is mesh-only
+(`directions: 0`). Notation and output: reference.md "Meshes".
+
+**Setup** (once, with the owner):
+- `pagan config set export png,godot,mesh` (drop godot if the engine isn't Godot).
+- **Pick `voxel_size` with the owner** (`pagan config set mesh.voxel_size <metres>`); it's the game's texel
+  density, the same for every model. Work it out from the **closest the camera gets** and the render
+  resolution: on-screen pixels per voxel ~ `screen_height_px * voxel_size / (2 * distance * tan(fov / 2))`.
+  At the closest distance a voxel should cover a few pixels (chunky, readable), and anything gameplay hits
+  at close range needs real voxels: an eye that is a hit zone is at least 2x2 voxels, a hand 2-3 thick.
+  Example: 270 px tall, 70 degrees, closest 0.5 m, 0.0625 m voxels -> ~24 px per voxel up close, ~1 px at
+  12 m. Default 0.0625 (16 voxels per metre: a 1.8 m soldier is ~29 voxels tall). Huge, distant structures
+  may override `voxel_size` per model (W009 reminds you they'll look coarser), or be split into modules.
+- `[mesh] shading`: `ramp` (default: palette-locked lighting from the game's sun, Godot shader), `baked`
+  (fixed-side props, no shader), `flat` (the game shades). Godot scenes: Linear tonemapper, a
+  DirectionalLight3D (the sun) with shadows.
+
+**Making a 3D asset** - the loop from section 2, plus:
+- **Rig for gameplay:** give an `id` to everything that moves, detaches or is hit (head, helmet, eyes,
+  shield, a trebuchet arm). In `rig:` set `parent` (children follow: helmet -> head -> torso), `pivot` at the
+  joint or hinge (shoulder, axle), `meta` for what game code reads (`hitzone: eye`, `detachable: true`,
+  `armour: 2`), `collision: box | convex` where the game needs a shape. The manifest gives each part's node
+  path, pivot and AABB (metres) for hitboxes. Only names and meanings the owner agreed; write them in BRIEF.md.
+- **Animations:** as poses; `interpolation: linear` for smooth mechanical motion (an arm swinging);
+  keep the default step for pixel-art timing. Show/hide parts per pose for props that appear.
+- **Review in 3D, not just the headings:** `pagan preview <model> --orbit` (undersides! a flying camera sees
+  them) and `--closeup <part>` for anything seen up close (faces, hit zones); `--engine` shows the real
+  shader in Godot when there's a display. Look at all of them before reporting.
+- **Triangle budget:** read `triangles` in `pagan build --json`'s manifest. Big flat areas of one material
+  merge into few triangles; noise (scattered single voxels, dithering, many materials) multiplies them.
+  Rough budgets unless the owner says otherwise: a prop < 2k, a character < 5k, a big structure < 30k.
+- **Models or textures?** Things with a silhouette and depth (characters, siege engines, towers) are models.
+  Big repeating flat surfaces (ground, wall faces, roofs) are tile textures: a tileset with
+  `export_textures` (seamless tiles, `groups` to break up repetition, `triplanar: true` in Godot).
+- **Report back:** `godot_scene` (or `glb`), the part node paths and `meta` keys, animation names, the
+  triangle count, `voxel_size`, and the preview paths.
 
 ## 4. Changing the look over time
 

@@ -14,7 +14,7 @@ output_dir = "build"
 preview_dir = "previews"
 
 # What `pagan build` produces: PNG sheets + manifest.json always ("png"); add "godot" (SpriteFrames/TileSet .tres),
-# "normals" (normal-map sheets for 3D models, for engine lighting).
+# "normals" (normal-map sheets for 3D models, for engine lighting), "mesh" (3D models as .glb meshes, for 3D games).
 # Every setting here can also be viewed/changed with `pagan config show` / `pagan config set <key> <value>`.
 export = ["png"]
 
@@ -44,6 +44,13 @@ shadows = true                   # parts cast shadows on each other
 shadow_strength = 0.65           # how dark cast shadows are (0-1)
 wrap = 0.3                       # how far light wraps around curves (0-1, higher = softer)
 baked = true                     # false: flat colors for engines with their own lighting (+ export "normals")
+
+# Only with export "mesh" (3D games with a free camera). voxel_size is the game's texel density: pick it from
+# the closest the camera gets (see the PAGAN skill, "3D games"); every model shares it.
+[mesh]
+voxel_size = 0.0625              # metres per voxel (0.0625 = 16 voxels per metre)
+shading = "ramp"                 # ramp: palette-locked engine lighting (shader); baked: light baked in; flat: engine shades
+collision_suffixes = false       # name collision parts with Godot's -convcol / -colonly suffixes
 
 # Only with export "godot".
 [godot]

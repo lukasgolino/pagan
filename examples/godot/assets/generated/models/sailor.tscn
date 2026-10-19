@@ -8,6 +8,12 @@
 [node name="body" parent="."]
 surface_material_override/0 = ExtResource("2_material")
 
+[node name="head" parent="body"]
+surface_material_override/0 = ExtResource("2_material")
+
+[node name="hat" parent="body/head"]
+surface_material_override/0 = ExtResource("2_material")
+
 [node name="left_arm" parent="body"]
 surface_material_override/0 = ExtResource("2_material")
 

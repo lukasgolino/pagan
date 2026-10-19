@@ -4,6 +4,34 @@ Brief for the agent adding mesh export to PAGAN. Read [CLAUDE.md](CLAUDE.md) (co
 decisions log) and [PLAN.md](PLAN.md) §Milestone 4b first. Bug reports and feature requests from 3D games
 arrive in [3D_Bugsandfeaturerequests.md](3D_Bugsandfeaturerequests.md). Triage them there and answer each one.
 
+## Status (2026-10-20): M1–M8 done, release v0.8.0 prepared (tag awaits the owner)
+
+| | Milestone | Notes / deviations from the brief (all in CLAUDE.md's decisions log) |
+|---|---|---|
+| ☑ | M1 Static mesh export | glTF = (y, z, x) · voxel_size: the brief's (−y, z, x) mirrors the model. T-junctions are removed (edge vertices inserted), proven watertight by test. The ramp PNG sits next to the .glb (uri), not inside: Godot extracts embedded images into the project. Khronos validator: 0 errors/warnings. |
+| ☑ | M2 Shading | Ramp texture **per model** (+ per variant), not per palette: variants are per asset. Width = lcm of ramp lengths, so u = brightness reproduces the sprite renderer's step exactly. The shader locks every sun; omni/spot add unlocked. |
+| ☑ | M3 Parts, hierarchy, metadata | Hidden parts use KHR_node_visibility (scale 0 makes Godot's importer error). Rig parents also apply to sprite poses. Godot `-col`/`-convcol`/`-colonly` work; `-colonly` on an empty node doesn't, so box colliders are a box-mesh child. |
+| ☑ | M4 Animations | Visibility per pose via KHR_animation_pointer; looping animations are `<name>-loop` in the glTF (Godot loops them and strips the suffix). |
+| ☑ | M5 Godot | Shader as a `Shader` .tres (a .gdshader gets a random `.uid` sidecar). Hand-written inherited `.tscn` per model is stable across re-imports. `mesh_test.tscn` in CI. |
+| ☑ | M6 Previews | `--orbit`, `--closeup`, `--engine` (Godot with a display), gallery. |
+| ☑ | M7 World surfaces | `export_textures` on tilesets. Terrain: findings below. |
+| ☑ | M8 Skill, docs, release | Skill "3D games" section, reference "Meshes", README, CHANGELOG 0.8.0. |
+
+**M7 terrain findings (investigated, not built):**
+- A heightmap terrain is just columns of voxels: a `heightmap:` part (a grid of height characters 0-9a-z plus
+  a legend of materials per height band) would reuse everything (greedy meshing merges flat terraces, the
+  ramp shader shades slopes, `export_textures` could texture tops). Fine for courtyards, hills and moats up
+  to ~128×128 voxels (8×8 m at 16 voxels/m).
+- World-scale terrain doesn't fit the voxel model: 256 m at 16 voxels/m is 4096² columns. It needs a numpy
+  path that skips the per-voxel dicts, chunked meshes (one node per 32×32 m chunk for culling) and probably
+  LOD. Collision should be a Godot `HeightMapShape3D` from the same grid (cheap), not mesh collision.
+- Terraced voxel steps match the style; smooth slopes would need heightfield triangles (still palette-locked
+  with the ramp shader, but no longer voxels).
+- Authoring: a text grid is readable up to ~64×64; bigger terrain wants a PNG heightmap (`pagan import`-style)
+  or a generator script on `pagan.api`.
+- Recommendation: build the small `heightmap:` part when a game asks for it; for big worlds let the engine's
+  terrain (e.g. Terrain3D) use PAGAN-exported heightmap PNGs + `export_textures`. Question for the owner in QUESTIONS.md.
+
 ## Why
 
 Today a `.model.yaml` becomes 2D sprites: 1–32 headings from **one** camera elevation. That works for
@@ -200,7 +228,7 @@ Big flat things (ground, wall faces, roofs) can be voxel models, but repeating t
 
 ## Open questions for the owner (propose defaults, don't block)
 
-1. Mesh-only models: `directions: 0` (recommended) or a `mesh_only` flag.
+1. Mesh-only models: `directions: 0` (recommended) or a `mesh_only` flag. **Built: `directions: 0`** (the default).
 
 Decided (owner, 2026-10-19): `voxel_size` is a per-project setting chosen per game; the skill covers how
 to choose it. Shading defaults to the palette-locked ramp shader.

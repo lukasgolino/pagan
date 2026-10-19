@@ -13,7 +13,8 @@ frames:
 ```
 
 > **Status:** early development, but the full pipeline works: palettes, 2D sprites and tilesets, 3D voxel
-> models rendered from 8 headings, previews, lint, import, and builds into Godot 4. See [PLAN.md](PLAN.md).
+> models rendered from 8 headings or exported as real meshes (glTF) for 3D games, previews, lint, import, and
+> builds into Godot 4. See [PLAN.md](PLAN.md) and [MESH_PLAN.md](MESH_PLAN.md).
 
 ## Install (development)
 
@@ -66,6 +67,30 @@ for any engine. With `export = ["png", "godot"]` it also writes Godot 4 resource
 - **Tilesets:** `tiles/<name>.tres` is a TileSet with every tile in atlas source 0; the manifest's `tiles`
   gives each tile name's atlas coordinates. Terrains, collision and other tile data are set up in Godot.
 
+### 3D games: meshes
+
+For a free 3D camera, add `"mesh"` to `export`: every 3D model also builds `models/<name>.glb` (binary glTF:
+one node per part, animations, part metadata) plus a palette ramp texture, and with `"godot"` a
+`models/<name>.tscn` with PAGAN's palette-locked ramp shader applied. Pick the project's texel density with
+`pagan config set mesh.voxel_size 0.0625` (metres per voxel). Models face +Z, +Y is up, the model's `origin`
+is the mesh origin; `rig:` in a model sets part pivots, parents and metadata (hit zones, detachable parts).
+
+```gdscript
+var soldier: Node3D = load("res://assets/generated/models/soldier.tscn").instantiate()  # manifest: mesh.godot_scene
+add_child(soldier)
+soldier.look_at(target, Vector3.UP, true)                  # true: the model's front (+Z) faces the target
+soldier.get_node("AnimationPlayer").play("walk")           # looping animations loop
+var helmet: Node3D = soldier.get_node("body/torso/head/helmet")   # manifest: mesh.parts.helmet.node
+if helmet.get_meta("extras").get("detachable", false):    # rig meta -> node metadata "extras"
+    helmet.reparent(get_tree().current_scene)              # knock it off: keeps its place in the world
+```
+
+Light the scene with a DirectionalLight3D (shadows on) and use the Linear tonemapper: the ramp shader then
+keeps every lit pixel a palette colour. Big repeating surfaces (ground, walls) are tileset textures:
+`export_textures` writes repeatable PNGs and triplanar Godot materials. Review models with
+`pagan preview <model> --orbit` (all headings, from below too), `--closeup <part>` and `--engine`.
+`examples/godot/scenes/mesh_test.tscn` shows the demo meshes on turntables under a moving sun.
+
 ## Using PAGAN with Claude
 
 PAGAN ships a Claude skill that teaches an agent the whole workflow: setting up a game's art folder,
@@ -84,7 +109,7 @@ Desktop, Claude Code, Cursor, your own agent) can make, lint, preview and build 
 return the same JSON as the CLI's `--json`, and previews come back as images the model can look at.
 
 ```sh
-pip install "pagan[mcp] @ git+https://github.com/lukasgolino/pagan@v0.7.0"
+pip install "pagan[mcp] @ git+https://github.com/lukasgolino/pagan@v0.8.0"
 claude mcp add pagan -- pagan mcp --project ./art          # or any client: command `pagan mcp --project <dir>`
 ```
 
