@@ -174,3 +174,9 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   `--engine` renders the built .tscn through Godot in a SubViewport (needs a display; orthographic camera).
 - 2026-10-20: Release v0.8.0 tagged and pushed (owner approved; all mesh defaults in QUESTIONS.md 11-18 accepted).
 
+- 2026-10-20: D5: Godot's Compatibility renderer works in sRGB space (source_color textures arrive undecoded; DIFFUSE_LIGHT
+  is still encoded at the end), so the ramp shader decodes under `#if CURRENT_RENDERER == RENDERER_COMPATIBILITY`.
+  Forward+/Compatibility exact; Mobile within 4 levels (10-bit light buffer). CI renders all three under xvfb + Mesa.
+- 2026-10-20: D6/D7: `remove` drops inherited rig entries of removed parts (children re-hang from the nearest survivor);
+  W013 = a part id left with no voxels; `shell: true | N` on box/cylinder/ellipsoid (numpy face-erosion over the
+  bounding box, which is capped at 64M cells). D9: manifest root `parent` is "" (not null).

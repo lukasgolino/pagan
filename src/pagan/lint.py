@@ -25,6 +25,7 @@ WARNING_RULES = {
     "W010": "a part's voxels are separate pieces (mesh export)",
     "W011": "rig pivot outside its part (mesh export)",
     "W012": "mesh-only model, but meshes aren't exported",
+    "W013": "a model part's id has no voxels left (later parts cover it)",
 }
 
 

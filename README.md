@@ -86,7 +86,8 @@ if helmet.get_meta("extras").get("detachable", false):    # rig meta -> node met
 ```
 
 Light the scene with a DirectionalLight3D (shadows on) and use the Linear tonemapper: the ramp shader then
-keeps every lit pixel a palette colour. Big repeating surfaces (ground, walls) are tileset textures:
+keeps every lit pixel a palette colour (Forward+ and Compatibility renderers; Mobile can be a few levels off in
+dark colours). Big repeating surfaces (ground, walls) are tileset textures:
 `export_textures` writes repeatable PNGs and triplanar Godot materials. Review models with
 `pagan preview <model> --orbit` (all headings, from below too), `--closeup <part>` and `--engine`.
 `examples/godot/scenes/mesh_test.tscn` shows the demo meshes on turntables under a moving sun.
@@ -109,7 +110,7 @@ Desktop, Claude Code, Cursor, your own agent) can make, lint, preview and build 
 return the same JSON as the CLI's `--json`, and previews come back as images the model can look at.
 
 ```sh
-pip install "pagan[mcp] @ git+https://github.com/lukasgolino/pagan@v0.8.0"
+pip install "pagan[mcp] @ git+https://github.com/lukasgolino/pagan@v0.9.0"
 claude mcp add pagan -- pagan mcp --project ./art          # or any client: command `pagan mcp --project <dir>`
 ```
 

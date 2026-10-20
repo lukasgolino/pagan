@@ -329,11 +329,13 @@ def verify_with_godot(godot: str, godot_root: Path, manifest_res: str, timeout: 
 
 
 def render_views(
-    godot: str, godot_root: Path, scene_res: str, radius: float, centre_y: float, views: list[tuple[float, float]], size: int = 128, timeout: int = 300
+    godot: str, godot_root: Path, scene_res: str, radius: float, centre_y: float, views: list[tuple[float, float]],
+    size: int = 128, timeout: int = 300, rendering_method: str | None = None,
 ) -> tuple[list[Path], str]:
     """Render a mesh scene through Godot's real renderer (ramp shader, shadows) from each (yaw, elevation) in
-    degrees, with an orthographic camera fitted to `radius` metres. Needs a display. Returns (PNGs, output); the
-    PNGs live in a temp folder until the next call, so copy or load them before calling again."""
+    degrees, with an orthographic camera fitted to `radius` metres, by the project's renderer or `rendering_method`
+    (forward_plus, mobile, gl_compatibility). Needs a display. Returns (PNGs, output); the PNGs live in a temp
+    folder until the next call, so copy or load them before calling again."""
     global _VIEWS_DIR
     script = files("pagan").joinpath("templates", "godot_views.gd").read_text(encoding="utf-8")
     if _VIEWS_DIR is not None:
@@ -345,8 +347,9 @@ def render_views(
     pairs = [f"{yaw:g}:{elevation:g}" for yaw, elevation in views]
     try:
         subprocess.run([godot, "--headless", "--path", str(godot_root), "--import"], capture_output=True, text=True, timeout=timeout)
+        method = ["--rendering-method", rendering_method] if rendering_method else []
         run = subprocess.run(
-            [godot, "--path", str(godot_root), "-s", str(script_path), "--", scene_res, str(scratch), str(size), f"{radius:g}", f"{centre_y:g}", *pairs],
+            [godot, *method, "--path", str(godot_root), "-s", str(script_path), "--", scene_res, str(scratch), str(size), f"{radius:g}", f"{centre_y:g}", *pairs],
             capture_output=True, text=True, timeout=timeout,
         )  # fmt: skip
     except (OSError, subprocess.TimeoutExpired) as exc:

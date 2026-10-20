@@ -431,6 +431,8 @@ def test_build_writes_mesh_files_and_manifest(mproject: Project) -> None:
     assert thing["mesh_only"] is True and "sheet" not in thing
     assert thing["mesh"]["glb"] == "models/thing.glb" and (out / "models" / "thing.glb").is_file()
     assert thing["mesh"]["parts"]["helmet"]["collision"] == "box"
+    parents = {part["parent"] for part in thing["mesh"]["parts"].values()}
+    assert thing["mesh"]["parts"]["body"]["parent"] == "" and all(isinstance(p, str) for p in parents)  # D9: no nulls
     assert crate["sheet"] == "sprites/crate.png" and crate["mesh"]["variants"]["green"] == {"ramp": "models/crate.green.ramp.png"}
     assert {"models/crate.glb", "models/crate.ramp.png", "models/crate.green.ramp.png", "models/thing.glb"} <= set(manifest["files"])
     first = {p: p.read_bytes() for p in out.rglob("*") if p.is_file()}

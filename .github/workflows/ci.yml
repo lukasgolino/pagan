@@ -64,5 +64,7 @@ jobs:
           pagan build --verify-godot
           git status --porcelain -- ../godot/assets/generated
           test -z "$(git status --porcelain -- ../godot/assets/generated)" || (echo "Generated output differs from the commit: run pagan build in examples/demo and commit" && git diff --stat && exit 1)
+      - name: Virtual display and software GPU (rendering tests: Forward+, Mobile, Compatibility)
+        run: sudo apt-get update && sudo apt-get install -y xvfb mesa-vulkan-drivers libgl1-mesa-dri
       - name: Godot end-to-end tests
-        run: pytest tests/test_godot.py -v
+        run: xvfb-run -a pytest tests/test_godot.py tests/test_views.py -v

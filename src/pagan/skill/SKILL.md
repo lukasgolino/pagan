@@ -239,6 +239,9 @@ meshes (`.glb`). Same model files, no edits; sprites still build too unless a mo
   joint or hinge (shoulder, axle), `meta` for what game code reads (`hitzone: eye`, `detachable: true`,
   `armour: 2`), `collision: box | convex` where the game needs a shape. The manifest gives each part's node
   path, pivot and AABB (metres) for hitboxes. Only names and meanings the owner agreed; write them in BRIEF.md.
+- **Covering parts and big buildings:** a part drawn over another (a bucket helm over the head) replaces its
+  voxels, and an id left with none has no node (W013). Make the cover `shell: true` (hollow) instead; hollow
+  `shell` towers and walls also stay far under the 2M-voxel cap.
 - **Animations:** as poses; `interpolation: linear` for smooth mechanical motion (an arm swinging);
   keep the default step for pixel-art timing. Show/hide parts per pose for props that appear.
 - **Review in 3D, not just the headings:** `pagan preview <model> --orbit` (undersides! a flying camera sees

@@ -69,7 +69,7 @@ func _process(_delta: float) -> bool:
 	_index += 1
 	_wait = 0
 	if _index >= _views.size():
-		print("PAGAN_VIEWS_OK ", _index)
+		print("PAGAN_VIEWS_OK ", _index, " ", RenderingServer.get_current_rendering_method())
 		quit(0)
 		return true
 	_place(_index)

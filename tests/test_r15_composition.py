@@ -123,3 +123,41 @@ def test_axes_in_the_manifest(tmp_path: Path) -> None:
         assert entry["variant_axes"]["team"]["plain"]["swap"] == {}
         assert (set(entry["variants"]) == {"green+white", "green+blue", "plain+white", "plain+blue"}) is sheets
         assert (project.output_dir / "sprites" / "flag.green+white.png").exists() is sheets
+
+
+RIGGED = """\
+name: soldier
+template: true
+size: [24, 24]
+directions: 4
+outline: none
+materials:
+  main: { ramp: red }
+  trim: { ramp: green }
+parts:
+  - box: { from: [-1, -1, 0], to: [1, 1, 3], material: main }
+    id: head
+  - box: { from: [-1, -1, 4], to: [1, 1, 5], material: trim }
+    id: helmet
+  - box: { from: [2, 0, 4], to: [2, 0, 4], material: trim }
+    id: plume
+rig:
+  head: { pivot: [0, 0, 0] }
+  helmet: { parent: head, meta: { detachable: true } }
+  plume: { parent: helmet, meta: { hitzone: hat } }
+"""
+
+
+def test_remove_drops_inherited_rig_entries(project: Project) -> None:
+    """D6: removing a part drops its inherited rig entry; inherited children hang from the nearest survivor."""
+    _models(project, soldier=RIGGED, archer="name: archer\nextends: soldier\nremove: [helmet]\n")
+    archer, findings = load_asset(project.root / "models" / "archer.model.yaml", project)
+    assert archer is not None and not [f for f in findings if f.severity == "error"], [f.format() for f in findings]
+    rig = archer.mesh.rig
+    assert "helmet" not in rig and rig["plume"].parent == "head" and dict(rig["plume"].meta) == {"hitzone": "hat"}
+
+
+def test_rig_written_for_a_removed_part_is_still_an_error(project: Project) -> None:
+    _models(project, soldier=RIGGED, archer="name: archer\nextends: soldier\nremove: [helmet]\nrig:\n  helmet: { parent: head }\n")
+    _, findings = load_asset(project.root / "models" / "archer.model.yaml", project)
+    assert any(f.rule == "E014" and "no part has id 'helmet'" in f.message for f in findings)

@@ -551,7 +551,7 @@ def export_mesh(
         aabb = _aabb(node_arrays[part_id][0], source.origin, voxel_size) if node.cells else None
         parts_info[part_id] = {
             "node": node_path(nodes, part_id, {p: p for p in nodes}),  # as engines show it (Godot strips collision suffixes)
-            "parent": node.parent,
+            "parent": node.parent or "",  # "" for the root: every field keeps one type
             "pivot": [f32(v) for v in to_gltf(tuple(node.pivot[i] - source.origin[i] for i in range(3)), voxel_size)],  # type: ignore[arg-type]
             "aabb": aabb,
             "voxels": len(node.cells),

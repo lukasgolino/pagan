@@ -29,7 +29,7 @@ func _check() -> int:
 	for name in manifest["assets"]:
 		var entry: Dictionary = manifest["assets"][name]
 		var variants: Dictionary = entry.get("variants", {})
-		var sheets: Array = [entry.get("sheet")]
+		var sheets: Array = [] if entry.get("mesh_only", false) else [entry.get("sheet")]  # mesh-only models have no sheet
 		for v in variants:
 			if variants[v].has("sheet"):
 				sheets.append(variants[v]["sheet"])

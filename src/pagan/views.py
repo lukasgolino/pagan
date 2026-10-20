@@ -78,7 +78,7 @@ def orbit_views(asset: Asset, camera_scale: float, elevations: tuple[float, ...]
     return rows
 
 
-def closeup_views(asset: Asset, part_id: str, size: int = 96) -> list[tuple[str, list[View]]]:
+def closeup_views(asset: Asset, part_id: str, size: int = 128) -> list[tuple[str, list[View]]]:
     """One part filling the view, in place (other parts may cover it, as in game) and on its own."""
     source: MeshSource = asset.mesh
     cells = sorted(part_cells(source.model).get(part_id, set()))
@@ -87,11 +87,11 @@ def closeup_views(asset: Asset, part_id: str, size: int = 96) -> list[tuple[str,
     xs, ys, zs = ([c[i] for c in cells] for i in range(3))
     centre = ((min(xs) + max(xs) + 1) / 2, (min(ys) + max(ys) + 1) / 2, (min(zs) + max(zs) + 1) / 2)
     reach = max(_reach(cells, centre), 1.0)
-    scale = max(1.0, min(16.0, (size - 12) / (2 * reach)))
+    scale = max(1.0, min(size / 6, (size - 12) / (2 * reach)))  # a tiny part: at most 6 voxels across the view
     shown = source.model.posed({}, set(source.hidden) - {part_id})  # a hidden part is shown for its closeup
     alone = _only(shown, part_id)
     rows = []
-    context = max(1.0, scale / 1.6)  # in place, the part fills ~60% of the view: its surroundings show too
+    context = max(1.0, scale * 0.85)  # in place, the part fills ~75% of the view: its surroundings show at the edges
     for elevation in CLOSEUP_ELEVATIONS:
         views = [View(name, render_view(asset, shown, centre, angle, elevation, context, size)) for name, angle in heading_angles(ORBIT_HEADINGS)]
         rows.append((f"{part_id} in place, elevation {elevation:+g}°", views))

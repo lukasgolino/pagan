@@ -6,6 +6,8 @@ code = "// PAGAN ramp shader (written by `pagan build`; don't edit, it's replace
 // picks a step of the surface's palette ramp exactly as PAGAN's sprite renderer does:
 //   brightness = ambient + (1 - ambient) * max(0, (N.L + wrap) / (1 + wrap)) * (shadowed ? 1 - shadow_strength : 1)
 // so every lit pixel is a palette colour (before fog or post effects; use the Linear tonemapper).
+// Exact in the Forward+ and Compatibility renderers; Mobile keeps light in a 10-bit buffer, so its dark
+// colours can be a few levels off.
 // The light's colour and energy don't change the sun's result. Omni and spot lights add on top, unlocked.
 // The environment's ambient light is ignored: `ambient` below is the palette-locked ambient.
 shader_type spatial;
@@ -23,7 +25,13 @@ uniform bool two_sided = false;
 uniform float other_lights : hint_range(0.0, 4.0) = 1.0;
 
 vec3 ramp_at(float brightness, float row) {
-	return texture(ramp, vec2(clamp(brightness, 0.0, 0.9999), row)).rgb;
+	vec3 colour = texture(ramp, vec2(clamp(brightness, 0.0, 0.9999), row)).rgb;
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	// The Compatibility renderer works in sRGB space: the ramp arrives undecoded, but DIFFUSE_LIGHT is still
+	// converted linear -> sRGB at the end. Decode here so the palette colour comes out unchanged.
+	colour = mix(pow((colour + 0.055) / 1.055, vec3(2.4)), colour / 12.92, lessThan(colour, vec3(0.04045)));
+#endif
+	return colour;
 }
 
 void fragment() {

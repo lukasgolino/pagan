@@ -171,6 +171,7 @@ class _Builder:
         self.pending_normals: dict[Cell, tuple[float, float, float]] = {}
         self.hidden_ids: dict[str, int | None] = {}
         self.visible_ids: dict[str, int | None] = {}
+        self.id_samples: dict[str, tuple[Cell, int | None, str]] = {}  # one cell each visible id was placed at, line, where
 
     def build(self, parts: Any, line: int | None) -> None:
         self._build(parts, line)
@@ -246,10 +247,28 @@ class _Builder:
                         overlay.cells.pop(cell, None)
             else:
                 self._put_all(cells, part_id, index, shape_normals)
+                if part_id is not None and cells:
+                    self.id_samples.setdefault(part_id, (next(iter(cells)), pline, where))
             total = len(self.model.voxels) + sum(len(o.cells) for o in self.model.overlays)
             if total > MAX_MODEL_VOXELS:
                 self.error("E013", f"the model has over {MAX_MODEL_VOXELS:,} voxels; make it smaller", pline, where)
                 return
+
+    def lost_ids(self) -> dict[str, tuple[int | None, str, str]]:
+        """Ids whose voxels later parts covered or carved completely: id -> (line, where, what happened to it)."""
+        lost: dict[str, tuple[int | None, str, str]] = {}
+        ids = self.model.part_ids()
+        for part_id, (cell, line, where) in self.id_samples.items():
+            if part_id in ids:
+                continue
+            if cell not in self.model.voxels:
+                lost[part_id] = (line, where, f"part {part_id!r} has no voxels left: carve parts removed all of it")
+                continue
+            owner = self.model.groups.get(cell)
+            by = f"{owner!r}" if owner is not None else "a part without an id"
+            index = self.model.parts.get(cell)
+            lost[part_id] = (line, where, f"part {part_id!r} has no voxels left: later parts cover all of it (e.g. {by}, parts[{index}])")
+        return lost
 
     def _put_all(self, cells: dict[Cell, str], part_id: str | None, index: int, normals: dict[Cell, Vec]) -> None:
         """VoxelModel._put for every cell, in bulk (same dict contents and order; big shapes fill fast)."""
@@ -311,19 +330,33 @@ class _Builder:
         return out
 
     def _box(self, spec: dict[str, Any], line: int | None, where: str) -> dict[Cell, str] | None:
-        if not self._check_fields(spec, ("from", "to", "material", "top", "rim"), line, where):
+        if not self._check_fields(spec, ("from", "to", "material", "top", "rim", "shell"), line, where):
             return None
         a, b = _ivec(_get(spec, "from")), _ivec(_get(spec, "to"))
         material = self._material(spec, "material", line, where)
         if a is None or b is None:
             self.error("E013", "box needs from: [x, y, z] and to: [x, y, z] (whole voxels, inclusive)", line, where)
             return None
-        if material is None:
+        shell = self._shell(spec, line, where)
+        if material is None or shell is None:
             return None
         lo = [min(a[i], b[i]) for i in range(3)]
         hi = [max(a[i], b[i]) for i in range(3)]
+        if shell:
+            inside = np.ones([hi[i] - lo[i] + 1 for i in range(3)], dtype=bool)
+            return self._with_top_and_rim(_shell_cells(inside, lo, shell), material, spec, line, where)
         cells = set(product(range(lo[0], hi[0] + 1), range(lo[1], hi[1] + 1), range(lo[2], hi[2] + 1)))
         return self._with_top_and_rim(cells, material, spec, line, where)
+
+    def _shell(self, spec: dict[str, Any], line: int | None, where: str) -> int | None:
+        """`shell`: 0 = solid, else the wall thickness in voxels (true = 1); None after reporting an error."""
+        value = _get(spec, "shell", False)
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int) and value >= 1:
+            return value
+        self.error("E013", "shell must be true (hollow, walls 1 voxel thick) or the wall thickness in voxels (2, 3, ...)", line, where)
+        return None
 
     def _hull(self, spec: dict[str, Any], line: int | None, where: str) -> dict[Cell, str] | None:
         allowed = ("from", "length", "beam", "height", "bow", "stern", "material", "top", "rim")
@@ -355,7 +388,7 @@ class _Builder:
         return self._with_top_and_rim(cells, material, spec, line, where)
 
     def _cylinder(self, spec: dict[str, Any], line: int | None, where: str) -> dict[Cell, str] | None:
-        if not self._check_fields(spec, ("base", "height", "radius", "axis", "material", "top", "rim"), line, where):
+        if not self._check_fields(spec, ("base", "height", "radius", "axis", "material", "top", "rim", "shell"), line, where):
             return None
         base = _ivec(_get(spec, "base"))
         height, radius = _get(spec, "height"), _get(spec, "radius", 0)
@@ -364,10 +397,18 @@ class _Builder:
         if base is None or not (_num(height) and height > 0) or not (_num(radius) and radius >= 0) or axis not in ("x", "y", "z"):
             self.error("E013", "cylinder needs base: [x, y, z], height > 0, radius >= 0, axis x|y|z", line, where)
             return None
-        if material is None:
+        shell = self._shell(spec, line, where)
+        if material is None or shell is None:
             return None
         height, radius = float(height), float(radius)
         r = math.floor(radius)
+        if shell:
+            _, ga, gb = np.ogrid[0 : math.ceil(height), -r : r + 1, -r : r + 1]
+            disc = np.broadcast_to(ga * ga + gb * gb <= radius * radius + 1e-9, (math.ceil(height), 2 * r + 1, 2 * r + 1))
+            order = {"z": (1, 2, 0), "x": (0, 1, 2), "y": (1, 0, 2)}[axis]  # which of (along, a, b) is x, y, z
+            inside = np.transpose(disc, order)
+            lo = [base[i] - (0 if order[i] == 0 else r) for i in range(3)]
+            return self._with_top_and_rim(_shell_cells(inside, lo, shell), material, spec, line, where)
         cells: set[Cell] = set()
         for along in range(math.ceil(height)):
             for a in range(-r, r + 1):
@@ -382,18 +423,23 @@ class _Builder:
         return self._with_top_and_rim(cells, material, spec, line, where)
 
     def _ellipsoid(self, spec: dict[str, Any], line: int | None, where: str) -> dict[Cell, str] | None:
-        if not self._check_fields(spec, ("center", "radii", "material", "top", "rim"), line, where):
+        if not self._check_fields(spec, ("center", "radii", "material", "top", "rim", "shell"), line, where):
             return None
         center, radii = _vec(_get(spec, "center")), _vec(_get(spec, "radii"))
         material = self._material(spec, "material", line, where)
         if center is None or radii is None or min(radii) <= 0:
             self.error("E013", "ellipsoid needs center: [x, y, z] and radii: [rx, ry, rz] (positive)", line, where)
             return None
-        if material is None:
+        shell = self._shell(spec, line, where)
+        if material is None or shell is None:
             return None
         cells: set[Cell] = set()
         lo = [math.floor(center[i] - radii[i]) for i in range(3)]
         hi = [math.ceil(center[i] + radii[i]) for i in range(3)]
+        if shell:
+            grid = np.ogrid[lo[0] : hi[0] + 1, lo[1] : hi[1] + 1, lo[2] : hi[2] + 1]
+            reach = ((grid[0] - center[0]) / radii[0]) ** 2 + ((grid[1] - center[1]) / radii[1]) ** 2 + ((grid[2] - center[2]) / radii[2]) ** 2
+            return self._with_top_and_rim(_shell_cells(reach <= 1 + 1e-9, lo, shell), material, spec, line, where)
         for x in range(lo[0], hi[0] + 1):
             for y in range(lo[1], hi[1] + 1):
                 for z in range(lo[2], hi[2] + 1):
@@ -604,8 +650,54 @@ def sail_cells(
     return out
 
 
+def _shell_cells(inside: np.ndarray, lo: list[int], thickness: int) -> set[Cell]:
+    """The cells of `inside` (a filled shape over its bounding box, which starts at `lo`) within `thickness` steps
+    of the outside, counting face neighbours: a closed wall, no ray gets through it."""
+    core = inside
+    for _ in range(thickness):
+        p = np.pad(core, 1)
+        core = core & p[2:, 1:-1, 1:-1] & p[:-2, 1:-1, 1:-1] & p[1:-1, 2:, 1:-1] & p[1:-1, :-2, 1:-1] & p[1:-1, 1:-1, 2:] & p[1:-1, 1:-1, :-2]
+    found = np.argwhere(inside & ~core) + np.array(lo)
+    return set(map(tuple, found.tolist()))
+
+
 def _estimated_cells(shape: str, spec: dict[str, Any]) -> float:
     """Upper bound on the voxels a shape fills, from its parameters (inf if they're absurd)."""
+    solid = _estimated_solid_cells(shape, spec)
+    shell = spec.get("shell", False)
+    if shell is False or not isinstance(shell, int) or shape not in ("box", "cylinder", "ellipsoid"):
+        return solid
+    if solid > MAX_SHELL_BOX:
+        return math.inf  # the filled bounding box a shell is cut from would be too big
+    # A shell: at most its bounding box's surface times the wall thickness.
+    dx, dy, dz = _bounding_box(shape, spec)
+    return min(solid, 2 * (dx * dy + dy * dz + dz * dx) * int(shell))
+
+
+MAX_SHELL_BOX = 64_000_000  # cells of the filled bounding box a shell is cut from
+
+
+def _bounding_box(shape: str, spec: dict[str, Any]) -> tuple[float, float, float]:
+    """Sides of a box, cylinder or ellipsoid's bounding box in voxels (1s if its parameters are broken)."""
+
+    def num(value: Any, default: float = 1.0) -> float:
+        return abs(float(value)) if _num(value) else default
+
+    if shape == "box":
+        a, b = spec.get("from"), spec.get("to")
+        if isinstance(a, list) and isinstance(b, list) and len(a) == len(b) == 3 and all(_num(v) for v in a + b):
+            return (num(a[0] - b[0]) + 1, num(a[1] - b[1]) + 1, num(a[2] - b[2]) + 1)
+    elif shape == "cylinder":
+        across = 2 * num(spec.get("radius", 0), 0) + 1
+        return (num(spec.get("height")) + 1, across, across)
+    else:
+        radii = spec.get("radii")
+        if isinstance(radii, list) and len(radii) == 3 and all(_num(v) for v in radii):
+            return (2 * num(radii[0]) + 1, 2 * num(radii[1]) + 1, 2 * num(radii[2]) + 1)
+    return (1.0, 1.0, 1.0)
+
+
+def _estimated_solid_cells(shape: str, spec: dict[str, Any]) -> float:
 
     def size(key: str, default: float = 1.0) -> float:
         value = spec.get(key, default)
@@ -674,7 +766,8 @@ def _angle(value: Any) -> bool:
 
 
 def _parse_poses(
-    raw: Any, line: int | None, ids: set[str], error: ErrorFn, hidden_by_default: set[str] | None = None
+    raw: Any, line: int | None, ids: set[str], error: ErrorFn, hidden_by_default: set[str] | None = None,
+    lost: dict[str, str] | None = None,
 ) -> dict[str, PoseAnimation]:
     """animations: { name: { fps, loop, poses: [ { roll, pitch, part_id: { offset, roll, pitch, yaw, about },
     hide: [ids], show: [ids] } ] } }
@@ -737,7 +830,8 @@ def _parse_poses(
                         tilt[part_id] = float(change)
                     continue
                 if part_id not in ids:
-                    error("E013", f"unknown part id {part_id!r} (ids: {known}); a pose also takes roll, pitch, hide, show", aline, f"{pwhere}.{part_id}")
+                    reason = f"{lost[part_id]}; " if lost and part_id in lost else ""
+                    error("E013", f"unknown part id {part_id!r} ({reason}ids: {known}); a pose also takes roll, pitch, hide, show", aline, f"{pwhere}.{part_id}")
                     continue
                 move = _parse_move(change, aline, f"{pwhere}.{part_id}", error)
                 if move is not None:
@@ -880,12 +974,17 @@ def _setup(data: Any, path: Path | None, project: Project, error: ErrorFn, findi
                     )
                 )
     model = VoxelModel()
+    lost: dict[str, str] = {}
     if materials:
-        _Builder(model, error, materials).build(data.get("parts"), _line(data, "parts"))
+        builder = _Builder(model, error, materials)
+        builder.build(data.get("parts"), _line(data, "parts"))
         if not model.voxels and not has_errors(findings):
             error("E013", "the model has no voxels (everything was carved away?)", _line(data, "parts"), "parts")
-    poses = _parse_poses(data.get("animations"), _line(data, "animations"), model.part_ids(), error, model.hidden_by_default)
-    rig = _parse_rig(data.get("rig"), _line(data, "rig"), model.part_ids(), error)
+        for part_id, (line, where, message) in sorted(builder.lost_ids().items()):
+            findings.append(Finding("W013", f"{message}; give it room, or make the covering part a shell (shell: 1)", path, line, where))
+            lost[part_id] = message
+    poses = _parse_poses(data.get("animations"), _line(data, "animations"), model.part_ids(), error, model.hidden_by_default, lost)
+    rig = _parse_rig(data.get("rig"), _line(data, "rig"), model.part_ids(), error, lost)
     voxel_size: float | None = None
     if "voxel_size" in data:
         if not valid_voxel_size(data["voxel_size"]):
@@ -953,7 +1052,7 @@ class RigPart:
     collision: str = "none"
 
 
-def _parse_rig(raw: Any, line: int | None, ids: set[str], error: ErrorFn) -> dict[str, RigPart]:
+def _parse_rig(raw: Any, line: int | None, ids: set[str], error: ErrorFn, lost: dict[str, str] | None = None) -> dict[str, RigPart]:
     rig: dict[str, RigPart] = {}
     if raw is None:
         return rig
@@ -965,7 +1064,8 @@ def _parse_rig(raw: Any, line: int | None, ids: set[str], error: ErrorFn) -> dic
         rline = _line(raw, part_id) or line
         where = f"rig.{part_id}"
         if part_id not in ids and part_id != ROOT_ID:
-            error("E014", f"rig: no part has id {part_id!r} (ids: {known})", rline, where)
+            reason = f" ({lost[part_id]})" if lost and part_id in lost else ""
+            error("E014", f"rig: no part has id {part_id!r}{reason} (ids: {known})", rline, where)
             continue
         spec = spec if spec is not None else {}
         if not isinstance(spec, dict):
@@ -1315,7 +1415,44 @@ def resolve_extends(
     merged["parts"] = kept + (own_parts if isinstance(own_parts, list) else [own_parts])
     if isinstance(data, LineMap) and "parts" in data.key_lines:
         merged.key_lines["parts"] = data.key_lines["parts"]
+    if remove and isinstance(merged.get("rig"), dict):
+        merged["rig"] = _drop_removed_rig(merged["rig"], data.get("rig"), merged["parts"])
     return merged, [*texts, base_text]
+
+
+def _drop_removed_rig(rig: Any, own: Any, parts: list[Any]) -> Any:
+    """Inherited rig entries of parts that `remove` dropped go with them; inherited entries whose parent was dropped
+    hang from the nearest surviving ancestor instead. Entries this file writes itself are kept as written."""
+    own_keys = set(own) if isinstance(own, dict) else set()
+    surviving = {p["id"] for p in parts if isinstance(p, dict) and isinstance(p.get("id"), str)} | {ROOT_ID}
+
+    def ancestor(part_id: Any) -> Any:
+        seen = set()
+        while part_id is not None and part_id not in surviving and part_id not in seen:
+            seen.add(part_id)
+            spec = rig.get(part_id)
+            part_id = spec.get("parent") if isinstance(spec, dict) else None
+        return part_id if part_id in surviving else None
+
+    kept = LineMap()
+    kept.line = rig.line if isinstance(rig, LineMap) else None
+    for part_id, spec in rig.items():
+        if part_id not in own_keys and part_id not in surviving:
+            continue
+        if part_id not in own_keys and isinstance(spec, dict) and spec.get("parent") is not None and spec["parent"] not in surviving:
+            moved = LineMap()
+            moved.line = spec.line if isinstance(spec, LineMap) else None
+            moved.update({k: v for k, v in spec.items() if k != "parent"})
+            if isinstance(spec, LineMap):
+                moved.key_lines.update(spec.key_lines)
+            new_parent = ancestor(spec["parent"])
+            if new_parent is not None:
+                moved["parent"] = new_parent
+            spec = moved
+        kept[part_id] = spec
+        if isinstance(rig, LineMap) and part_id in rig.key_lines:
+            kept.key_lines[part_id] = rig.key_lines[part_id]
+    return kept
 
 
 def parse_model(data: Any, path: Path | None, project: Project, source_text: str = "") -> tuple[Asset | None, list[Finding]]:

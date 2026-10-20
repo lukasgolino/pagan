@@ -19,6 +19,32 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-20
+
+From LOOSE!'s first weeks with meshes (3D_Bugsandfeaturerequests.md D5-D10). 2D output is unchanged.
+
+### Added
+
+- `shell: true` (or a wall thickness, `shell: 2`) on `box`, `cylinder` and `ellipsoid`: only the outer wall, so a
+  helmet can cover a head and a big tower stays under the 2M-voxel cap (D7).
+- W013 (any model): a part id has no voxels left because later parts cover or carve all of it; E014 (rig) and pose
+  errors about that id say why (D7).
+
+### Changed
+
+- Ramp shader: lit pixels are palette colours in the Compatibility renderer too (it works in sRGB space, so the
+  ramp was converted twice and came out pale). Forward+ and Compatibility are exact; Mobile can be a few levels off in
+  dark colours (10-bit light buffer). CI renders the demo meshes in all three renderers (D5).
+- `extends` + `remove`: a removed part's inherited `rig` entry goes with it, and inherited rig children of a removed part
+  hang from its parent; rig entries the extending file writes are still checked (D6).
+- `pagan preview --closeup`: the "in place" rows are framed on the part like its own row (surroundings cropped at the
+  edges), and views are 128 px (D8).
+- Manifest: a mesh's root part has `parent: ""` instead of `null`, so every field has one type (D9).
+
+### Fixed
+
+- `--verify-godot` failed on every mesh-only model ("texture <null>"): mesh-only models have no sheet to check (D10).
+
 ## [0.8.0] - 2026-10-20
 
 From 3D games (3D_Bugsandfeaturerequests.md D1-D4, MESH_PLAN.md). Opt-in: without "mesh" in `export` and
@@ -313,7 +339,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/lukasgolino/pagan/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/lukasgolino/pagan/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lukasgolino/pagan/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/lukasgolino/pagan/compare/v0.6.0...v0.6.1

@@ -224,6 +224,8 @@ about 2r+1 wide; `box` corners are inclusive (`from: [0,0,0], to: [0,0,0]` is on
 Pivot: from above at elevation e, the front of a round base sits about r·sin(e) pixels *below* the origin,
 so put the pivot a few pixels above the frame's bottom (E007 tells you if the outline would be clipped). Heading 0 shows the front pointing right ("e"), 90 away from the camera ("n"), 270 towards it.
 `top:` gives a shape's top layer another material; `rim:` adds a 1-voxel wall around its top edge.
+`shell: true` on a `box`, `cylinder` or `ellipsoid` keeps only its outer wall, 1 voxel thick (`shell: 2`: 2 thick):
+a helmet that covers a head without swallowing it, or a big tower that stays under the 2M-voxel cap.
 `box` is inclusive of both corners. `hull` and `cylinder` are symmetric about their centre voxel, so their
 widths are odd: `beam: 10` gives 9 voxels (use 11 for 11). `sail` `at` is where the sail's bottom edge
 meets the mast: `rig: square` (default) hangs across the hull just forward of the mast (`brace` turns it
@@ -235,9 +237,9 @@ animations `<heading>` and `<anim>_<heading>` (1 direction: `main`, `<anim>_<i>`
 
 **Shared bases.** `template: true` marks a model that's only a base: linted and previewable, never built.
 Another model starts from it with `extends: <base>`: it inherits everything except name, description,
-tags, status, style_version, lint and template; `materials`, `animations`, `variants` and `variant_axes`
-merge by name (this file wins); `parts` are the base's, minus ids listed in `remove: [ids]`, then this
-file's. E.g. one `knight_base` body, then `knight_axe` / `knight_bow` that swap the weapon part and a
+tags, status, style_version, lint and template; `materials`, `animations`, `variants`, `variant_axes` and
+`rig` merge by name (this file wins); `parts` are the base's, minus ids listed in `remove: [ids]`, then this
+file's. A removed part's inherited `rig` entry goes with it (inherited children hang from its parent). E.g. one `knight_base` body, then `knight_axe` / `knight_bow` that swap the weapon part and a
 material. Each extending model is its own asset with its own sheet.
 
 Hidden parts are overlays: they never change the normal frames, and a shown one is drawn over
@@ -271,7 +273,8 @@ For a free 3D camera (flying, below models, close up), models also build as real
   closed on its own, so a part can move or detach without leaving holes.
 - **Shading** (`[mesh] shading`): `ramp` (default) - PAGAN's Godot shader picks the ramp step per pixel from
   the sun (every DirectionalLight3D) exactly like the sprite renderer (`[light]` ambient, wrap,
-  shadow_strength), so lit pixels stay palette colours; omni/spot lights add on top; use the Linear
+  shadow_strength), so lit pixels stay palette colours (exact in Forward+ and Compatibility; Mobile's 10-bit
+  light buffer can shift dark colours a few levels); omni/spot lights add on top; use the Linear
   tonemapper; the light's colour/energy don't change the sun's result. Other glTF viewers show the middle
   step. `baked` - steps baked per voxel from the project light at heading 0 (unlit material, no shader:
   props seen from a fixed side). `flat` - middle step; the engine lights it normally.
@@ -285,7 +288,7 @@ For a free 3D camera (flying, below models, close up), models also build as real
   `interpolation: linear`; rotations are exact, not resampled). Looping ones are named `<name>-loop` in the
   glTF (Godot's importer loops them and drops the suffix, so in Godot they're just `<name>`).
 - **Manifest** `assets.<name>.mesh`: `glb`, `ramp`, `voxel_size`, `shading`, `bounds` (min/max metres, model
-  space), `triangles`, `vertices`, `root`, `parts` (per id: `node` path like `body/torso/head`, `parent`,
+  space), `triangles`, `vertices`, `root`, `parts` (per id: `node` path like `body/torso/head`, `parent` (`""` for the root),
   `pivot`, `aabb`, `voxels`, `triangles`, `meta`, `collision`, `hidden`), `animations` (`gltf_name`, `fps`,
   `loop`, `frames`, `interpolation`, `duration`), `animation_order`, `variants` (`ramp`, Godot materials),
   `godot_scene`, `godot_materials`. Mesh-only models (`directions: 0`) have `mesh_only: true` and no sheet.
@@ -456,6 +459,7 @@ jumps between frames, W006 made under an older style version, W007 too much chan
 W008 too many shades from one ramp (sprites) / in one material (models), when `max_ramp_steps` is set.
 Mesh export only (`export` has "mesh"): W009 a model overrides `[mesh] voxel_size`, W010 a part's voxels are
 separate pieces, W011 a rig pivot outside its part; W012 `directions: 0` (mesh only) without "mesh" in `export`.
+W013 (any model): a part id has no voxels left, because later parts cover (or carve) all of it.
 Turn warnings off project-wide with `[lint] disable`, or per asset/frame/animation with the file's `lint:`.
 W001 isn't checked on 3D models (a rendered orphan can't be fixed pixel by pixel).
 

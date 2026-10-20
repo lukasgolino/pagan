@@ -87,6 +87,16 @@ def test_closeup_fills_the_view_with_one_part(project: Project) -> None:
         closeup_views(tower(project), "nope")
 
 
+def test_closeup_in_place_is_framed_on_the_part(project: Project) -> None:
+    """D8: the in-place rows zoom in like the part's own row (surroundings cropped), not the whole model."""
+    rows = closeup_views(tower(project), "flag")
+    red = {(255, 0, 0, 255), (255, 128, 128, 255)}
+    for label, views in rows[1:2]:  # +15 degrees: from below the tower's top hides the flag's foot, from above it's foreshortened
+        flag = np.isin(np.asarray(views[6].image).view(np.uint32), np.array(list(red), dtype=np.uint8).view(np.uint32))
+        rows_with_flag = np.flatnonzero(flag.any(axis=1))
+        assert rows_with_flag.size and np.ptp(rows_with_flag) > views[6].image.height * 0.5, label  # the 4-voxel flag is big
+
+
 def test_preview_cli_orbit_and_closeup(project: Project) -> None:
     tower(project)
     result = cli(project.root, "preview", "tower", "--orbit", "--closeup", "flag", "--closeup", "nope")
