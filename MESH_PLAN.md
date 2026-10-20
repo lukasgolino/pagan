@@ -6,6 +6,10 @@ arrive in [3D_Bugsandfeaturerequests.md](3D_Bugsandfeaturerequests.md). Triage t
 
 ## Status (2026-10-20): M1–M8 done, released as v0.8.0 (owner accepted all defaults)
 
+**Frozen (2026-10-20, owner):** no further 3D work in PAGAN. The voxel look isn't the smooth 3D look games like
+LOOSE! want; that belongs in a separate tool. v0.9.0 shipped the LOOSE! bug fixes (D5-D10); mesh export stays
+supported as is.
+
 | | Milestone | Notes / deviations from the brief (all in CLAUDE.md's decisions log) |
 |---|---|---|
 | ☑ | M1 Static mesh export | glTF = (y, z, x) · voxel_size: the brief's (−y, z, x) mirrors the model. T-junctions are removed (edge vertices inserted), proven watertight by test. The ramp PNG sits next to the .glb (uri), not inside: Godot extracts embedded images into the project. Khronos validator: 0 errors/warnings. |

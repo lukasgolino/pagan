@@ -180,3 +180,5 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-20: D6/D7: `remove` drops inherited rig entries of removed parts (children re-hang from the nearest survivor);
   W013 = a part id left with no voxels; `shell: true | N` on box/cylinder/ellipsoid (numpy face-erosion over the
   bounding box, which is capped at 64M cells). D9: manifest root `parent` is "" (not null).
+- 2026-10-20: 3D frozen (owner): PAGAN's voxel meshes stay supported as of v0.9.0, no new 3D features. A smooth "normal
+  3D" look is out of scope for PAGAN (a separate agent-driven asset tool is being planned instead).
