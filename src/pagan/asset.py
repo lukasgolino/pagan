@@ -39,7 +39,7 @@ _COMMON_FIELDS = (
 WARNING_ID_RE = re.compile(r"^W\d{3}$")
 _SPRITE_FIELDS = (
     *_COMMON_FIELDS, "size", "pivot", "mirror", "outline", "outline_color", "shadow", "frames", "animations", "nine_slice",
-    "font",
+    "font", "points",
 )  # fmt: skip
 MAX_OUTLINE_WIDTH = 8  # per ring
 _FONT_FIELDS = ("glyphs", "cell", "baseline", "line_height", "advance", "spacing", "space")
@@ -123,6 +123,7 @@ class Asset:
     supersample: int | None = None  # authored at N x the output size; None = the project's setting
     nine_slice: dict[str, Margins] = field(default_factory=dict)  # frame -> 9-slice margins (sprites)
     font: Font | None = None  # sprites: the frames are a font's glyphs
+    points: dict[str, dict[str, tuple[int, int]]] = field(default_factory=dict)  # sprites: point -> frame -> [x, y]
     textures: Textures | None = None  # tilesets: `export_textures` (repeatable PNGs for 3D surfaces)
     # 3D models only: renders screen-space normal maps per frame on demand (H x W x 3 arrays)
     normal_maps: Callable[[], dict[str, Any]] | None = field(default=None, compare=False, repr=False)
@@ -1228,12 +1229,14 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
         check_base_variant(meta["base_variant"], variants, _line(data, "base_variant"), error)
 
     nine_slice: dict[str, Margins] = {}
+    points: dict[str, dict[str, tuple[int, int]]] = {}
     font: Font | None = None
     textures: Textures | None = None
     if kind == "tileset" and data.get("export_textures") not in (None, False):
         textures = _parse_textures(data["export_textures"], frames, animations, _line(data, "export_textures"), error)
     if kind == "sprite":
         nine_slice = _parse_nine_slice(data.get("nine_slice"), list(frames), size, _line(data, "nine_slice"), error)
+        points = _parse_points(data.get("points"), list(frames), size, _line(data, "points"), error)
         if "font" in data:
             font = _parse_font(data["font"], frames, size, _line(data, "font"), error)
 
@@ -1264,6 +1267,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             lint_max_ramps=lint.max_ramps,
             variant_axes=variant_axes,
             nine_slice=nine_slice,
+            points=points,
             font=font,
             textures=textures,
             **meta,
@@ -1416,6 +1420,57 @@ def _parse_nine_slice(raw: Any, frames: list[str], size: tuple[int, int], line: 
         found = margins(value, where, _line(raw, name) or line)
         if found is not None:
             out[name] = found
+    return out
+
+
+def _parse_points(
+    raw: Any, frames: list[str], size: tuple[int, int], line: int | None, error: ErrorFn
+) -> dict[str, dict[str, tuple[int, int]]]:
+    """`points: { muzzle: [12, 7], impact: { wob00: [30, 12], wob01: [31, 10] } }`: named attachment points (sockets)
+    in pixel-edge coordinates like `pivot`: one position for every frame, or per frame (only the frames listed)."""
+    if raw is None:
+        return {}
+    width, height = size
+    usage = "points must map a point name to [x, y] (every frame) or { frame: [x, y], ... }"
+    if not isinstance(raw, dict) or not raw:
+        error("E001", usage, line, "points")
+        return {}
+
+    def position(value: Any, where: str, ln: int | None) -> tuple[int, int] | None:
+        if not (isinstance(value, list) and len(value) == 2 and all(isinstance(v, int) and not isinstance(v, bool) for v in value)):
+            error("E008", f"{where}: a point is [x, y] in whole pixels (pixel-edge coordinates, like pivot)", ln, where)
+            return None
+        if not (0 <= value[0] <= width and 0 <= value[1] <= height):
+            error("E008", f"point {value} is outside the {width}x{height} canvas", ln, where)
+            return None
+        return (value[0], value[1])
+
+    out: dict[str, dict[str, tuple[int, int]]] = {}
+    for name, spec in raw.items():
+        pline = _line(raw, name) or line
+        where = f"points.{name}"
+        if not isinstance(name, str) or not FRAME_NAME_RE.match(name):
+            error("E001", f"point name {name!r} must be letters, digits, '_' or '-'", pline, where)
+            continue
+        if isinstance(spec, list):
+            found = position(spec, where, pline)
+            if found is not None:
+                out[name] = {frame: found for frame in frames}
+            continue
+        if not isinstance(spec, dict) or not spec:
+            error("E001", usage, pline, where)
+            continue
+        per_frame: dict[str, tuple[int, int]] = {}
+        for frame, value in spec.items():
+            fwhere = f"{where}.{frame}"
+            fline = _line(spec, frame) or pline
+            if frame not in frames:
+                error("E001", f"points.{name}: {frame!r} isn't a frame of this sprite", fline, fwhere)
+                continue
+            found = position(value, fwhere, fline)
+            if found is not None:
+                per_frame[frame] = found
+        out[name] = {frame: per_frame[frame] for frame in frames if frame in per_frame}  # sheet order
     return out
 
 

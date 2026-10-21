@@ -19,6 +19,14 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-21
+
+### Added
+
+- `points:` on sprites: named attachment points (sockets), one `[x, y]` for every frame or per frame, in the
+  manifest as `points: { name: { frame: [x, y] } }` (output pixels), so engines can attach effects, weapons and
+  hit boxes to animated sprites (#5).
+
 ## [0.12.0] - 2026-10-21
 
 ### Added
@@ -383,7 +391,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/lukasgolino/pagan/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/lukasgolino/pagan/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/lukasgolino/pagan/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/lukasgolino/pagan/compare/v0.9.1...v0.10.0

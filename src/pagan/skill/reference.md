@@ -89,6 +89,9 @@ lint:                         # optional: warnings off for this asset only (any 
   max_ramps: 9                # W003's limit for this asset (e.g. a sheet of unrelated pickups)
 nine_slice: [4, 4, 4, 4]      # optional: 9-slice margins left, top, right, bottom (px), or per frame:
                               # { frame: [4, 4, 4, 4] }; carried into the manifest (NinePatchRect patch margins)
+points:                       # optional: named attachment points (sockets) for particles, weapons, hit boxes
+  muzzle: [12, 7]             # [x, y] in pixel-edge coords like pivot: the same in every frame
+  fire: { wob00: [30, 12], wob01: [31, 10] }   # or per frame (only the frames listed; derived frames too)
 font:                         # optional: the frames are a font's glyphs (manifest metrics + <name>.fnt)
   glyphs: " !\"#ABC..."       # characters in glyph order (or a list of strings, joined)
   cell: [6, 8]                # glyph cell: frames are cut into cells row by row (default: one glyph per frame)
@@ -497,7 +500,8 @@ keys share a base colour but not a variant colour, so a shader swap would be wro
 `variant_sheets = false` that's error E006), `variant_axes` (per axis, per option: `swap`, `swap_exact`;
 apply one option's swap per axis together - with `variant_sheets = false` the combinations aren't listed
 in `variants`, the game composes them), and `normal_sheet` (when "normals" is exported: RGB = normal * 0.5 + 0.5, x right,
-y up, z towards the viewer), `animation_order` (animation names in file order: JSON keys are unordered),
+y up, z towards the viewer), `animation_order` (animation names in file order: JSON keys are unordered), `points` (sprites: point -> frame ->
+[x, y] in output pixels from the frame's top-left; minus `pivot` = offset from the node's origin),
 `nine_slice` (frame -> [left, top, right, bottom]), `mesh` (models with "mesh" exported: see Meshes),
 `textures` (tilesets with `export_textures`: per texture `png`, `size`, `metres`, `tiles`, `variants`,
 `godot_material`) and, for fonts, `font` (`glyph_order`, `glyphs`: char ->
