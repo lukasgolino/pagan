@@ -1,6 +1,6 @@
 # SPACIO_USEREPORT.MD — PAGAN use report from Space IO
 
-Reports from the agent building **Space IO** (`~/repos/space-io`), a space1.io replica in Godot 4.7.2.
+Reports from building **Space IO** (`~/repos/space-io`), a space1.io replica in Godot 4.7.2.
 Art target is **not** traditional pixel art: high-contrast neon arcade, straight top-down 2D, sprites rotated
 freely by the engine. That makes this a stress test of PAGAN outside its pixel-art comfort zone.
 
@@ -17,7 +17,7 @@ Setup: PAGAN pinned `pagan @ git+ssh://git@github.com/lukasgolino/PAGAN.git@v0.4
 ### S1 · feature · medium · No way to say "straight top-down 2D" at init; 3D camera defaults leak into 2D projects
 - **Context:** Purely 2D top-down game; no models.
 - **Actual:** `pagan init art --godot .` writes `[camera] elevation = 42` and a full `[light]` block. Nothing asks
-  or records the perspective; I had to know to `config set camera.elevation 90`. STYLE.md / BRIEF.md
+  or records the perspective; we had to know to `config set camera.elevation 90`. STYLE.md / BRIEF.md
   templates are also pitched at 3/4 pixel-art (character head ratios, walk cycles).
 - **Expected:** Perspective is a first-class project choice.
 - **Proposal:** `pagan init --perspective top-down|top-down-3/4|side|iso` (sets elevation, writes it into
@@ -27,7 +27,7 @@ Setup: PAGAN pinned `pagan @ git+ssh://git@github.com/lukasgolino/PAGAN.git@v0.4
 ### S2 · feature · high · `pagan.api.Canvas` has no polygon fill or distance-to-edge helpers
 - **Context:** Arcade / vector-style ships are polygons (arrowheads, wings, fins). Canvas offers rect, ellipse,
   circle, ring, line only.
-- **Actual:** I wrote my own even-odd point-in-polygon and point-to-segment distance in the game's generator to
+- **Actual:** We wrote our own even-odd point-in-polygon and point-to-segment distance in the game's generator to
   fill a hull and draw a 2px inner rim (`inside()`, `edge_distance()` in `art/tools/gen_art.py`). The skill
   explicitly says not to copy PAGAN's geometry into game code, but there's nothing to call.
 - **Proposal:** `Canvas.polygon(points, key)` where a callable key receives the pixel's distance to the
@@ -46,7 +46,7 @@ Setup: PAGAN pinned `pagan @ git+ssh://git@github.com/lukasgolino/PAGAN.git@v0.4
 ### S4 · feature · medium · No control over the Godot texture import settings PAGAN's output gets
 - **Context:** Downscaled/rotated sprites need `mipmaps/generate=true` (and linear filtering). Godot writes
   `<png>.import` with defaults (mipmaps off) on first import.
-- **Actual:** I patch `.import` files from a game-side script after `pagan build` (fragile; easy to forget).
+- **Actual:** We patch `.import` files from a game-side script after `pagan build` (fragile; easy to forget).
 - **Proposal:** `[godot] mipmaps = true` / `filter = "linear"` in `pagan.toml` (or per asset), and have
   the exporter write the `.import` files (or a `.tres` `CanvasTexture` / texture filter on the SpriteFrames).
   At minimum document how to set them so a rebuild doesn't lose them.
@@ -70,14 +70,14 @@ Setup: PAGAN pinned `pagan @ git+ssh://git@github.com/lukasgolino/PAGAN.git@v0.4
   `swap` tables, and `variants.png` to eyeball them all. Zero friction.
 
 ### OK2 · Preview loop
-- `pagan preview` sheet + changes row + `variants_1x.png` answered every question I had without opening an
+- `pagan preview` sheet + changes row + `variants_1x.png` answered every question we had without opening an
   image editor. `build --verify-godot` worked first time.
 
 ### S7 · doc · medium · Skill/templates steer every project toward detailed pixel art; nothing for flat/vector arcade styles
-- **Context:** Owner asked for "high contrast arcade graphics, not traditional pixel art" (space1.io: flat
+- **Context:** The brief asked for "high contrast arcade graphics, not traditional pixel art" (space1.io: flat
   neon triangles, glowing line lasers).
 - **Actual:** Following the skill (outline: auto, light from top-left, ramps dark→light, "no pillow shading",
-  cockpit/engine detail) I produced a detailed pixel-art fighter with outline and shading. Owner rejected it as
+  cockpit/engine detail) the first attempt was a detailed pixel-art fighter with outline and shading. It was rejected as
   "the wrong route"; the right answer was a flat filled triangle with a pale rim and no outline. The STYLE.md
   template has no slot for "flat / unshaded / no outline / glow done by the engine", and the skill's first-time
   setup questions (perspective, mood, sizes, outline, light) never ask "pixel art or flat vector-like?".
@@ -96,11 +96,11 @@ Setup: PAGAN pinned `pagan @ git+ssh://git@github.com/lukasgolino/PAGAN.git@v0.4
 ### S10 · feature · low · Diagonal edges at 2x show stair steps in previews
 - Related to S3. The triangle's 2x edges are visibly stepped in `pagan preview`; in-game they're smoothed by
   the 0.5x mipmapped downscale, but previews don't show what the game shows. A `--display-scale 0.5 --filter
-  linear` preview (or the S3 supersample) would let the agent judge the real look without running the game.
+  linear` preview (or the S3 supersample) would show the real look without running the game.
 
 ---
 
-## PAGAN responses to S1-S10 — 2026-10-17 (in v0.5.0, see CHANGELOG.md; tag pending owner approval)
+## PAGAN responses to S1-S10 — 2026-10-17 (in v0.5.0, see CHANGELOG.md; tag pending approval)
 
 - **S1** fixed: `pagan init --perspective top-down|top-down-3/4|side|iso` sets `camera.elevation`
   (90/42/15/30) and writes it into BRIEF.md (also a "Rendering style" line). `config show` marks
