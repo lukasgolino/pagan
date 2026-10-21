@@ -54,6 +54,7 @@ class Animation:
     fps: float
     loop: bool
     new_row: bool = False  # tile animations: start on a new atlas row (column 0)
+    durations: tuple[float, ...] | None = None  # sprites: each frame shown for duration / fps seconds; None = all 1
 
 
 @dataclass(frozen=True)
@@ -898,8 +899,8 @@ def _parse_animations(raw: Any, frames_known: set[str], line: int | None, error:
             error("E001", "an animation must be { frames: [...], fps: N, loop: true }", aline, where)
             continue
         for key in spec:
-            if key not in ("frames", "fps", "loop"):
-                error("E001", f"unknown animation field {key!r}; allowed: frames, fps, loop", aline, where)
+            if key not in ("frames", "fps", "loop", "durations"):
+                error("E001", f"unknown animation field {key!r}; allowed: frames, fps, loop, durations", aline, where)
         frame_list = spec.get("frames")
         if not isinstance(frame_list, list) or not frame_list or not all(isinstance(f, str) for f in frame_list):
             error("E001", "animation frames must be a non-empty list of frame names", aline, where)
@@ -915,8 +916,18 @@ def _parse_animations(raw: Any, frames_known: set[str], line: int | None, error:
         if not isinstance(loop, bool):
             error("E001", "loop must be true or false", aline, where)
             continue
+        durations = spec.get("durations")
+        if durations is not None:
+            if not (
+                isinstance(durations, list)
+                and len(durations) == len(frame_list)
+                and all(isinstance(d, int | float) and not isinstance(d, bool) and 0 < d <= 1000 for d in durations)
+            ):
+                error("E001", f"durations must list one number above 0 per frame ({len(frame_list)}): how many 1/fps steps each frame is shown, e.g. [1, 1, 3]", aline, where)
+                continue
+            durations = tuple(float(d) for d in durations)
         if not missing:
-            animations[name] = Animation(name=name, frames=tuple(frame_list), fps=float(fps), loop=loop)
+            animations[name] = Animation(name=name, frames=tuple(frame_list), fps=float(fps), loop=loop, durations=durations)
     return animations
 
 
@@ -1004,9 +1015,9 @@ def _expand_mirrored_animations(
             continue
         where = f"animations.{name}"
         aline = _line(raw, name) or line
-        extra = [k for k in spec if k not in ("from", "flip", "shift", "fps", "loop")]
+        extra = [k for k in spec if k not in ("from", "flip", "shift", "fps", "loop", "durations")]
         if extra:
-            error("E001", f"unknown field(s) {', '.join(map(str, extra))}; a mirrored animation takes from, flip, shift, fps, loop", aline, where)
+            error("E001", f"unknown field(s) {', '.join(map(str, extra))}; a mirrored animation takes from, flip, shift, fps, loop, durations", aline, where)
             expanded.pop(name)
             continue
         source = raw.get(spec["from"]) if isinstance(spec["from"], str) else None
@@ -1050,6 +1061,8 @@ def _expand_mirrored_animations(
             "fps": spec.get("fps", source.get("fps", DEFAULT_FPS)),
             "loop": spec.get("loop", source.get("loop", True)),
         }
+        if "durations" in spec or "durations" in source:
+            expanded[name]["durations"] = spec.get("durations", source.get("durations"))
     return expanded
 
 

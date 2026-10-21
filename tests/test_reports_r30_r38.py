@@ -1,7 +1,7 @@
 """LOOSE! title-logo reports R30-R38 (GitHub issues #1-#9): translucent palette colours (#2), wide/stacked
 outlines and drop shadows (#3), rotated/scaled derived frames (#4),
 per-frame attachment points (#5), numpy-friendly `pagan.api` (#6), faster lint of big
-sprites (#7)."""
+sprites (#7), per-frame durations (#8)."""
 
 from __future__ import annotations
 
@@ -368,3 +368,49 @@ def test_orphans_match_the_pixel_by_pixel_rule() -> None:
         ]
         assert _orphans(grid) == expected
     assert _orphans(()) == []
+
+
+# --- R37 (#8): per-frame durations ----------------------------------------------------------------
+
+HOLD = "name: hit\nsize: [2, 1]\nframes:\n  a: |\n    1.\n  b: |\n    .1\nanimations:\n{anims}"
+
+
+def test_durations_parse_and_mirror(load: LoadFn) -> None:
+    asset, findings = load(HOLD.format(anims="  hit: { frames: [a, b, a], fps: 10, durations: [1, 3, 0.5] }\n  back: { from: hit, flip: horizontal }\n"), name="hit")
+    assert asset is not None, [f.format() for f in findings]
+    assert asset.animations["hit"].durations == (1.0, 3.0, 0.5)
+    assert asset.animations["back"].durations == (1.0, 3.0, 0.5)  # copied from the source animation
+    plain, _ = load(HOLD.format(anims="  hit: [a, b]\n"), name="hit")
+    assert plain is not None and plain.animations["hit"].durations is None
+
+
+def test_durations_errors(load: LoadFn) -> None:
+    for bad in ("[1, 2]", "[1, 0, 1]", "[1, true, 1]", "3"):
+        _, findings = load(HOLD.format(anims=f"  hit: {{ frames: [a, b, a], durations: {bad} }}\n"), name="hit")
+        assert rules(findings) == {"E001"}, bad
+
+
+def test_durations_in_manifest_godot_and_gif(tmp_path: Path) -> None:
+    from pagan.exporters.godot import sprite_frames_tres
+    from pagan.preview import PreviewOptions, animation_gif
+
+    project = make_project(tmp_path, 'default_palette = "test"\noutput_dir = "out"\n')
+    (project.root / "sprites" / "hit.sprite.yaml").write_text(
+        HOLD.format(anims="  hit: { frames: [a, b], fps: 10, durations: [1, 3] }\n  idle: [a]\n") + "lint: { disable: [W001] }\n"
+    )
+    result = build(project)
+    assert not result.errors and result.manifest is not None, [f.format() for f in result.errors]
+    animations = json.loads(result.manifest.read_text())["assets"]["hit"]["animations"]
+    assert animations["hit"]["durations"] == [1.0, 3.0] and "durations" not in animations["idle"]
+    asset = load_asset(project.root / "sprites" / "hit.sprite.yaml", project)[0]
+    assert asset is not None
+    tres = sprite_frames_tres("res://hit.png", {"a": (0, 0, 2, 1), "b": (2, 0, 2, 1)}, list(asset.animations.values()))
+    assert '"duration": 3.0' in tres and '"duration": 1.0' in tres
+    gif = tmp_path / "hit.gif"
+    animation_gif(asset, "hit", PreviewOptions(scale=1), gif)
+    with Image.open(gif) as image:
+        shown = []
+        for i in range(getattr(image, "n_frames", 1)):
+            image.seek(i)
+            shown.append(image.info["duration"])
+    assert shown == [100, 300]

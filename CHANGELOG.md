@@ -19,6 +19,14 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-21
+
+### Added
+
+- Per-frame `durations` on sprite animations (`durations: [1, 1, 3]`: how many 1/fps steps each frame shows), in
+  the manifest, the Godot SpriteFrames (frame `duration`) and preview GIFs; mirrored animations copy them.
+  Animations without `durations` are unchanged (#8).
+
 ## [0.14.1] - 2026-10-21
 
 ### Changed
@@ -410,7 +418,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/lukasgolino/pagan/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/lukasgolino/pagan/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/lukasgolino/pagan/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/lukasgolino/pagan/compare/v0.12.0...v0.13.0

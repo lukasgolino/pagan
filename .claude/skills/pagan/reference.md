@@ -69,6 +69,7 @@ frames:
 animations:
   idle: { frames: [idle_0, idle_1], fps: 4, loop: true }
   blink: [idle_0, idle_1]                         # short form: fps 8, loop true
+  hit: { frames: [a, b, c], fps: 10, durations: [1, 1, 3] }   # holds: c shows 3/10 s (Godot frame duration)
   walk_right: { from: walk_left, flip: horizontal }   # mirrored animation: frames generated as walk_right_0..
 variants:                     # recolors with identical geometry, built as <name>.<variant>; swaps apply
                               # to the final pixels, so every key is remapped wherever it's used
@@ -497,7 +498,7 @@ W001 isn't checked on 3D models (a rendered orphan can't be fixed pixel by pixel
 ## Build output (any engine)
 
 `manifest.json` in `output_dir` describes everything: per asset its kind, sheet, frame rects, animations
-(frames, fps, loop), pivot, `godot_offset`, headings (models), tiles (`name -> [column, row]` for
+(frames, fps, loop, and `durations` when set), pivot, `godot_offset`, headings (models), tiles (`name -> [column, row]` for
 tilesets; an animated tile is listed by its animation name at its first frame's cell, and the tileset
 gets `animations`), variants (each with its sheet/.tres unless `variant_sheets = false`, plus `swap`:
 base colour -> variant colour as "#rrggbb" (or "#rrggbbaa" when translucent) for every colour it changes, and `swap_exact`: false when two
