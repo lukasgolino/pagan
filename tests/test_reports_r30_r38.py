@@ -1,6 +1,7 @@
 """LOOSE! title-logo reports R30-R38 (GitHub issues #1-#9): translucent palette colours (#2), wide/stacked
 outlines and drop shadows (#3), rotated/scaled derived frames (#4),
-per-frame attachment points (#5), numpy-friendly `pagan.api` (#6)."""
+per-frame attachment points (#5), numpy-friendly `pagan.api` (#6), faster lint of big
+sprites (#7)."""
 
 from __future__ import annotations
 
@@ -347,3 +348,23 @@ def test_sprite_yaml_accepts_numpy_numbers() -> None:
         pivot=[np.int64(1), np.int64(1)],
     )
     assert "pivot: [1, 1]" in text and "size: [2, 1]" in text and "fps: 4.0" in text
+
+
+# --- R36 (#7): big sprites lint faster ----------------------------------------------------------
+
+
+def test_orphans_match_the_pixel_by_pixel_rule() -> None:
+    from pagan.asset import opaque
+    from pagan.lint import _orphans
+
+    rng = np.random.default_rng(7)
+    for _ in range(20):
+        grid = tuple("".join("1" if v else "." for v in row) for row in rng.random((9, 11)) < 0.2)
+        expected = [
+            (x, y)
+            for y, row in enumerate(grid)
+            for x, c in enumerate(row)
+            if c != "." and not any(opaque(grid, x + dx, y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy)
+        ]
+        assert _orphans(grid) == expected
+    assert _orphans(()) == []

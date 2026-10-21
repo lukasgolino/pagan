@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pagan.asset import ASSET_SUFFIXES, Asset, Grid, load_asset, opaque
+from pagan.asset import ASSET_SUFFIXES, Asset, Grid, load_asset
 from pagan.findings import Finding, PaganError
 from pagan.palette import PALETTE_SUFFIX, TRANSPARENT, load_palette_file
 from pagan.project import Project
@@ -307,14 +307,19 @@ def frame_change(a: Grid, b: Grid, max_shift: int = 2) -> tuple[float, tuple[int
 
 
 def _orphans(grid: Grid) -> list[tuple[int, int]]:
-    out = []
-    for y, row in enumerate(grid):
-        for x, char in enumerate(row):
-            if char != TRANSPARENT and not any(
-                opaque(grid, x + dx, y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy
-            ):
-                out.append((x, y))
-    return out
+    """Opaque pixels without an opaque neighbour in 8 directions, as (x, y) in row-major order (numpy: big frames
+    are megapixels)."""
+    if not grid:
+        return []
+    solid = np.array([[c != TRANSPARENT for c in row] for row in grid], dtype=bool)
+    padded = np.pad(solid, 1)
+    height, width = solid.shape
+    neighbours = np.zeros_like(solid)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if dx or dy:
+                neighbours |= padded[1 + dy : 1 + dy + height, 1 + dx : 1 + dx + width]
+    return [(int(x), int(y)) for y, x in np.argwhere(solid & ~neighbours)]
 
 
 def _bbox(grid: Grid) -> tuple[int, int, int, int] | None:

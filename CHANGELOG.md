@@ -19,6 +19,13 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-21
+
+### Changed
+
+- W001 (orphan pixels) is vectorised: `pagan lint` and `pagan build` of big generated sprites are about 3x faster
+  (8 frames of 1024x1024: lint 5.3 s -> 1.6 s). Same findings (#7).
+
 ## [0.14.0] - 2026-10-21
 
 ### Added
@@ -403,7 +410,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/lukasgolino/pagan/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/lukasgolino/pagan/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/lukasgolino/pagan/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/lukasgolino/pagan/compare/v0.11.0...v0.12.0
