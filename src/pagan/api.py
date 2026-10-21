@@ -21,10 +21,11 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 from PIL import Image
 
-from pagan.asset import Asset, load_asset_or_raise
+from pagan.asset import Asset, glyph_cells, load_asset_or_raise
 from pagan.lint import _orphans
 from pagan.model import SailCell, _Builder, hull_reach, sail_cells
 from pagan.palette import TRANSPARENT, Palette
@@ -38,9 +39,12 @@ __all__ = [
     "API_VERSION",
     "Canvas",
     "SailCell",
+    "bevel",
     "compose",
     "corner_tiles",
     "directional_frames",
+    "distance_field",
+    "dither",
     "hash01",
     "hull_reach",
     "light_2d",
@@ -106,6 +110,52 @@ class Canvas:
             for x, key in enumerate(row):
                 canvas.pixels[y][x] = key
         return canvas
+
+    @classmethod
+    def from_array(cls, array: Any, keys: Sequence[str] | str | None = None) -> Canvas:
+        """A canvas from a 2D numpy array (rows = y): of palette keys ("." = transparent), or of integers that
+        index `keys` (negative = transparent), e.g. `Canvas.from_array(np.digitize(shade, bins) - 1, "rstuv")`."""
+        data = np.asarray(array)
+        if data.ndim != 2:
+            raise ValueError(f"from_array needs a 2D array (height x width), got shape {data.shape}")
+        if keys is not None:
+            if not np.issubdtype(data.dtype, np.integer):
+                raise ValueError("with keys, the array holds integer indexes into keys")
+            if data.size and data.max() >= len(keys):
+                raise ValueError(f"index {int(data.max())} is out of range for {len(keys)} keys")
+            lookup = np.array([*keys, TRANSPARENT])
+            data = lookup[np.where(data < 0, len(keys), data)]
+        canvas = cls(data.shape[1], data.shape[0])
+        canvas.pixels = [[str(k) for k in row] for row in data.tolist()]
+        return canvas
+
+    def to_array(self) -> Any:
+        """The pixels as a 2D numpy array of keys (dtype '<U1'; "." = transparent)."""
+        return np.array(self.pixels, dtype="<U1").reshape(self.height, self.width)
+
+    def mask(self) -> Any:
+        """A boolean 2D array: True where a pixel is opaque (for `distance_field` and `bevel`)."""
+        return self.to_array() != TRANSPARENT
+
+    def text(self, font: Asset, text: str, x: int, y: int, scale: int = 1, key: str | None = None) -> Canvas:
+        """Write `text` with a project font sprite (`font:`), its top-left at (x, y), each glyph pixel `scale` x
+        `scale`; advances as in the build's font metrics. `key` paints every glyph pixel one key (else the font's)."""
+        if font.font is None:
+            raise ValueError(f"{font.name!r} isn't a font sprite (it has no font: section)")
+        glyphs = dict(zip(font.font.glyphs, (grid for _, grid in glyph_cells(font.font, font.frames, font.size)), strict=False))
+        pen = x
+        for char in text:
+            grid = glyphs.get(char)
+            if grid is None:
+                raise ValueError(f"font {font.name!r} has no glyph for {char!r}")
+            for gy, row in enumerate(grid):
+                for gx, value in enumerate(row):
+                    if value != TRANSPARENT:
+                        self.rect(pen + gx * scale, y + gy * scale, pen + gx * scale + scale - 1, y + gy * scale + scale - 1, key or value)
+            drawn = max((i + 1 for row in grid for i, c in enumerate(row) if c != TRANSPARENT), default=0)
+            advance = font.font.advance if font.font.advance is not None else (drawn + font.font.spacing if drawn else font.font.space)
+            pen += advance * scale
+        return self
 
     def copy(self) -> Canvas:
         return Canvas.from_rows(self.rows())
@@ -375,6 +425,96 @@ def sphere_light(dx: float, dy: float, light: tuple[float, float, float] | None 
     return max(0.0, min(1.0, (facing + wrap) / (1 + wrap)))
 
 
+_BAYER_2 = np.array([[0, 2], [3, 1]])
+
+
+def _bayer(size: int) -> Any:
+    """The ordered-dither threshold matrix (2, 4 or 8 wide), as thresholds in 0..1."""
+    if size not in (2, 4, 8):
+        raise ValueError("matrix must be 2, 4 or 8")
+    matrix = _BAYER_2
+    while matrix.shape[0] < size:
+        matrix = np.block([[4 * matrix, 4 * matrix + 2], [4 * matrix + 3, 4 * matrix + 1]])
+    return (matrix + 0.5) / (size * size)
+
+
+def dither(keys: Sequence[str], t: Any, x: Any, y: Any, matrix: int = 4) -> Any:
+    """Ordered (Bayer) dithering between a ramp's steps: brightness t (0 = first key, 1 = last) at pixel (x, y).
+    Between two steps, the share of pixels taking the lighter one follows t, in a fixed pattern. Scalars give a
+    key; numpy arrays (t, x, y broadcast together, e.g. from `np.mgrid`) give an array of keys for `Canvas.from_array`."""
+    level = np.clip(np.asarray(t, dtype=float), 0.0, 1.0) * (len(keys) - 1)
+    base = np.floor(level)
+    threshold = _bayer(matrix)[np.asarray(y) % matrix, np.asarray(x) % matrix]
+    index = np.minimum(base + (level - base > threshold), len(keys) - 1).astype(np.int64)
+    picked = np.array(list(keys))[index]
+    return str(picked) if picked.ndim == 0 else picked
+
+
+def _edt_1d(f: list[float]) -> list[float]:
+    """Squared distance transform of one line (Felzenszwalb & Huttenlocher): min over q of (p - q)^2 + f[q]."""
+    n = len(f)
+    hull = [0] * n  # parabolas of the lower envelope
+    bounds = [0.0] * (n + 1)  # where each one starts
+    k = 0
+    bounds[0], bounds[1] = -math.inf, math.inf
+    for q in range(1, n):
+        cross = ((f[q] + q * q) - (f[hull[k]] + hull[k] * hull[k])) / (2 * q - 2 * hull[k])
+        while cross <= bounds[k]:
+            k -= 1
+            cross = ((f[q] + q * q) - (f[hull[k]] + hull[k] * hull[k])) / (2 * q - 2 * hull[k])
+        k += 1
+        hull[k] = q
+        bounds[k], bounds[k + 1] = cross, math.inf
+    out = [0.0] * n
+    k = 0
+    for p in range(n):
+        while bounds[k + 1] < p:
+            k += 1
+        out[p] = (p - hull[k]) ** 2 + f[hull[k]]
+    return out
+
+
+def _distance_to(targets: Any) -> Any:
+    """Exact Euclidean distance (pixel centre to centre) from every pixel to the nearest True pixel of `targets`."""
+    height, width = targets.shape
+    big = float((width + height) ** 2)
+    columns = np.where(targets, 0.0, big)
+    for x in range(width):  # along y, then along x: the transform is separable
+        columns[:, x] = _edt_1d(columns[:, x].tolist())
+    for y in range(height):
+        columns[y, :] = _edt_1d(columns[y, :].tolist())
+    return np.sqrt(columns)
+
+
+def distance_field(mask: Any) -> Any:
+    """Signed distance field of a boolean mask (e.g. `Canvas.mask()`): inside, the distance from a pixel centre to
+    the nearest outside pixel's centre (1 on the edge row); outside, minus the distance to the nearest inside
+    pixel. For rims, bevels, outlines and glows on big canvases, in one numpy pass instead of per pixel."""
+    inside = np.asarray(mask, dtype=bool)
+    if inside.ndim != 2:
+        raise ValueError("distance_field needs a 2D mask")
+    if not inside.any():
+        return -np.full(inside.shape, float(sum(inside.shape)))
+    if inside.all():
+        return np.full(inside.shape, float(sum(inside.shape)))
+    return np.where(inside, _distance_to(~inside), -_distance_to(inside))
+
+
+def bevel(mask: Any, width: float, light: tuple[float, float, float] | None = None) -> Any:
+    """A bevelled shape's brightness 0..1 per pixel (0 outside): the edge rises over `width` pixels to a flat
+    top, lit by `light` (x right, y down, z to the viewer; default the project-style light of `light_2d`). Feed it
+    to `ramp_pick` or `dither`."""
+    if width <= 0:
+        raise ValueError("width must be above 0")
+    inside = np.asarray(mask, dtype=bool)
+    height = np.clip(distance_field(inside), 0.0, float(width))
+    gy, gx = np.gradient(height)
+    lx, ly, lz = light or light_2d()
+    norm = np.sqrt(gx * gx + gy * gy + 1.0)
+    shade = (-gx * lx - gy * ly + lz) / norm / math.sqrt(lx * lx + ly * ly + lz * lz)
+    return np.where(inside, np.clip(shade, 0.0, 1.0), 0.0)
+
+
 # --- terrain ------------------------------------------------------------------------------------
 
 CornerPaint = Callable[[Callable[[int, int], float], int, int, tuple[int, int, int, int]], str]
@@ -470,11 +610,23 @@ def _key(name: str) -> str:
     return name if _PLAIN_NAME.match(name) and name.lower() not in _YAML_WORDS else f'"{name}"'
 
 
+def _plain(value: Any) -> Any:
+    """numpy numbers and arrays (and containers of them) as plain Python values, which YAML can write."""
+    if isinstance(value, np.generic | np.ndarray):
+        return value.tolist()
+    if isinstance(value, Mapping):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_plain(v) for v in value]
+    return value
+
+
 def _fields(fields: Mapping[str, Any]) -> list[str]:
     out = []
     for key, value in fields.items():
         if value is None:
             continue
+        value = _plain(value)
         text = yaml.safe_dump({key: value}, default_flow_style=True, sort_keys=False, allow_unicode=True, width=10**6)
         out.append(text.strip()[1:-1].strip())  # "{key: value}" -> "key: value"
     return out
@@ -496,7 +648,7 @@ def _animations(animations: Mapping[str, Mapping[str, Any]] | None) -> list[str]
         return []
     lines = ["animations:"]
     for name, spec in animations.items():
-        body = yaml.safe_dump(dict(spec), default_flow_style=True, sort_keys=False, width=10**6).strip()
+        body = yaml.safe_dump(_plain(dict(spec)), default_flow_style=True, sort_keys=False, width=10**6).strip()
         lines.append(f"  {_key(name)}: {body}")
     return lines
 
