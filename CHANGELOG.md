@@ -19,6 +19,14 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-21
+
+### Added
+
+- Derived frames can scale and rotate: `{ from: idle, scale: [1.2, 0.8], rotate: 6, about: pivot }` (nearest
+  neighbour; `about` is `pivot` (default), `center` or `[x, y]`). Order: flip, scale/rotate, shift; E010 if opaque
+  pixels would leave the canvas (#4).
+
 ## [0.11.0] - 2026-10-21
 
 ### Added
@@ -375,7 +383,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/lukasgolino/pagan/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/lukasgolino/pagan/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/lukasgolino/pagan/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/lukasgolino/pagan/compare/v0.9.0...v0.9.1

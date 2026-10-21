@@ -64,6 +64,8 @@ frames:
     ......0000......
   idle_1: { from: idle_0, shift: [0, 1] }        # derived frame: from + flip/shift
   left:   { from: idle_0, flip: horizontal }      # flip: horizontal | vertical | both
+  land:   { from: idle_0, scale: [1.2, 0.8] }     # squash/stretch about the pivot (number = both axes)
+  tip:    { from: idle_0, rotate: 6, about: [8, 16] }   # degrees, + = clockwise; about: pivot (default) | center | [x, y]
 animations:
   idle: { frames: [idle_0, idle_1], fps: 4, loop: true }
   blink: [idle_0, idle_1]                         # short form: fps 8, loop true
@@ -98,7 +100,8 @@ font:                         # optional: the frames are a font's glyphs (manife
 ```
 
 Frame order in the file = order in the sprite sheet (generated frames of mirrored animations come
-after the written ones). Leave a 1px transparent border with `outline: auto`. Findings give `row`/`col`
+after the written ones). Derived frames apply flip, then scale/rotate (nearest neighbour, about the pivot
+unless `about` says otherwise), then shift; E010 if opaque pixels would leave the canvas. Leave a 1px transparent border with `outline: auto`. Findings give `row`/`col`
 1-based, counted in the grid as written (for `mirror: horizontal`, in the authored left half).
 
 **Outlines and shadows** (sprites; PAGAN adds them to every frame, so frames stay plain shapes):

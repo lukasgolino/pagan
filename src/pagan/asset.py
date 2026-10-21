@@ -240,6 +240,47 @@ def _shift(grid: Grid, dx: int, dy: int) -> Grid | None:
     return tuple("".join(r) for r in out)
 
 
+MAX_DERIVED_SCALE = 8
+
+
+def _transform(grid: Grid, scale: tuple[float, float], rotate: float, about: tuple[float, float]) -> Grid | None:
+    """Scale then rotate (degrees, clockwise on screen) about a point in pixel-edge coordinates, nearest neighbour:
+    each output pixel takes the source pixel under its centre mapped back. None if an opaque pixel would leave the
+    canvas. Trig and the mapped coordinates are rounded so results are the same on every machine."""
+    import math
+
+    height, width = len(grid), len(grid[0]) if grid else 0
+    sx, sy = scale
+    angle = math.radians(rotate)
+    cos, sin = round(math.cos(angle), 12), round(math.sin(angle), 12)
+    ax, ay = about
+
+    def forward(x: float, y: float) -> tuple[float, float]:
+        dx, dy = (x - ax) * sx, (y - ay) * sy
+        return (ax + dx * cos - dy * sin, ay + dx * sin + dy * cos)
+
+    # Map back every pixel the whole transformed canvas covers, so an opaque pixel landing outside is caught.
+    corners = [forward(x, y) for x in (0, width) for y in (0, height)]
+    left, top = min(0, math.floor(min(c[0] for c in corners))), min(0, math.floor(min(c[1] for c in corners)))
+    right, bottom = max(width, math.ceil(max(c[0] for c in corners))), max(height, math.ceil(max(c[1] for c in corners)))
+    import numpy as np  # local import, like the wide outlines
+
+    ys, xs = np.mgrid[top:bottom, left:right]
+    dx, dy = xs + 0.5 - ax, ys + 0.5 - ay
+    ux, uy = dx * cos + dy * sin, -dx * sin + dy * cos  # rotate back
+    src_x = np.floor(np.round(ax + ux / sx, 9)).astype(np.int64)
+    src_y = np.floor(np.round(ay + uy / sy, 9)).astype(np.int64)
+    inside = (src_x >= 0) & (src_x < width) & (src_y >= 0) & (src_y < height)
+    source = np.array([list(row) for row in grid])
+    chars = np.full(xs.shape, TRANSPARENT)
+    chars[inside] = source[src_y[inside], src_x[inside]]
+    canvas = (xs >= 0) & (xs < width) & (ys >= 0) & (ys < height)
+    if (chars[~canvas] != TRANSPARENT).any():
+        return None
+    out = ["".join(row) for row in chars[-top : -top + height, -left : -left + width]]
+    return tuple(out)
+
+
 def opaque(grid: Grid, x: int, y: int) -> bool:
     return 0 <= y < len(grid) and 0 <= x < len(grid[y]) and grid[y][x] != TRANSPARENT
 
@@ -480,8 +521,11 @@ def _parse_frames(
     palette: Palette | None,
     line: int | None,
     error: ErrorFn,
+    pivot: tuple[int, int] | None = None,
 ) -> tuple[dict[str, Grid], dict[str, int | None], dict[str, str]]:
-    """Parse grid frames and derived frames. Returns (frames in source order, lines, derived_from)."""
+    """Parse grid frames and derived frames. Returns (frames in source order, lines, derived_from).
+
+    `pivot` is what `about: pivot` means for derived frames (sprites); without one it's the centre."""
     frames: dict[str, Grid] = {}
     lines: dict[str, int | None] = {}
     derived_specs: dict[str, tuple[dict[str, Any], int | None]] = {}
@@ -556,8 +600,8 @@ def _parse_frames(
 
     def _derive(name: str, spec: dict[str, Any], spec_line: int | None, where: str) -> Grid | None:
         for key in spec:
-            if key not in ("from", "flip", "shift"):
-                error("E001", f"unknown derived-frame field {key!r}; allowed: from, flip, shift", spec_line, where)
+            if key not in ("from", "flip", "scale", "rotate", "about", "shift"):
+                error("E001", f"unknown derived-frame field {key!r}; allowed: from, flip, scale, rotate, about, shift", spec_line, where)
         source = spec.get("from")
         if not isinstance(source, str):
             error("E010", "a derived frame needs `from: <frame name>`", spec_line, where)
@@ -573,6 +617,14 @@ def _parse_frames(
             error("E010", "flip must be none, horizontal, vertical or both", spec_line, where)
             return None
         grid = _flip(grid, flip)
+        if "scale" in spec or "rotate" in spec:
+            transformed = _derive_transform(spec, grid, spec_line, where)
+            if transformed is None:
+                return None
+            grid = transformed
+        elif "about" in spec:
+            error("E010", "about is the point to scale/rotate around; add scale or rotate", spec_line, where)
+            return None
         shift = spec.get("shift", [0, 0])
         if not (
             isinstance(shift, list)
@@ -588,6 +640,38 @@ def _parse_frames(
         frames[name] = shifted
         derived_from[name] = source
         return shifted
+
+    def _derive_transform(spec: dict[str, Any], grid: Grid, spec_line: int | None, where: str) -> Grid | None:
+        raw_scale = spec.get("scale", 1)
+        factors = raw_scale if isinstance(raw_scale, list) else [raw_scale, raw_scale]
+        if not (
+            len(factors) == 2
+            and all(isinstance(v, int | float) and not isinstance(v, bool) and 0 < v <= MAX_DERIVED_SCALE for v in factors)
+        ):
+            error("E010", f"scale must be a number or [x, y], each above 0 and at most {MAX_DERIVED_SCALE} (use flip to mirror)", spec_line, where)
+            return None
+        rotate = spec.get("rotate", 0)
+        if isinstance(rotate, bool) or not isinstance(rotate, int | float) or not -360 <= rotate <= 360:
+            error("E010", "rotate must be degrees, -360 to 360 (positive = clockwise)", spec_line, where)
+            return None
+        raw_about = spec.get("about", "pivot")
+        if raw_about == "pivot":
+            about = (float(pivot[0]), float(pivot[1])) if pivot is not None else (width / 2, height / 2)
+        elif raw_about in ("center", "centre"):
+            about = (width / 2, height / 2)
+        elif (
+            isinstance(raw_about, list)
+            and len(raw_about) == 2
+            and all(isinstance(v, int | float) and not isinstance(v, bool) for v in raw_about)
+        ):
+            about = (float(raw_about[0]), float(raw_about[1]))
+        else:
+            error("E010", "about must be pivot, center or [x, y] (pixel-edge coordinates, like pivot)", spec_line, where)
+            return None
+        result = _transform(grid, (float(factors[0]), float(factors[1])), float(rotate), about)
+        if result is None:
+            error("E010", f"scale/rotate about {list(about)} pushes opaque pixels off the canvas; grow the canvas or move `about`", spec_line, where)
+        return result
 
     for name in derived_specs:
         resolve(name)
@@ -1081,6 +1165,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
         palette=palette,
         line=_line(data, frames_field),
         error=error,
+        pivot=pivot if kind == "sprite" else None,
     )
 
     animations: dict[str, Animation] = {}
