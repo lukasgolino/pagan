@@ -210,6 +210,11 @@ def build(project: Project) -> BuildResult:
                 entry["mesh"] = _mesh_outputs(asset, project, out, godot_root, write_png, write_file)
         if asset.nine_slice:
             entry["nine_slice"] = {name: [m // factor for m in margins] for name, margins in asset.nine_slice.items()}
+        if asset.points:
+            entry["points"] = {
+                point: {frame: [_shrink(x, factor), _shrink(y, factor)] for frame, (x, y) in frames.items()}
+                for point, frames in asset.points.items()
+            }
         if font is not None:
             entry["font"] = font
         if normal_sheet is not None:

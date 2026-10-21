@@ -1,14 +1,17 @@
 """LOOSE! title-logo reports R30-R38 (GitHub issues #1-#9): translucent palette colours (#2), wide/stacked
-outlines and drop shadows (#3), rotated/scaled derived frames (#4)."""
+outlines and drop shadows (#3), rotated/scaled derived frames (#4),
+per-frame attachment points (#5)."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from PIL import Image
 
 from conftest import LoadFn, make_project
 from pagan.asset import load_asset
+from pagan.build import build
 from pagan.importer import import_png
 from pagan.manage import Adjustment, adjust_colors
 from pagan.palette import parse_palette
@@ -231,3 +234,42 @@ def test_derived_transform_errors(load: LoadFn) -> None:
     assert found("rotate: 10, about: middle") == {"E010"}
     assert found("about: center") == {"E010"}  # nothing to rotate/scale about
     assert found("spin: 3") == {"E001"}
+
+
+# --- R34 (#5): per-frame attachment points ---------------------------------------------------------
+
+WOBBLE = (
+    "name: sign\nsize: [4, 4]\nframes:\n  a: |\n    ....\n    .11.\n    .11.\n    ....\n"
+    "  b: {{ from: a, shift: [1, 0] }}\n{points}"
+)
+
+
+def test_points_per_frame_and_every_frame(load: LoadFn) -> None:
+    asset, findings = load(WOBBLE.format(points="points:\n  muzzle: [4, 2]\n  fire: { b: [3, 1], a: [2, 1] }\n"), name="sign")
+    assert asset is not None, [f.format() for f in findings]
+    assert asset.points == {"muzzle": {"a": (4, 2), "b": (4, 2)}, "fire": {"a": (2, 1), "b": (3, 1)}}
+    assert list(asset.points["fire"]) == ["a", "b"]  # sheet order, not file order
+
+
+def test_points_errors(load: LoadFn) -> None:
+    def found(points: str) -> set[str]:
+        return rules(load(WOBBLE.format(points=f"points:\n  {points}\n"), name="sign")[1])
+
+    assert found("p: [5, 0]") == {"E008"}
+    assert found("p: [1.5, 0]") == {"E008"}
+    assert found("p: { c: [1, 1] }") == {"E001"}
+    assert found("p: 3") == {"E001"}
+    assert found("p q: [1, 1]") == {"E001"}
+
+
+def test_points_in_the_manifest(tmp_path: Path) -> None:
+    project = make_project(tmp_path, 'default_palette = "test"\noutput_dir = "out"\n')
+    (project.root / "sprites" / "sign.sprite.yaml").write_text(WOBBLE.format(points="points:\n  fire: { a: [2, 1] }\n"))
+    (project.root / "sprites" / "big.sprite.yaml").write_text(
+        "name: big\nsize: [4, 4]\nsupersample: 2\npoints:\n  tip: [3, 2]\nframes:\n  a: |\n    ....\n    .11.\n    .11.\n    ....\n"
+    )
+    result = build(project)
+    assert not result.errors and result.manifest is not None, [f.format() for f in result.errors]
+    assets = json.loads(result.manifest.read_text())["assets"]
+    assert assets["sign"]["points"] == {"fire": {"a": [2, 1]}}
+    assert assets["big"]["points"] == {"tip": {"a": [1.5, 1]}}  # output pixels
