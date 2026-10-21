@@ -190,3 +190,6 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-21: #3 (R32): an outline ring of width w = transparent pixels within Euclidean distance w (pixel centres) of
   the shape, so w = 1 is the old 4-adjacent outline (that code path is kept, byte-identical); rings stack outwards;
   `shadow` is the outlined silhouette shifted, painted only on transparent pixels. Sprites only (3D frozen).
+- 2026-10-21: #4 (R33): derived-frame scale/rotate is inverse-mapped nearest neighbour (output pixel centre -> source
+  pixel), not RotSprite; trig rounded to 12 and mapped coordinates to 9 decimals for cross-platform stability.
+  Tilesets' `about: pivot` = centre (tiles have no pivot).

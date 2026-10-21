@@ -194,7 +194,7 @@ in `pagan gallery`, then delete the losers and keep the winner under the real na
   listing as it sinks; a part can rotate about a hinge, e.g. a falling mast). Damage and extras are
   `hidden: true` parts (overlays: they never alter the normal frames; with `carve: true` they cut holes)
   that poses `show`; 2D -> add frames (derive with `from`/`shift` where possible) and an
-  `animations` entry. Keep everything that shouldn't move on exactly the same pixels; check the changes
+  `animations` entry (squash/stretch, tipping and pulsing: `from` + `scale`/`rotate`). Keep everything that shouldn't move on exactly the same pixels; check the changes
   row and W007. Typical frame counts: idle 2-4, walk 4-6, attack 3-5.
 - **"Make an enemy / another character"**: new asset in the same style - same palette, outline, light,
   proportions; compare side by side with `pagan gallery`. Variants (`variants:` ramp_swap/key_swap/

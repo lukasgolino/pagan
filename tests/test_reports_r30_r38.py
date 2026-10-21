@@ -1,5 +1,5 @@
 """LOOSE! title-logo reports R30-R38 (GitHub issues #1-#9): translucent palette colours (#2), wide/stacked
-outlines and drop shadows (#3)."""
+outlines and drop shadows (#3), rotated/scaled derived frames (#4)."""
 
 from __future__ import annotations
 
@@ -189,3 +189,45 @@ def test_outline_and_shadow_field_errors(load: LoadFn) -> None:
     assert found('shadow: { offset: [1, 1] }\n') == {"E001"}
     assert found('shadow: { offset: [0, 0], color: "5" }\n') == {"E001"}
     assert found('shadow: { offset: [1, 1], color: "z" }\n') == {"E005"}
+
+
+# --- R33 (#4): derived frames that rotate and scale ---------------------------------------------
+
+BAR = "name: bar\nsize: [5, 5]\npivot: [{px}, {py}]\nframes:\n  a: |\n    .....\n    ..1..\n    ..1..\n    ..2..\n    .....\n"
+
+
+def test_derived_rotate_about_centre(load: LoadFn) -> None:
+    asset, findings = load(BAR.format(px=2, py=5) + "  r: { from: a, rotate: 90, about: center }\n", name="bar")
+    assert asset is not None, [f.format() for f in findings]
+    assert asset.frames["r"] == (".....", ".....", ".211.", ".....", ".....")  # clockwise: the top swings right
+    assert asset.derived_from["r"] == "a"
+    back, _ = load(BAR.format(px=2, py=5) + "  r: { from: a, rotate: 360, about: center }\n", name="bar")
+    assert back is not None and back.frames["r"] == back.frames["a"]
+
+
+def test_derived_scale_about_pivot(load: LoadFn) -> None:
+    text = BAR.format(px=2, py=4) + "  squash: { from: a, scale: [1, 0.5] }\n  tall: { from: a, scale: [1, 1.25] }\n"
+    asset, findings = load(text, name="bar")
+    assert asset is not None, [f.format() for f in findings]
+    assert asset.frames["squash"] == (".....", ".....", "..1..", "..2..", ".....")  # half height, foot stays put
+    assert asset.frames["tall"] == ("..1..", "..1..", "..1..", "..2..", ".....")
+
+
+def test_derived_transform_combines_with_flip_and_shift(load: LoadFn) -> None:
+    text = BAR.format(px=2, py=4) + "  s: { from: a, flip: vertical, scale: 1, rotate: 0, shift: [1, 0] }\n"
+    asset, findings = load(text, name="bar")
+    assert asset is not None, [f.format() for f in findings]
+    assert asset.frames["s"] == (".....", "...2.", "...1.", "...1.", ".....")
+
+
+def test_derived_transform_errors(load: LoadFn) -> None:
+    def found(spec: str) -> set[str]:
+        return rules(load(BAR.format(px=2, py=4) + f"  r: {{ from: a, {spec} }}\n", name="bar")[1])
+
+    assert found("scale: 3") == {"E010"}  # off the canvas
+    assert found("scale: 0") == {"E010"}
+    assert found("scale: [-1, 1]") == {"E010"}
+    assert found("rotate: 400") == {"E010"}
+    assert found("rotate: 10, about: middle") == {"E010"}
+    assert found("about: center") == {"E010"}  # nothing to rotate/scale about
+    assert found("spin: 3") == {"E001"}
