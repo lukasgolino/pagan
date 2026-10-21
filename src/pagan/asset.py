@@ -38,8 +38,10 @@ _COMMON_FIELDS = (
 )  # fmt: skip
 WARNING_ID_RE = re.compile(r"^W\d{3}$")
 _SPRITE_FIELDS = (
-    *_COMMON_FIELDS, "size", "pivot", "mirror", "outline", "outline_color", "frames", "animations", "nine_slice", "font",
+    *_COMMON_FIELDS, "size", "pivot", "mirror", "outline", "outline_color", "shadow", "frames", "animations", "nine_slice",
+    "font",
 )  # fmt: skip
+MAX_OUTLINE_WIDTH = 8  # per ring
 _FONT_FIELDS = ("glyphs", "cell", "baseline", "line_height", "advance", "spacing", "space")
 Margins = tuple[int, int, int, int]  # left, top, right, bottom
 _TILESET_FIELDS = (*_COMMON_FIELDS, "tile_size", "columns", "tiles", "animations", "export_textures")
@@ -103,7 +105,9 @@ class Asset:
     columns: int = 8  # tilesets: atlas layout
     mirror: bool = False
     outline: bool = False
-    outline_color: str | None = None
+    outline_color: str | None = None  # the first (innermost) outline ring's colour
+    outlines: tuple[tuple[int, str], ...] = ()  # sprites: (width, colour) rings, innermost first; () = no outline
+    shadow: tuple[int, int, str] | None = None  # sprites: drop shadow (dx, dy, colour) under the outlined pixels
     description: str | None = None
     tags: tuple[str, ...] = ()
     status: str = "draft"
@@ -255,12 +259,53 @@ def _outline(grid: Grid, color: str) -> Grid:
     return tuple("".join(r) for r in rows)
 
 
-def _edge_pixel(grid: Grid) -> tuple[int, int] | None:
-    """First opaque pixel touching the canvas edge (an outline there would be clipped)."""
+def _outline_ring(grid: Grid, color: str, width: int) -> Grid:
+    """Paint `color` on transparent pixels within `width` pixels (centre to centre, Euclidean) of an opaque one:
+    width 1 is the 4-adjacent outline, wider rings get round corners."""
+    if width == 1:
+        return _outline(grid, color)
+    import numpy as np  # local import: only wide outlines need it
+
+    height, row_width = len(grid), len(grid[0]) if grid else 0
+    solid = np.array([[c != TRANSPARENT for c in row] for row in grid], dtype=bool)
+    padded = np.pad(solid, width)
+    near = np.zeros_like(solid)
+    for dy in range(-width, width + 1):
+        for dx in range(-width, width + 1):
+            if dx * dx + dy * dy <= width * width:
+                near |= padded[width + dy : width + dy + height, width + dx : width + dx + row_width]
+    paint = near & ~solid
+    return tuple("".join(color if paint[y, x] else c for x, c in enumerate(row)) for y, row in enumerate(grid))
+
+
+def _drop_shadow(grid: Grid, dx: int, dy: int, color: str) -> Grid:
+    """The opaque pixels' silhouette moved by (dx, dy) in `color`, under them (only on transparent pixels)."""
+    height = len(grid)
+    rows = [list(row) for row in grid]
+    for y, row in enumerate(grid):
+        for x, char in enumerate(row):
+            nx, ny = x + dx, y + dy
+            if char != TRANSPARENT and 0 <= ny < height and 0 <= nx < len(row) and grid[ny][nx] == TRANSPARENT:
+                rows[ny][nx] = color
+    return tuple("".join(r) for r in rows)
+
+
+def _edge_pixel(grid: Grid, margin: int = 1) -> tuple[int, int] | None:
+    """First opaque pixel closer than `margin` to the canvas edge (an outline that wide there would be clipped)."""
     height = len(grid)
     for y, row in enumerate(grid):
         for x, char in enumerate(row):
-            if char != TRANSPARENT and (x == 0 or y == 0 or x == len(row) - 1 or y == height - 1):
+            if char != TRANSPARENT and min(x, y, len(row) - 1 - x, height - 1 - y) < margin:
+                return (x, y)
+    return None
+
+
+def _shadow_clipped(grid: Grid, dx: int, dy: int) -> tuple[int, int] | None:
+    """First opaque pixel whose shadow would land off the canvas."""
+    height = len(grid)
+    for y, row in enumerate(grid):
+        for x, char in enumerate(row):
+            if char != TRANSPARENT and not (0 <= x + dx < len(row) and 0 <= y + dy < height):
                 return (x, y)
     return None
 
@@ -975,6 +1020,8 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
     mirror = False
     outline = False
     outline_color: str | None = None
+    outlines: tuple[tuple[int, str], ...] = ()
+    shadow: tuple[int, int, str] | None = None
     pivot = (width // 2, height)
     columns = 8
     if kind == "sprite":
@@ -982,13 +1029,6 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
         if mirror_raw not in ("none", "horizontal"):
             error("E001", "mirror must be none or horizontal", _line(data, "mirror"), "mirror")
         mirror = mirror_raw == "horizontal"
-
-        outline_raw = data.get("outline", "none")
-        if outline_raw not in ("none", "auto"):
-            error("E001", "outline must be none or auto", _line(data, "outline"), "outline")
-        outline = outline_raw == "auto"
-        if not outline and project.config.lint.require_outline:
-            error("E011", "pagan.toml requires outlines: add `outline: auto`", _line(data), "outline")
 
         if palette is not None:
             raw_color = data.get("outline_color")
@@ -1000,6 +1040,14 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
                     error("E005", f"outline_color {raw_color!r} isn't a palette key", _line(data, "outline_color"), "outline_color")
                 else:
                     outline_color = raw_color
+        outlines = _parse_outlines(data.get("outline", "none"), palette, outline_color, _line(data, "outline"), error)
+        outline = bool(outlines)
+        if outlines:
+            outline_color = outlines[0][1]
+        if not outline and project.config.lint.require_outline:
+            error("E011", "pagan.toml requires outlines: add `outline: auto`", _line(data), "outline")
+        if "shadow" in data:
+            shadow = _parse_shadow(data["shadow"], palette, _line(data, "shadow"), error)
 
         if "pivot" in data:
             raw_pivot = data["pivot"]
@@ -1047,26 +1095,37 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
     lint = _parse_lint(data.get("lint"), _line(data, "lint"), lint_targets, error)
 
     frames = dict(base_frames)
-    if outline and outline_color is not None:
+    if outlines or shadow is not None:
         clipped: set[str] = set()
         authored_width = -(-width // 2) if mirror else width
+        border = sum(w for w, _ in outlines)
+
+        def clip_error(frame_name: str, pixel: tuple[int, int], message: str) -> None:
+            clipped.add(frame_name)
+            # Report each problem once: not again for frames derived from an already-reported one.
+            if derived_from.get(frame_name) in clipped:
+                return
+            x, y = pixel
+            if mirror and x >= authored_width:  # mirrored half: point at the column the author wrote
+                x = width - 1 - x
+            error("E007", message, frame_lines.get(frame_name), f"{frames_field}.{frame_name} row {y + 1} col {x + 1}")
+
         for frame_name, grid in base_frames.items():
-            edge = _edge_pixel(grid)
+            edge = _edge_pixel(grid, border) if outlines else None
             if edge is not None:
-                clipped.add(frame_name)
-                # Report each problem once: not again for frames derived from an already-reported one.
-                if derived_from.get(frame_name) not in clipped:
-                    x, y = edge
-                    if x >= authored_width:  # mirrored half: point at the column the author wrote
-                        x = width - 1 - x
-                    error(
-                        "E007",
-                        "outline: auto would be clipped: an opaque pixel touches the canvas edge. "
-                        "Leave a 1px transparent border (or grow the canvas)",
-                        frame_lines.get(frame_name),
-                        f"{frames_field}.{frame_name} row {y + 1} col {x + 1}",
-                    )
-            frames[frame_name] = _outline(grid, outline_color)
+                if border == 1:
+                    message = "outline: auto would be clipped: an opaque pixel touches the canvas edge. Leave a 1px transparent border (or grow the canvas)"
+                else:
+                    message = f"the outline ({border}px in all) would be clipped: an opaque pixel is closer than {border}px to the canvas edge. Leave a {border}px transparent border (or grow the canvas)"
+                clip_error(frame_name, edge, message)
+            for ring_width, ring_color in outlines:
+                grid = _outline_ring(grid, ring_color, ring_width)
+            if shadow is not None and edge is None:
+                off = _shadow_clipped(grid, shadow[0], shadow[1])
+                if off is not None:
+                    clip_error(frame_name, off, f"shadow offset {[shadow[0], shadow[1]]} would push the shadow off the canvas. Leave room on that side (or grow the canvas)")
+                grid = _drop_shadow(grid, *shadow)
+            frames[frame_name] = grid
 
     variants: dict[str, Variant] = {}
     variant_axes: dict[str, dict[str, Variant]] = {}
@@ -1113,6 +1172,8 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             mirror=mirror,
             outline=outline,
             outline_color=outline_color,
+            outlines=outlines,
+            shadow=shadow,
             lint_disable=lint.disable,
             lint_disable_for=lint.disable_for,
             lint_max_ramps=lint.max_ramps,
@@ -1124,6 +1185,60 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
         ),
         findings,
     )
+
+
+def _parse_outlines(
+    raw: Any, palette: Palette | None, default_color: str | None, line: int | None, error: ErrorFn
+) -> tuple[tuple[int, str], ...]:
+    """`outline: none | auto | { width: 3, color: "0" } | [ { width: 2, color: "0" }, { width: 1, color: "7" } ]`.
+
+    A list stacks rings outwards (the first hugs the sprite). `auto` = `{ width: 1 }`; a ring without `color`
+    uses `outline_color`.
+    """
+    usage = 'outline must be none, auto, { width: N, color: "<key>" } or a list of those (innermost first)'
+    if raw == "none":
+        return ()
+    if raw == "auto":
+        raw = [{}]
+    elif isinstance(raw, dict):
+        raw = [raw]
+    if not isinstance(raw, list) or not raw:
+        error("E001", usage, line, "outline")
+        return ()
+    rings: list[tuple[int, str]] = []
+    for i, ring in enumerate(raw):
+        where = "outline" if len(raw) == 1 else f"outline.{i}"
+        if not isinstance(ring, dict) or any(k not in ("width", "color") for k in ring):
+            error("E001", usage, line, where)
+            return ()
+        ring_width = ring.get("width", 1)
+        if isinstance(ring_width, bool) or not isinstance(ring_width, int) or not 1 <= ring_width <= MAX_OUTLINE_WIDTH:
+            error("E001", f"outline width must be a whole number of pixels, 1-{MAX_OUTLINE_WIDTH}", line, f"{where}.width")
+            return ()
+        color = str(ring["color"]) if "color" in ring else default_color
+        if palette is not None and (color is None or color not in palette.colors):
+            error("E005", f"outline color {color!r} isn't a palette key", line, f"{where}.color")
+            return ()
+        if color is not None:
+            rings.append((ring_width, color))
+    return tuple(rings)
+
+
+def _parse_shadow(raw: Any, palette: Palette | None, line: int | None, error: ErrorFn) -> tuple[int, int, str] | None:
+    """`shadow: { offset: [3, 4], color: "s" }`: a drop shadow of the (outlined) sprite, `offset` pixels away."""
+    usage = 'shadow must be { offset: [dx, dy], color: "<key>" } (whole pixels; +x right, +y down)'
+    if not isinstance(raw, dict) or set(raw) != {"offset", "color"}:
+        error("E001", usage, line, "shadow")
+        return None
+    offset = raw["offset"]
+    if not (isinstance(offset, list) and len(offset) == 2 and all(isinstance(v, int) and not isinstance(v, bool) for v in offset)) or offset == [0, 0]:
+        error("E001", usage + "; not [0, 0]", line, "shadow.offset")
+        return None
+    color = str(raw["color"])
+    if palette is not None and color not in palette.colors:
+        error("E005", f"shadow color {color!r} isn't a palette key", line, "shadow.color")
+        return None
+    return (offset[0], offset[1], color)
 
 
 def _parse_textures(raw: Any, frames: dict[str, Grid], animations: dict[str, Animation], line: int | None, error: ErrorFn) -> Textures | None:
