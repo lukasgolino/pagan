@@ -19,6 +19,14 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-21
+
+### Added
+
+- `api.text_mask(text, font, cap_height=... | size=..., variation, anchor, rotate, scale, supersample)`: lettering
+  from a TTF/OTF as an anti-aliased coverage mask (`TextMask`: `coverage`, `mask()`, `origin`, `advance`, `bbox`),
+  sized by cap height, rotated/scaled about its anchor, variable-font axes by tag (#15).
+
 ## [0.16.0] - 2026-10-21
 
 ### Added
@@ -430,7 +438,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/lukasgolino/pagan/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/lukasgolino/pagan/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/lukasgolino/pagan/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/lukasgolino/pagan/compare/v0.14.0...v0.14.1

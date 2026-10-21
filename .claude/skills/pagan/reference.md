@@ -380,6 +380,11 @@ on `from pagan import api` instead of copying PAGAN's maths; it's versioned with
   pixel centres: + inside, - outside), `bevel(mask, width, light)` -> 0..1 brightness of a bevelled shape,
   `dither(keys, t, x, y, matrix=4)` (ordered Bayer dithering between ramp steps; scalars or arrays from `np.mgrid`).
   Draw in numpy, hand PAGAN the keys. `text(font_sprite, "THWACK!", x, y, scale, key)` writes with a `font:` sprite.
+- Lettering from a real typeface: `text_mask("A", font="fonts/Serif.ttf", cap_height=104, variation={"wght": 900},
+  anchor="baseline_centre", rotate=3, scale=(0.9, 1), supersample=4)` -> `.coverage` (0..1 floats), `.mask()`
+  (bool), `.origin` (the anchor in the mask), `.advance` (kerning included), `.bbox`. Rotate/scale turn about the
+  anchor, so a tilting letter's frames stay aligned; `variation` is axis values by tag or a named instance ("Bold").
+  Then `distance_field(text.mask())` / `bevel(...)` for bevels, outlines and extrusions.
 - Shading: `light_2d(project)` (the project's light for flat art), `sphere_light(dx, dy, light)`,
   `ramp_pick(keys, t)`, `hash01(x, y, seed)`, `periodic_noise(x, y, period, seed)` (seamless), `smoothstep`.
 - Terrain: `corner_tiles(prefix, size, paint, seed, amp)` -> the 16 Match-Corners tiles
