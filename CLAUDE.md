@@ -3,7 +3,9 @@
 PAGAN (Pixel Art Grammar And Notation) is a standalone Python CLI that translates between AI and pixel
 art: agents write pixel art as palette-keyed YAML grids, and PAGAN lints them and renders them to PNGs,
 sprite sheets and engine assets (Godot first). This repo is the tool only — it is not tied to any game.
-Read [PLAN.md](PLAN.md) for the full brief, milestones and progress.
+Open work, agent reports and owner questions are GitHub issues (`gh issue list`); there are no plan files.
+The old briefs and report logs (PLAN.md, MESH_PLAN.md, ORCHESTRATOR_PLAN.md R1-R39, 3D_Bugsandfeaturerequests.md
+D1-D10, MCP_PLAN.md, WEBSITE_PLAN.md) are in git history: `git show e487084:PLAN.md`.
 
 ## Setup and commands
 
@@ -172,7 +174,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   world scale = texture pixels x [mesh] voxel_size, the meshes' texel density). Terrain heightmaps investigated, not
   built (MESH_PLAN M7 findings). Previews: `--orbit`/`--closeup` use PAGAN's renderer (any elevation, incl. below);
   `--engine` renders the built .tscn through Godot in a SubViewport (needs a display; orthographic camera).
-- 2026-10-20: Release v0.8.0 tagged and pushed (owner approved; all mesh defaults in QUESTIONS.md 11-18 accepted).
+- 2026-10-20: Release v0.8.0 tagged and pushed (owner approved; all mesh defaults in the former QUESTIONS.md 11-18 accepted).
 
 - 2026-10-20: D5: Godot's Compatibility renderer works in sRGB space (source_color textures arrive undecoded; DIFFUSE_LIGHT
   is still encoded at the end), so the ramp shader decodes under `#if CURRENT_RENDERER == RENDERER_COMPATIBILITY`.
