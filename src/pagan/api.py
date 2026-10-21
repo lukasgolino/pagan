@@ -18,12 +18,13 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import yaml
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from pagan.asset import Asset, glyph_cells, load_asset_or_raise
 from pagan.lint import _orphans
@@ -60,6 +61,8 @@ __all__ = [
     "smoothstep",
     "sphere_light",
     "sprite_yaml",
+    "text_mask",
+    "TextMask",
     "tileset_yaml",
     "write",
 ]
@@ -513,6 +516,128 @@ def bevel(mask: Any, width: float, light: tuple[float, float, float] | None = No
     norm = np.sqrt(gx * gx + gy * gy + 1.0)
     shade = (-gx * lx - gy * ly + lz) / norm / math.sqrt(lx * lx + ly * ly + lz * lz)
     return np.where(inside, np.clip(shade, 0.0, 1.0), 0.0)
+
+
+# --- text from real typefaces -------------------------------------------------------------------
+
+_ANCHORS = {"baseline_left": "ls", "baseline_centre": "ms", "baseline_center": "ms", "baseline_right": "rs"}
+_AXIS_TAGS = {"wght": "weight", "wdth": "width", "slnt": "slant", "ital": "italic", "opsz": "optical size"}
+
+
+@dataclass(frozen=True)
+class TextMask:
+    """Text rasterised from a TTF/OTF. `coverage` is H x W floats 0..1 (anti-aliased ink); `origin` is where the
+    anchor point lies in it (pixel-edge coordinates, like a pivot: paste the mask at `(x, y) - origin` to put the
+    anchor on (x, y)); `advance` is how far the pen moves after the text, in output pixels (kerning included);
+    `bbox` is (x0, y0, x1, y1) of the ink inside the mask, x1/y1 exclusive."""
+
+    coverage: Any
+    origin: tuple[int, int]
+    advance: float
+    bbox: tuple[int, int, int, int]
+
+    def mask(self, threshold: float = 0.5) -> Any:
+        """Boolean ink mask: coverage at or above `threshold` (for `distance_field`, `bevel`, `Canvas.from_array`)."""
+        return np.asarray(self.coverage) >= threshold
+
+
+def _load_font(font: str | Path | ImageFont.FreeTypeFont, size: int) -> ImageFont.FreeTypeFont:
+    if isinstance(font, ImageFont.FreeTypeFont):
+        return font.font_variant(size=size)
+    return ImageFont.truetype(str(font), size)
+
+
+def _set_variation(face: ImageFont.FreeTypeFont, variation: Mapping[str, float] | str | None) -> None:
+    """A named instance ("Bold"), or axis values by OpenType tag (wght, wdth, slnt, ital, opsz) or axis name."""
+    if variation is None:
+        return
+    if isinstance(variation, str):
+        face.set_variation_by_name(variation)
+        return
+    try:
+        axes = face.get_variation_axes()
+    except OSError as exc:
+        raise ValueError("variation needs a variable font; this font has no variation axes") from exc
+    names = [str(a["name"].decode() if isinstance(a["name"], bytes) else a["name"]).lower() for a in axes]
+    values = [float(a["default"] or 0) for a in axes]
+    for key, value in variation.items():
+        wanted = _AXIS_TAGS.get(key, key).lower()
+        if wanted not in names:
+            raise ValueError(f"font has no axis {key!r} (axes: {', '.join(names)})")
+        values[names.index(wanted)] = float(value)
+    face.set_variation_by_axes(values)
+
+
+def text_mask(
+    text: str,
+    font: str | Path | ImageFont.FreeTypeFont,
+    *,
+    cap_height: float | None = None,
+    size: float | None = None,
+    variation: Mapping[str, float] | str | None = None,
+    anchor: str = "baseline_left",
+    rotate: float = 0.0,
+    scale: tuple[float, float] | float = 1.0,
+    supersample: int = 4,
+) -> TextMask:
+    """Rasterise `text` from a TTF/OTF (path, or a Pillow FreeTypeFont) into a coverage mask for pixel lettering.
+
+    Size it by `cap_height` (pixels from the baseline to the top of "H": letters line up with the rest of the art)
+    or by `size` (the font size in pixels). `anchor` is baseline_left (default), baseline_centre, baseline_right or
+    any Pillow anchor ("mm", "lt", ...). `rotate` (degrees, + = clockwise) and `scale` ((x, y) or one number) turn
+    the text about the anchor, so the frames of a tilting letter stay aligned with its rest frame. The text is drawn
+    at `supersample` x the size and box-filtered down, the same result on every machine with the same font file.
+    """
+    if (cap_height is None) == (size is None):
+        raise ValueError("give exactly one of cap_height or size")
+    if supersample < 1:
+        raise ValueError("supersample must be 1 or more")
+    sx, sy = (float(scale), float(scale)) if isinstance(scale, int | float) else (float(scale[0]), float(scale[1]))
+    if sx <= 0 or sy <= 0:
+        raise ValueError("scale must be above 0")
+    pil_anchor = _ANCHORS.get(anchor, anchor)
+    if size is None:
+        assert cap_height is not None
+        probe = _load_font(font, 1000)
+        _set_variation(probe, variation)
+        cap = -probe.getbbox("H", anchor="ls")[1]
+        if cap <= 0:
+            raise ValueError("this font has no 'H' to measure the cap height by; pass size instead")
+        size = cap_height * 1000 / cap
+    ss = supersample
+    face = _load_font(font, max(1, round(size * ss)))
+    _set_variation(face, variation)
+    box = face.getbbox(text, anchor=pil_anchor)
+    left, top, right, bottom = math.floor(box[0]), math.floor(box[1]), math.ceil(box[2]), math.ceil(box[3])
+    advance = face.getlength(text) / ss
+    # Hi-res canvas with the anchor on a pixel edge that is a multiple of ss, so it lands on an output pixel edge.
+    angle = math.radians(rotate)
+    cos, sin = round(math.cos(angle), 12), round(math.sin(angle), 12)
+    corners = [((x * sx) * cos - (y * sy) * sin, (x * sx) * sin + (y * sy) * cos) for x in (left, right) for y in (top, bottom)]
+    pad = 2 * ss
+    x0 = math.floor((min(c[0] for c in corners) - pad) / ss) * ss
+    y0 = math.floor((min(c[1] for c in corners) - pad) / ss) * ss
+    x1 = math.ceil((max(c[0] for c in corners) + pad) / ss) * ss
+    y1 = math.ceil((max(c[1] for c in corners) + pad) / ss) * ss
+    glyph_pad = 2 * ss
+    glyphs = Image.new("L", (right - left + 2 * glyph_pad, bottom - top + 2 * glyph_pad), 0)
+    ImageDraw.Draw(glyphs).text((glyph_pad - left, glyph_pad - top), text, font=face, fill=255, anchor=pil_anchor)
+    if rotate == 0 and sx == 1 and sy == 1:
+        hi = Image.new("L", (x1 - x0, y1 - y0), 0)
+        hi.paste(glyphs, (left - glyph_pad - x0, top - glyph_pad - y0))
+    else:
+        # Output pixel (u, v) -> anchor-relative q = (u + x0, v + y0) -> undo rotate, then scale -> glyph image.
+        a, b = cos / sx, sin / sx
+        d, e = -sin / sy, cos / sy
+        ox, oy = glyph_pad - left, glyph_pad - top
+        matrix = (a, b, a * x0 + b * y0 + ox, d, e, d * x0 + e * y0 + oy)
+        hi = glyphs.transform((x1 - x0, y1 - y0), Image.Transform.AFFINE, matrix, resample=Image.Resampling.BILINEAR)
+    data = np.asarray(hi, dtype=np.float64) / 255.0
+    h, w = data.shape[0] // ss, data.shape[1] // ss
+    coverage = np.round(data.reshape(h, ss, w, ss).mean(axis=(1, 3)), 9)
+    ink = np.argwhere(coverage > 0)
+    bbox = (0, 0, 0, 0) if not len(ink) else (int(ink[:, 1].min()), int(ink[:, 0].min()), int(ink[:, 1].max()) + 1, int(ink[:, 0].max()) + 1)
+    return TextMask(coverage=coverage, origin=(-x0 // ss, -y0 // ss), advance=round(advance * sx, 6), bbox=bbox)
 
 
 # --- terrain ------------------------------------------------------------------------------------

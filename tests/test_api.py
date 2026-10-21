@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
+from PIL import ImageFont
 
 from pagan import api
 from pagan.asset import load_asset
@@ -117,3 +119,49 @@ def test_light_follows_the_project(project: Project) -> None:
     assert lx < 0 and ly < 0 and lz > 0  # default: from the top-left, towards the viewer
     assert api.hash01(3, 4, 5) == api.hash01(3, 4, 5) != api.hash01(3, 4, 6)
     assert abs(api.periodic_noise(0, 3, 16) - api.periodic_noise(16, 3, 16)) < 1e-9
+
+
+# --- text from a real typeface (#15) -----------------------------------------------------------
+
+
+def _font() -> ImageFont.FreeTypeFont:
+    font = ImageFont.load_default(10)  # Pillow's bundled TrueType font (needs FreeType, as Pillow wheels have)
+    assert isinstance(font, ImageFont.FreeTypeFont)
+    return font
+
+
+def test_text_mask_cap_height_and_metrics() -> None:
+    mask = api.text_mask("H", _font(), cap_height=12)
+    ink = mask.mask()
+    x0, y0, x1, y1 = mask.bbox
+    assert mask.origin[1] == y1 and y1 - y0 == 12  # baseline under the ink, "H" exactly 12 px tall
+    assert ink[y0:y1, x0:x1].any(axis=1).all() and not ink[:y0].any() and not ink[y1:].any()
+    assert mask.coverage.min() >= 0 and mask.coverage.max() <= 1
+    pair = api.text_mask("HH", _font(), cap_height=12)
+    assert pair.advance == pytest.approx(2 * mask.advance, abs=0.5)
+    by_size = api.text_mask("H", _font(), size=20)
+    assert by_size.coverage.shape != mask.coverage.shape
+    assert api.text_mask("H", _font(), cap_height=12).coverage.tobytes() == mask.coverage.tobytes()  # repeatable
+
+
+def test_text_mask_rotate_and_scale_about_the_anchor() -> None:
+    rest = api.text_mask("I", _font(), cap_height=20, anchor="baseline_centre")
+    tilt = api.text_mask("I", _font(), cap_height=20, anchor="baseline_centre", rotate=15)
+    wide = api.text_mask("I", _font(), cap_height=20, anchor="baseline_centre", scale=(2, 1))
+    for m in (rest, tilt, wide):  # the anchor stays where the letter stands
+        ox, oy = m.origin
+        assert m.mask()[oy - 2, ox - 3 : ox + 3].any()
+    def top_x(m: api.TextMask) -> int:  # first inked pixel (row-major), relative to the anchor
+        return int(np.argwhere(m.mask())[0][1]) - m.origin[0]
+
+    assert top_x(tilt) > top_x(rest)  # clockwise: the top swings right
+    assert (wide.bbox[2] - wide.bbox[0]) > (rest.bbox[2] - rest.bbox[0])
+
+
+def test_text_mask_errors() -> None:
+    with pytest.raises(ValueError):
+        api.text_mask("H", _font())
+    with pytest.raises(ValueError):
+        api.text_mask("H", _font(), size=10, cap_height=10)
+    with pytest.raises(ValueError):
+        api.text_mask("H", _font(), size=10, variation={"wght": 900})  # not a variable font
