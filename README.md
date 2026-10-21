@@ -14,7 +14,7 @@ frames:
 
 > **Status:** early development, but the full pipeline works: palettes, 2D sprites and tilesets, 3D voxel
 > models rendered from 8 headings or exported as real meshes (glTF) for 3D games, previews, lint, import, and
-> builds into Godot 4. See [PLAN.md](PLAN.md) and [MESH_PLAN.md](MESH_PLAN.md).
+> builds into Godot 4. See [CHANGELOG.md](CHANGELOG.md) and the [issues](https://github.com/lukasgolino/pagan/issues).
 
 ## Install (development)
 
