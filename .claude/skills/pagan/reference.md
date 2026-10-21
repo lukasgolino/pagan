@@ -23,6 +23,7 @@ colors:                       # key = ONE letter or digit ("." is transparent)
   "0": { hex: "#140c1c", name: ink }
   "1": "#442434"              # short form: just the hex
   "α": "#2f6b9a"              # past 0-9 a-z A-Z: any other single Unicode letter
+  "s": { hex: "#00000080", name: shadow }   # "#rrggbbaa": translucent (00 clear .. ff opaque)
 ramps:                        # dark -> light; one ramp per material
   warm: ["1", "2", "3", "4"]
 variants:                     # optional: palette-wide recolours every asset using this palette gets
@@ -37,6 +38,11 @@ in an asset turns an inherited one off.
 Keys: use 0-9, a-z, A-Z first (62), then Latin-1 letters (à-ÿ, À-Þ, ß) and Greek letters that don't look
 like Latin ones (α-ω, Γ Δ Θ Λ Ξ Π Σ Φ Ψ Ω); any single Unicode letter or digit is accepted. Quote keys in
 the palette file. Files are UTF-8; an accent typed as a separate combining mark is merged (NFC).
+
+Translucent colours (`"#rrggbbaa"`) are for drop shadows, glows, light rays and smoke in sprites and
+tilesets: the PNG pixel gets that alpha. The default `outline_color` is the darkest *opaque* colour, `pagan
+import` snaps to opaque colours only, and 3D model materials must be opaque (E013). `[lint] require_opaque
+= true` forbids them in a project (E015). `"#rrggbbff"` is the same as `"#rrggbb"`.
 
 ## Sprite - `sprites/<name>.sprite.yaml`
 
@@ -402,6 +408,7 @@ max_frame_change = 0.4             # W007
 max_ramp_steps = 0                 # W008: most shades per ramp/material (0 = no limit)
 disable = []                       # warning ids only
 require_outline = false            # E011
+require_opaque = false             # E015: no translucent "#rrggbbaa" colours in sprites/tilesets
 ```
 
 ## Commands (all accept `--json`; non-zero exit on errors)
@@ -452,7 +459,7 @@ Errors: E000 command/usage, E001 YAML/field, E002 unknown pixel key, E003 grid s
 animation frame, E005 palette problem, E006 variant problem, E007 outline clipped at the edge, E008 pivot,
 E009 inline palette in strict mode, E010 derived frame, E011 outline required, E012 duplicate asset name,
 E013 model problem, E014 rig / mesh problem (unknown rig id or parent, parent cycle, a hidden carving part when
-meshes are exported). E003 also: a size that isn't a multiple of `supersample`.
+meshes are exported), E015 translucent colour with `require_opaque`. E003 also: a size that isn't a multiple of `supersample`.
 
 Warnings: W001 orphan pixel, W002 unused frame, W003 too many ramps, W004 empty frame, W005 visible area
 jumps between frames, W006 made under an older style version, W007 too much change between frames,
@@ -469,7 +476,7 @@ W001 isn't checked on 3D models (a rendered orphan can't be fixed pixel by pixel
 (frames, fps, loop), pivot, `godot_offset`, headings (models), tiles (`name -> [column, row]` for
 tilesets; an animated tile is listed by its animation name at its first frame's cell, and the tileset
 gets `animations`), variants (each with its sheet/.tres unless `variant_sheets = false`, plus `swap`:
-base colour -> variant colour as "#rrggbb" for every colour it changes, and `swap_exact`: false when two
+base colour -> variant colour as "#rrggbb" (or "#rrggbbaa" when translucent) for every colour it changes, and `swap_exact`: false when two
 keys share a base colour but not a variant colour, so a shader swap would be wrong; with
 `variant_sheets = false` that's error E006), `variant_axes` (per axis, per option: `swap`, `swap_exact`;
 apply one option's swap per axis together - with `variant_sheets = false` the combinations aren't listed

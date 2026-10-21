@@ -62,6 +62,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("lint.max_ramp_steps", 0, "W008: most shades per ramp/material (0 = no limit)", "lint"),
     Setting("lint.disable", [], "warning ids to turn off", "lint"),
     Setting("lint.require_outline", False, "E011: every sprite must use outline: auto", "lint"),
+    Setting("lint.require_opaque", False, 'E015: sprites and tilesets may not use translucent ("#rrggbbaa") colours', "lint"),
 )
 BY_KEY = {s.key: s for s in SETTINGS}
 

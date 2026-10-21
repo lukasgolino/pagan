@@ -29,7 +29,7 @@ def is_key(text: str) -> bool:
     return len(text) == 1 and text.isalnum()
 PALETTE_SUFFIX = ".pal.yaml"
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
-_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
 _FIELDS = ("name", "description", "colors", "ramps", "variants", "base_variant")
 _VARIANT_FIELDS = ("ramp_swap", "key_swap", "tags")
 _COLOR_FIELDS = ("hex", "name")
@@ -41,12 +41,21 @@ ErrorFn = Callable[[str, str, int | None, str | None], None]
 @dataclass(frozen=True)
 class Color:
     key: str
-    hex: str  # normalized lowercase "#rrggbb"
+    hex: str  # normalized lowercase "#rrggbb", or "#rrggbbaa" for a translucent colour (never "ff")
     name: str | None = None
 
     @property
     def rgb(self) -> tuple[int, int, int]:
         return (int(self.hex[1:3], 16), int(self.hex[3:5], 16), int(self.hex[5:7], 16))
+
+    @property
+    def alpha(self) -> int:
+        """0-255; 255 (opaque) unless the hex has an alpha byte."""
+        return int(self.hex[7:9], 16) if len(self.hex) == 9 else 255
+
+    @property
+    def rgba(self) -> tuple[int, int, int, int]:
+        return (*self.rgb, self.alpha)
 
 
 @dataclass(frozen=True)
@@ -299,7 +308,7 @@ def _parse_color(key: str, raw: Any, line: int | None, where: str, error: ErrorF
         )
         return None
     else:
-        error("E005", 'color must be "#rrggbb" or { hex: "#rrggbb", name: ... }', line, where)
+        error("E005", 'color must be "#rrggbb" (or "#rrggbbaa") or { hex: "#rrggbb", name: ... }', line, where)
         return None
 
     if hex_value is None:
@@ -312,12 +321,15 @@ def _parse_color(key: str, raw: Any, line: int | None, where: str, error: ErrorF
         )
         return None
     if not isinstance(hex_value, str) or not _HEX_RE.match(hex_value):
-        error("E005", f'bad hex {hex_value!r}; expected "#rrggbb"', line, f"{where}.hex")
+        error("E005", f'bad hex {hex_value!r}; expected "#rrggbb", or "#rrggbbaa" with alpha (00 = clear, ff = opaque)', line, f"{where}.hex")
         return None
     if color_name is not None and not isinstance(color_name, str):
         error("E005", "color name must be text", line, f"{where}.name")
         return None
-    return Color(key=key, hex=hex_value.lower(), name=color_name)
+    hex_value = hex_value.lower()
+    if hex_value.endswith("ff") and len(hex_value) == 9:
+        hex_value = hex_value[:7]  # opaque: one spelling, so swaps and manifests compare equal
+    return Color(key=key, hex=hex_value, name=color_name)
 
 
 def palette_name_from_path(path: Path) -> str | None:

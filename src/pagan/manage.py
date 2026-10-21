@@ -121,7 +121,7 @@ def adjust_colors(palette: Palette, keys: list[str], adj: Adjustment) -> dict[st
         L2, a, b = from_lch(L, C, h)
         b += adj.warmth
         a += adj.warmth * 0.35
-        out[key] = rgb_to_hex(oklab_to_rgb((L2, a, b)))
+        out[key] = rgb_to_hex(oklab_to_rgb((L2, a, b))) + palette.colors[key].hex[7:]  # alpha stays as written
     return out
 
 

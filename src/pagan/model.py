@@ -148,6 +148,10 @@ def _parse_materials(raw: Any, palette: Palette, line: int | None, error: ErrorF
         if keys is None:
             error("E013", "a material needs ramp or keys", mline, where)
             continue
+        translucent = [k for k in keys if palette.colors[k].alpha < 255]
+        if translucent:
+            error("E013", f"material uses translucent colour(s) {', '.join(translucent)}; models are opaque (alpha is for sprites and tilesets)", mline, where)
+            continue
         two_sided = _get(spec, "two_sided", False)
         if not isinstance(two_sided, bool):
             error("E013", "two_sided must be true or false", mline, where)

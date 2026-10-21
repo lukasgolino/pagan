@@ -32,6 +32,7 @@ class LintConfig:
     max_ramp_steps: int = 0  # W008: most keys an asset may use from one ramp (0 = no limit)
     disable: tuple[str, ...] = ()
     require_outline: bool = False
+    require_opaque: bool = False  # E015: no translucent ("#rrggbbaa") colours in sprites and tilesets
 
 
 @dataclass(frozen=True)
@@ -283,7 +284,7 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
     if not isinstance(data, dict):
         error("[lint] must be a table", "lint")
         return defaults
-    allowed = ("max_ramps_per_sprite", "max_ramps_per_model", "max_frame_change", "max_ramp_steps", "disable", "require_outline")
+    allowed = ("max_ramps_per_sprite", "max_ramps_per_model", "max_frame_change", "max_ramp_steps", "disable", "require_outline", "require_opaque")
     for key in data:
         if key not in allowed:
             error(f"unknown lint setting {key!r}; allowed: {', '.join(allowed)}", f"lint.{key}")
@@ -318,6 +319,11 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
         error("require_outline must be true or false", "lint.require_outline")
         require_outline = defaults.require_outline
 
+    require_opaque = data.get("require_opaque", defaults.require_opaque)
+    if not isinstance(require_opaque, bool):
+        error("require_opaque must be true or false", "lint.require_opaque")
+        require_opaque = defaults.require_opaque
+
     return LintConfig(
         max_ramps_per_sprite=max_ramps,
         max_ramps_per_model=max_model_ramps,
@@ -325,6 +331,7 @@ def _parse_lint(data: Any, error: Callable[[str, str], None]) -> LintConfig:
         max_ramp_steps=max_steps,
         disable=tuple(disable),
         require_outline=require_outline,
+        require_opaque=require_opaque,
     )
 
 

@@ -16,15 +16,15 @@ CLEAR: RGBA = (0, 0, 0, 0)
 
 
 def color_table(asset: Asset, variant: str | None = None) -> dict[str, RGBA]:
-    """Key -> RGBA for the asset's palette, or for one of its variants."""
+    """Key -> RGBA for the asset's palette, or for one of its variants (alpha from "#rrggbbaa" colours)."""
     if variant is None:
-        return {key: (*c.rgb, 255) for key, c in asset.palette.colors.items()}
+        return {key: c.rgba for key, c in asset.palette.colors.items()}
     v = asset.variants[variant]
     table: dict[str, RGBA] = {}
     for key in asset.palette.colors:
         target = v.keys.get(key, key)
         if target in v.palette.colors:
-            table[key] = (*v.palette.colors[target].rgb, 255)
+            table[key] = v.palette.colors[target].rgba
     return table
 
 

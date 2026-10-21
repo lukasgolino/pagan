@@ -184,3 +184,6 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   bounding box, which is capped at 64M cells). D9: manifest root `parent` is "" (not null).
 - 2026-10-20: 3D frozen (owner): PAGAN's voxel meshes stay supported as of v0.9.0, no new 3D features. A smooth "normal
   3D" look is out of scope for PAGAN (a separate agent-driven asset tool is being planned instead).
+- 2026-10-21: #2 (R31): translucent colours are `"#rrggbbaa"` in the palette (`Color.hex` keeps the alpha byte, `"ff"` is
+  dropped so opaque colours have one spelling); 2D only: model materials must be opaque (3D frozen). Opt-in strictness is
+  `[lint] require_opaque` (E015), like `require_outline`.

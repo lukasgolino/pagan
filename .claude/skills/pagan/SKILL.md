@@ -210,6 +210,8 @@ in `pagan gallery`, then delete the losers and keep the winner under the real na
   `template: true` model and `extends:` it per member (add parts, `remove: [ids]`, override materials),
   so a fix to the base reaches all of them. **Colours that combine** (player colour × rank, team × armour
   tint): `variant_axes`, not one variant per combination.
+- **Shadows, glows, light rays, smoke**: give the palette translucent colours (`"#00000080"`, `"#rrggbbaa"`)
+  and draw them like any other key, instead of dithering or tinting in the game. Not for 3D models (opaque).
 - **Out of palette keys** (62 ASCII letters/digits used): keep going with Unicode letters (à, é, ß, α, Ω...);
   see reference.md. Don't alias existing keys or copy the palette.
 
