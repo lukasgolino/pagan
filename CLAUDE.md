@@ -187,3 +187,6 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-21: #2 (R31): translucent colours are `"#rrggbbaa"` in the palette (`Color.hex` keeps the alpha byte, `"ff"` is
   dropped so opaque colours have one spelling); 2D only: model materials must be opaque (3D frozen). Opt-in strictness is
   `[lint] require_opaque` (E015), like `require_outline`.
+- 2026-10-21: #3 (R32): an outline ring of width w = transparent pixels within Euclidean distance w (pixel centres) of
+  the shape, so w = 1 is the old 4-adjacent outline (that code path is kept, byte-identical); rings stack outwards;
+  `shadow` is the outlined silhouette shifted, painted only on transparent pixels. Sprites only (3D frozen).

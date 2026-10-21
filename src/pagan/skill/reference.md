@@ -53,8 +53,8 @@ palette: dusk                 # optional when pagan.toml has default_palette; op
 size: [16, 16]                # width, height of one frame (or "16x16")
 pivot: [8, 16]                # anchor in pixel-edge coords (0..w, 0..h); default [w//2, h]
 mirror: none                  # none | horizontal: author only the left ceil(w/2) columns
-outline: auto                 # none | auto: 1px outline added around opaque pixels
-outline_color: "0"            # default: the palette's darkest color
+outline: auto                 # none | auto: 1px outline added around opaque pixels (see "Outlines and shadows")
+outline_color: "0"            # default: the palette's darkest opaque color
 status: draft                 # draft | approved
 style_version: 1              # the project style version it was made/reviewed under
 tags: [enemy]
@@ -100,6 +100,19 @@ font:                         # optional: the frames are a font's glyphs (manife
 Frame order in the file = order in the sprite sheet (generated frames of mirrored animations come
 after the written ones). Leave a 1px transparent border with `outline: auto`. Findings give `row`/`col`
 1-based, counted in the grid as written (for `mirror: horizontal`, in the authored left half).
+
+**Outlines and shadows** (sprites; PAGAN adds them to every frame, so frames stay plain shapes):
+
+```yaml
+outline: { width: 3, color: "0" }                            # a 3px ring (round corners); color default: outline_color
+outline: [{ width: 2, color: "0" }, { width: 1, color: "7" }]  # stacked, innermost first: ink + light rim
+shadow: { offset: [3, 4], color: "s" }                       # drop shadow of the outlined shape (+x right, +y down)
+```
+
+Width 1 is exactly `outline: auto`; wider rings take every transparent pixel within `width` pixels (centre to
+centre) of the shape, up to 8 per ring. The shadow goes under the sprite (only on transparent pixels); a
+translucent colour (`"#00000080"`) suits it. Leave a transparent border as wide as all rings together, and room
+for the shadow on its side (E007). With `supersample`, widths and offsets are in source pixels.
 
 ## Tileset - `tiles/<name>.tiles.yaml`
 
@@ -456,7 +469,7 @@ preview image), `lint`, `preview` (image: sheet, montage, variants, built, orbit
 ## Lint rules
 
 Errors: E000 command/usage, E001 YAML/field, E002 unknown pixel key, E003 grid size, E004 missing
-animation frame, E005 palette problem, E006 variant problem, E007 outline clipped at the edge, E008 pivot,
+animation frame, E005 palette problem, E006 variant problem, E007 outline or shadow clipped at the edge, E008 pivot,
 E009 inline palette in strict mode, E010 derived frame, E011 outline required, E012 duplicate asset name,
 E013 model problem, E014 rig / mesh problem (unknown rig id or parent, parent cycle, a hidden carving part when
 meshes are exported), E015 translucent colour with `require_opaque`. E003 also: a size that isn't a multiple of `supersample`.

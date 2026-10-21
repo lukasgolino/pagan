@@ -19,6 +19,18 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-21
+
+### Added
+
+- Wide and stacked outlines on sprites: `outline: { width: 3, color: "0" }` (a round ring up to 8 px) and a list of
+  rings, innermost first (ink + light rim). `outline: auto` is unchanged (#3).
+- `shadow: { offset: [dx, dy], color }` on sprites: a drop shadow of the outlined shape under every frame (#3).
+
+### Changed
+
+- E007 accounts for the total outline width and for shadows that would leave the canvas (#3).
+
 ## [0.10.0] - 2026-10-21
 
 ### Added
@@ -363,7 +375,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/lukasgolino/pagan/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/lukasgolino/pagan/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/lukasgolino/pagan/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/lukasgolino/pagan/compare/v0.8.0...v0.9.0

@@ -110,7 +110,7 @@ Desktop, Claude Code, Cursor, your own agent) can make, lint, preview and build 
 return the same JSON as the CLI's `--json`, and previews come back as images the model can look at.
 
 ```sh
-pip install "pagan[mcp] @ git+https://github.com/lukasgolino/pagan@v0.10.0"
+pip install "pagan[mcp] @ git+https://github.com/lukasgolino/pagan@v0.11.0"
 claude mcp add pagan -- pagan mcp --project ./art          # or any client: command `pagan mcp --project <dir>`
 ```
 

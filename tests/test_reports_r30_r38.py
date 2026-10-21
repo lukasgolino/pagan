@@ -1,4 +1,5 @@
-"""LOOSE! title-logo reports R30-R38 (GitHub issues #1-#9): translucent palette colours (#2)."""
+"""LOOSE! title-logo reports R30-R38 (GitHub issues #1-#9): translucent palette colours (#2), wide/stacked
+outlines and drop shadows (#3)."""
 
 from __future__ import annotations
 
@@ -6,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from conftest import make_project
+from conftest import LoadFn, make_project
 from pagan.asset import load_asset
 from pagan.importer import import_png
 from pagan.manage import Adjustment, adjust_colors
@@ -122,3 +123,69 @@ def test_swatch_draws_translucent_colours(tmp_path: Path) -> None:
     project = _alpha_project(tmp_path)
     image = render_swatch(project.load_palette("glow"))
     assert image.width > 0 and image.height > 0
+
+
+# --- R32 (#3): wide and stacked outlines, drop shadows -----------------------------------------
+
+DOT = "name: dot\nsize: [9, 9]\n{extra}frames:\n  a: |\n" + "".join(f"    {row}\n" for row in [
+    ".........", ".........", ".........", ".........", "....1....", ".........", ".........", ".........", ".........",
+])
+
+
+def test_outline_auto_is_unchanged_by_the_ring_code(load: LoadFn) -> None:
+    from pagan.asset import _outline, _outline_ring
+
+    auto, findings = load(DOT.format(extra="outline: auto\n"), name="dot")
+    ring, _ = load(DOT.format(extra="outline: { width: 1 }\n"), name="dot")
+    assert auto is not None and ring is not None, [f.format() for f in findings]
+    assert auto.frames == ring.frames and auto.outlines == ((1, "0"),)
+    grid = ("....", ".12.", "..2.", "....")
+    assert _outline_ring(grid, "0", 1) == _outline(grid, "0")
+
+
+def test_wide_outline_is_a_round_ring(load: LoadFn) -> None:
+    asset, findings = load(DOT.format(extra='outline: { width: 2, color: "5" }\n'), name="dot")
+    assert asset is not None, [f.format() for f in findings]
+    assert asset.frames["a"][2:7] == ("....5....", "...555...", "..55155..", "...555...", "....5....")
+    assert asset.outline and asset.outline_color == "5"
+
+
+def test_stacked_outlines_and_shadow(load: LoadFn) -> None:
+    extra = 'outline: [{ width: 1, color: "0" }, { width: 1, color: "6" }]\nshadow: { offset: [1, 2], color: "5" }\n'
+    asset, findings = load(DOT.format(extra=extra), name="dot")
+    assert asset is not None, [f.format() for f in findings]
+    assert asset.frames["a"] == (
+        ".........",
+        ".........",
+        "....6....",
+        "...606...",
+        "..60106..",
+        "...6065..",
+        "...56555.",
+        "....555..",
+        ".....5...",
+    )
+    assert asset.shadow == (1, 2, "5") and asset.base_frames["a"][4] == "....1...."
+
+
+def test_wide_outline_and_shadow_clipping_is_e007(load: LoadFn) -> None:
+    near = DOT.replace("....1....\n", "..1......\n")
+    _, findings = load(near.format(extra="outline: { width: 3 }\n"), name="dot")
+    assert rules(findings) == {"E007"} and "3px" in findings[0].message and findings[0].where == "frames.a row 5 col 3"
+    assert load(near.format(extra="outline: { width: 2 }\n"), name="dot")[0] is not None
+    _, findings = load(DOT.format(extra='shadow: { offset: [5, 0], color: "5" }\n'), name="dot")
+    assert rules(findings) == {"E007"} and "shadow" in findings[0].message
+
+
+def test_outline_and_shadow_field_errors(load: LoadFn) -> None:
+    def found(extra: str) -> set[str]:
+        return rules(load(DOT.format(extra=extra), name="dot")[1])
+
+    assert found("outline: thick\n") == {"E001"}
+    assert found("outline: { width: 0 }\n") == {"E001"}
+    assert found("outline: { width: 9 }\n") == {"E001"}
+    assert found('outline: { width: 2, colour: "0" }\n') == {"E001"}
+    assert found('outline: { width: 2, color: "z" }\n') == {"E005"}
+    assert found('shadow: { offset: [1, 1] }\n') == {"E001"}
+    assert found('shadow: { offset: [0, 0], color: "5" }\n') == {"E001"}
+    assert found('shadow: { offset: [1, 1], color: "z" }\n') == {"E005"}

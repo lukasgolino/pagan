@@ -290,7 +290,8 @@ set, and log the change in BRIEF.md's feedback log.
 ## 5. Rules of thumb
 
 - Never invent colors: everything comes from the palette (strict mode makes this an error anyway).
-- Keep 1px of transparent border when `outline: auto` (E007 otherwise).
+- Keep 1px of transparent border when `outline: auto` (E007 otherwise). Thick or double outlines and drop shadows
+  are `outline: { width: N }` / a list, and `shadow:` (reference.md): don't paint them into the frames.
 - Previews are for looking; `pagan build` output is what the game uses. Don't hand-edit build output.
 - Don't commit or push unless the owner asks.
 - If PAGAN itself seems wrong (a crash, a misleading error), say so instead of working around it silently,
