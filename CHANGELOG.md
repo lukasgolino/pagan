@@ -19,6 +19,15 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-21
+
+### Added
+
+- The skill asks agents to report what got in their way (crashes, misleading messages, workarounds, missing
+  features) as GitHub issues: a minimal-repro draft, a duplicate check, and filing only with the user's OK.
+  `.github/ISSUE_TEMPLATE/agent-report.md` and the `agent-report` label. Run `pagan skill install` to update a
+  project's copy of the skill.
+
 ## [0.9.0] - 2026-10-20
 
 From LOOSE!'s first weeks with meshes (3D_Bugsandfeaturerequests.md D5-D10). 2D output is unchanged.
@@ -339,7 +348,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/lukasgolino/pagan/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/lukasgolino/pagan/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/lukasgolino/pagan/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lukasgolino/pagan/compare/v0.6.1...v0.7.0

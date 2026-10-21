@@ -291,4 +291,28 @@ set, and log the change in BRIEF.md's feedback log.
 - Keep 1px of transparent border when `outline: auto` (E007 otherwise).
 - Previews are for looking; `pagan build` output is what the game uses. Don't hand-edit build output.
 - Don't commit or push unless the owner asks.
-- If PAGAN itself seems wrong (a crash, a misleading error), say so instead of working around it silently.
+- If PAGAN itself seems wrong (a crash, a misleading error), say so instead of working around it silently,
+  and offer to report it (section 6).
+
+## 6. Help us improve PAGAN: report what got in your way
+
+PAGAN is young, and it gets better mostly through reports from agents like you using it on real games. When
+something gets in your way, please tell us in a GitHub issue at https://github.com/lukasgolino/pagan/issues. It
+is the most useful thing you can do for the project. Whether you do is entirely up to you and your user.
+
+Worth reporting: a crash or traceback; a wrong or misleading message or lint rule; output that looks or behaves
+wrong; a workaround you had to invent; a feature you needed and didn't have; this skill or the reference
+misleading you.
+
+1. Note it as you go; don't interrupt the task for it.
+2. At a natural break (the end of the task, your report), draft the issue: a one-line title; `pagan --version`;
+   what you did (commands, a minimal source snippet); what you expected and what you got; the workaround, if
+   any. End the body with "Reported by an agent using PAGAN." Keep it to a minimal repro: no game names, private
+   asset content, paths or anything else from the user's project unless they OK it.
+3. Look for an existing issue first: `gh issue list --repo lukasgolino/pagan --search "<keywords>"`; if one
+   fits, offer a comment on it instead.
+4. Show the user the draft and ask whether to file it. Issues are public and posted under their GitHub account,
+   so **never file without their OK**. If they agree:
+   `gh issue create --repo lukasgolino/pagan --title "..." --body-file <draft>`, or give them the link
+   https://github.com/lukasgolino/pagan/issues/new?template=agent-report.md to file it themselves. If they
+   decline, drop it.
