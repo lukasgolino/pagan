@@ -373,6 +373,11 @@ on `from pagan import api` instead of copying PAGAN's maths; it's versioned with
   shapes fill pixels whose centres are strictly inside; `api.polygon_distance(points, x, y)` is the signed
   distance (+ inside). `fade(amount, seed)` dissolves from the edge,
   `scatter(n, key, seed, box, size)`, `orphans()` (exactly W001), `remove_orphans()`, `pair_orphans()`, `rows()`.
+- Big canvases (numpy): `Canvas.from_array(keys_array)` or `Canvas.from_array(index_array, "rstuv")` (negative =
+  transparent), `to_array()`, `mask()` (bool, opaque); `distance_field(mask)` (signed, exact Euclidean between
+  pixel centres: + inside, - outside), `bevel(mask, width, light)` -> 0..1 brightness of a bevelled shape,
+  `dither(keys, t, x, y, matrix=4)` (ordered Bayer dithering between ramp steps; scalars or arrays from `np.mgrid`).
+  Draw in numpy, hand PAGAN the keys. `text(font_sprite, "THWACK!", x, y, scale, key)` writes with a `font:` sprite.
 - Shading: `light_2d(project)` (the project's light for flat art), `sphere_light(dx, dy, light)`,
   `ramp_pick(keys, t)`, `hash01(x, y, seed)`, `periodic_noise(x, y, period, seed)` (seamless), `smoothstep`.
 - Terrain: `corner_tiles(prefix, size, paint, seed, amp)` -> the 16 Match-Corners tiles
@@ -384,7 +389,7 @@ on `from pagan import api` instead of copying PAGAN's maths; it's versioned with
 - 2D headings: `directional_frames(draw, size, directions=8)` -> one Canvas per heading, named like model
   headings (e, ne, n, ...; h00-h31); `draw(canvas, angle)` paints the shape turned to `angle` degrees,
   usually via `rotate_points(points, angle, about)` (a shape drawn facing east; counter-clockwise on screen).
-- Files: `sprite_yaml(name, size, frames, animations, **fields)`, `tileset_yaml(...)`, `write(path, text)`
+- Files (numpy numbers are fine in sizes and fields): `sprite_yaml(name, size, frames, animations, **fields)`, `tileset_yaml(...)`, `write(path, text)`
   (writes only on change), `load(path)` -> parsed asset, `open_project(path)`, `palette(name, project)`.
 
 ## `pagan.toml`

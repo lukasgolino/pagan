@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pagan"
-version = "0.13.0"
+version = "0.14.0"
 description = "PAGAN (Pixel Art Grammar And Notation): write pixel art as text, build it into PNGs and game-ready assets."
 readme = "README.md"
 license = "MIT"

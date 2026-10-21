@@ -1,15 +1,19 @@
 """LOOSE! title-logo reports R30-R38 (GitHub issues #1-#9): translucent palette colours (#2), wide/stacked
 outlines and drop shadows (#3), rotated/scaled derived frames (#4),
-per-frame attachment points (#5)."""
+per-frame attachment points (#5), numpy-friendly `pagan.api` (#6)."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
+import numpy as np
+import pytest
 from PIL import Image
 
 from conftest import LoadFn, make_project
+from pagan import api
 from pagan.asset import load_asset
 from pagan.build import build
 from pagan.importer import import_png
@@ -273,3 +277,73 @@ def test_points_in_the_manifest(tmp_path: Path) -> None:
     assets = json.loads(result.manifest.read_text())["assets"]
     assert assets["sign"]["points"] == {"fire": {"a": [2, 1]}}
     assert assets["big"]["points"] == {"tip": {"a": [1.5, 1]}}  # output pixels
+
+
+# --- R35 (#6): numpy canvases, dithering, distance fields, bevels, text, numpy ints in YAML --------
+
+
+def test_canvas_numpy_round_trip() -> None:
+    canvas = api.Canvas.from_rows(["12.", ".3."])
+    array = canvas.to_array()
+    assert array.shape == (2, 3) and array[0, 1] == "2"
+    assert api.Canvas.from_array(array).rows() == canvas.rows()
+    assert canvas.mask().tolist() == [[True, True, False], [False, True, False]]
+    indexed = api.Canvas.from_array(np.array([[0, 1, -1], [2, 2, 0]]), "abc")
+    assert indexed.rows() == ["ab.", "cca"]
+    with pytest.raises(ValueError):
+        api.Canvas.from_array(np.array([[3]]), "abc")
+    with pytest.raises(ValueError):
+        api.Canvas.from_array(np.zeros((2, 2, 2)))
+
+
+def test_dither_scalar_and_arrays() -> None:
+    assert api.dither("abc", 0.0, 3, 5) == "a" and api.dither("abc", 1.0, 3, 5) == "c"
+    ys, xs = np.mgrid[0:8, 0:8]
+    half = api.dither("ab", np.full((8, 8), 0.5), xs, ys)
+    assert (half == "b").sum() == 32  # half the pixels take the lighter step
+    assert (api.dither("ab", np.full((8, 8), 0.25), xs, ys, matrix=8) == "b").sum() == 16
+    assert api.Canvas.from_array(half).rows()[0] in ("abababab", "babababa")
+    with pytest.raises(ValueError):
+        api.dither("ab", 0.5, 0, 0, matrix=3)
+
+
+def test_distance_field_is_exact() -> None:
+    mask = np.zeros((7, 9), dtype=bool)
+    mask[1:6, 2:8] = True
+    field = api.distance_field(mask)
+    assert field[3, 4] == 3.0 and field[1, 4] == 1.0  # inside: to the nearest outside pixel centre
+    assert field[0, 0] == pytest.approx(-(5**0.5))  # outside: minus the distance to (row 1, col 2)
+    assert field[0, 4] == -1.0
+    assert (api.distance_field(np.zeros((2, 2), dtype=bool)) < 0).all()
+
+
+def test_bevel_lights_the_top_left_edge() -> None:
+    mask = np.zeros((20, 20), dtype=bool)
+    mask[3:17, 3:17] = True
+    shade = api.bevel(mask, 4)
+    assert shade[0, 0] == 0.0
+    assert shade[4, 10] > shade[10, 10] > shade[15, 10]  # lit edge, flat top, shadowed edge
+    assert 0.0 <= shade.min() and shade.max() <= 1.0
+
+
+def test_canvas_text_with_a_font_sprite(load: LoadFn) -> None:
+    text = (
+        'name: font\nsize: [8, 4]\nfont: { glyphs: "lE", cell: [4, 4], baseline: 3, advance: auto, space: 2 }\n'
+        "lint: { disable: [W001] }\nframes:\n  sheet: |\n    1...111.\n    1...1...\n    1...111.\n    ........\n"
+    )
+    font, findings = load(text, name="font")
+    assert font is not None, [f.format() for f in findings]
+    canvas = api.Canvas(8, 4).text(font, "lE", 0, 0)
+    assert canvas.rows() == ["1.111...", "1.1.....", "1.111...", "........"]  # l advances 1 + spacing 1
+    assert api.Canvas(4, 6).text(font, "l", 0, 0, scale=2, key="5").rows()[:2] == ["55..", "55.."]
+    with pytest.raises(ValueError):
+        api.Canvas(8, 4).text(font, "x", 0, 0)
+
+
+def test_sprite_yaml_accepts_numpy_numbers() -> None:
+    size: Any = (np.int64(2), np.int64(1))  # what numpy maths hands a generator
+    text = api.sprite_yaml(
+        "dot", size, {"a": ["1."]}, {"pulse": {"frames": ["a"], "fps": np.float64(4.0)}},
+        pivot=[np.int64(1), np.int64(1)],
+    )
+    assert "pivot: [1, 1]" in text and "size: [2, 1]" in text and "fps: 4.0" in text

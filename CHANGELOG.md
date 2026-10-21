@@ -19,6 +19,18 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-21
+
+### Added
+
+- `pagan.api` for big generated art (#6): `Canvas.from_array` / `to_array` / `mask` (numpy), `distance_field(mask)`
+  (exact signed Euclidean distance), `bevel(mask, width, light)` (0..1 brightness), `dither(keys, t, x, y)`
+  (ordered Bayer dithering between ramp steps, vectorised) and `Canvas.text(font_sprite, ...)`.
+
+### Fixed
+
+- `api.sprite_yaml` / `tileset_yaml` crashed on numpy numbers in `size`, `pivot` and other fields (#6).
+
 ## [0.13.0] - 2026-10-21
 
 ### Added
@@ -391,7 +403,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/lukasgolino/pagan/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/lukasgolino/pagan/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/lukasgolino/pagan/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/lukasgolino/pagan/compare/v0.10.0...v0.11.0
