@@ -19,6 +19,21 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-21
+
+### Added
+
+- Translucent palette colours: `"#rrggbbaa"` (00 = clear, ff = opaque) for drop shadows, glows, light rays and
+  smoke; sprite and tileset pixels get that alpha in every PNG, and variant `swap` tables carry it (#2).
+- `[lint] require_opaque = true` (E015) forbids translucent colours in a project's sprites and tilesets (#2).
+
+### Changed
+
+- The default `outline_color` is the darkest *opaque* colour; `pagan import` snaps to opaque colours only;
+  palette swatches show translucent colours over a checker; `pagan palette adjust` keeps each colour's alpha.
+  Palettes without translucent colours behave exactly as before (#2).
+- `"#rrggbbff"` is read as `"#rrggbb"`. 3D model materials must be opaque (E013) (#2).
+
 ## [0.9.1] - 2026-10-21
 
 ### Added
@@ -348,7 +363,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/lukasgolino/pagan/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/lukasgolino/pagan/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/lukasgolino/pagan/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/lukasgolino/pagan/compare/v0.7.0...v0.8.0

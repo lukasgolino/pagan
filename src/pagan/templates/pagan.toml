@@ -71,3 +71,5 @@ max_ramp_steps = 0
 disable = []
 # Require `outline: auto` on every sprite.
 require_outline = false
+# Forbid translucent palette colours ("#rrggbbaa") in sprites and tilesets (strict pixel art).
+require_opaque = false

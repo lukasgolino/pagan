@@ -124,7 +124,9 @@ def import_png(
     )
 
     if palette is not None:
-        targets = [(key, rgb_to_oklab(c.rgb), c.rgb) for key, c in palette.colors.items()]
+        # Snap to opaque colours: imported pixels are opaque (alpha is thresholded), so a translucent colour never fits.
+        snappable = {key: c for key, c in palette.colors.items() if c.alpha == 255} or palette.colors
+        targets = [(key, rgb_to_oklab(c.rgb), c.rgb) for key, c in snappable.items()]
         lookup: dict[RGB, str] = {}
         for color in colors:
             lab = rgb_to_oklab(color)

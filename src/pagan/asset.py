@@ -924,11 +924,14 @@ def _expand_mirrored_animations(
 
 
 def _darkest(palette: Palette) -> str:
+    """The default outline colour: the darkest opaque colour (a translucent shadow colour would make a see-through outline)."""
+
     def luminance(key: str) -> float:
         r, g, b = palette.colors[key].rgb
         return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
-    return min(palette.colors, key=luminance)
+    opaque_keys = [k for k, c in palette.colors.items() if c.alpha == 255]
+    return min(opaque_keys or palette.colors, key=luminance)
 
 
 # --- entry points -----------------------------------------------------------------------------
@@ -1069,6 +1072,9 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
     variant_axes: dict[str, dict[str, Variant]] = {}
     if palette is not None:
         used = {c for grid in frames.values() for row in grid for c in row if c != TRANSPARENT}
+        translucent = sorted(k for k in used if palette.colors[k].alpha < 255)
+        if translucent and project.config.lint.require_opaque:
+            error("E015", f"pagan.toml requires opaque colours (require_opaque), but this {kind} uses translucent key(s) {', '.join(translucent)}", _line(data, "palette") or _line(data), "palette")
         raw_variants, inherited = with_palette_variants(data.get("variants"), palette, meta["tags"], _line(data, "variants"), error)
         if inherited and meta["base_variant"] is None:
             meta["base_variant"] = palette.base_variant

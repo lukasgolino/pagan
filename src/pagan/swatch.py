@@ -49,6 +49,20 @@ def _contrast(color: Color) -> tuple[int, int, int]:
     return (0, 0, 0) if luminance > 0.5 else (255, 255, 255)
 
 
+def _fill(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], color: Color) -> None:
+    """Paint a swatch; a translucent colour is shown over a light/dark checker, like the previews."""
+    if color.alpha == 255:
+        draw.rectangle(box, fill=color.rgb)
+        return
+    x0, y0, x1, y1 = box
+    cell = 8
+    for y in range(y0, y1 + 1, cell):
+        for x in range(x0, x1 + 1, cell):
+            under = (200, 200, 200) if ((x - x0) // cell + (y - y0) // cell) % 2 else (90, 90, 90)
+            mixed = tuple((c * color.alpha + u * (255 - color.alpha) + 127) // 255 for c, u in zip(color.rgb, under, strict=True))
+            draw.rectangle((x, y, min(x + cell - 1, x1), min(y + cell - 1, y1)), fill=mixed)
+
+
 def _fit(draw: ImageDraw.ImageDraw, text: str, font: Font, width: int) -> str:
     if draw.textlength(text, font=font) <= width:
         return text
@@ -84,7 +98,7 @@ def render_swatch(palette: Palette, title: str | None = None) -> Image.Image:
     for i, color in enumerate(colors):
         x = PAD + (i % COLUMNS) * CELL_W
         cy = y + (i // COLUMNS) * CELL_H
-        draw.rectangle((x, cy, x + SWATCH_W - 1, cy + SWATCH_H - 1), fill=color.rgb)
+        _fill(draw, (x, cy, x + SWATCH_W - 1, cy + SWATCH_H - 1), color)
         draw.text((x + 5, cy + 3), color.key, font=key_font, fill=_contrast(color))
         draw.text((x, cy + SWATCH_H + 3), _fit(draw, color.name or "", label_font, SWATCH_W), font=label_font, fill=TEXT)
         draw.text((x, cy + SWATCH_H + 18), color.hex, font=label_font, fill=MUTED)
@@ -100,7 +114,7 @@ def render_swatch(palette: Palette, title: str | None = None) -> Image.Image:
             for j, key in enumerate(keys):
                 color = palette.colors[key]
                 x = PAD + RAMP_LABEL_W + j * RAMP_SWATCH
-                draw.rectangle((x, y, x + RAMP_SWATCH - 1, y + RAMP_SWATCH - 1), fill=color.rgb)
+                _fill(draw, (x, y, x + RAMP_SWATCH - 1, y + RAMP_SWATCH - 1), color)
                 draw.text((x + 5, y + 3), key, font=key_font, fill=_contrast(color))
             y += RAMP_SWATCH + 6
 
