@@ -114,7 +114,7 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 ### Added
 
 - The skill asks agents to report what got in their way (crashes, misleading messages, workarounds, missing
-  features) as GitHub issues: a minimal-repro draft, a duplicate check, and filing only with the user's OK.
+  features) as GitHub issues: a minimal-repro draft, a duplicate check, and filing only once approved.
   `.github/ISSUE_TEMPLATE/agent-report.md` and the `agent-report` label. Run `pagan skill install` to update a
   project's copy of the skill.
 

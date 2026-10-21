@@ -3,7 +3,7 @@
 PAGAN (Pixel Art Grammar And Notation) is a standalone Python CLI that translates between AI and pixel
 art: agents write pixel art as palette-keyed YAML grids, and PAGAN lints them and renders them to PNGs,
 sprite sheets and engine assets (Godot first). This repo is the tool only — it is not tied to any game.
-Open work, agent reports and owner questions are GitHub issues (`gh issue list`); there are no plan files.
+Open work, agent reports and open questions are GitHub issues (`gh issue list`); there are no plan files.
 The old briefs and report logs (PLAN.md, MESH_PLAN.md, ORCHESTRATOR_PLAN.md R1-R39, 3D_Bugsandfeaturerequests.md
 D1-D10, MCP_PLAN.md, WEBSITE_PLAN.md) are in git history: `git show e487084:PLAN.md`.
 
@@ -63,7 +63,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - Every feature lands with tests; CI must be green at the end of each milestone.
 - Output must be deterministic (byte-identical builds).
 - CLI: human-readable output by default, `--json` for machines, non-zero exit on error.
-- Commit only when the owner has authorized it (currently: at sensible milestone points), as plain `git commit` under the owner's identity. NEVER add AI attribution (no Co-Authored-By trailers). Never push unless asked.
+- Commit only when authorized (currently: at sensible milestone points), as plain `git commit` under our identity. NEVER add AI attribution (no Co-Authored-By trailers). Never push unless asked.
 - Commit messages (when asked): imperative subject line, e.g. `Add palette loading`.
 - Validation collects *all* findings in a file rather than stopping at the first, and every finding has a
   rule id, file, line where possible, a `where` path (e.g. `colors.4.hex`) and a message that says how to fix it.
@@ -94,7 +94,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-14: Variants can also swap to another palette (`palette: night`), not just ramp_swap/key_swap.
 - 2026-10-14: Asset metadata for long-term management: `description`, `tags`, `status` (draft|approved), `style_version` (vs. pagan.toml `style_version`, W006).
 - 2026-10-14: Only warnings can be disabled in `[lint] disable`.
-- 2026-10-14: Animation consistency is a first-class concern (owner feedback): W007 measures frame-to-frame pixel churn after the best ±2px alignment; preview sheets show a "changes" row per animation (magenta = changed, cyan = removed).
+- 2026-10-14: Animation consistency is a first-class concern (decided after feedback): W007 measures frame-to-frame pixel churn after the best ±2px alignment; preview sheets show a "changes" row per animation (magenta = changed, cyan = removed).
 - 2026-10-14: `pagan render`/`preview`/`lint` find the project from the target path, not the cwd.
 - 2026-10-14: GIF frame durations are rounded to 10ms (GIF's resolution).
 - 2026-10-14: `pagan import` picks the largest uniform block size as the upscale factor (gcd of pixel run lengths); snapping uses nearest OKLab color; open mode orders extracted keys darkest-first so "0" suits outlines.
@@ -105,33 +105,33 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-14: Sprites without animations export one single-frame animation per frame (so every sprite gets a SpriteFrames). Tilesets export atlas + manifest only.
 - 2026-10-14: `pagan build` always builds the whole project (partial builds would leave an incomplete manifest); only changed files are rewritten; files listed in the previous manifest but no longer produced are deleted (plus Godot's .import sidecar).
 - 2026-10-14: Variant outputs are named `<asset>.<variant>.png/.tres` (a dot can't occur in asset names, so no clashes).
-- 2026-10-14: Example Godot project: 480x270 viewport, integer scaling ×3 window, nearest filtering, pixel snapping. Base resolution is an open question for the owner.
+- 2026-10-14: Example Godot project: 480x270 viewport, integer scaling ×3 window, nearest filtering, pixel snapping. Base resolution is still an open question.
 - 2026-10-14: Long-term asset management: a PAGAN project folder is the single home for a game's art (BRIEF.md = what's wanted + feedback log, STYLE.md = how it looks + versioned changelog, assets carry description/status/style_version). `pagan palette adjust` (OKLab lightness/contrast/saturation/hue/warmth) changes every asset at once; `pagan style bump` flags assets for review (W006) until `pagan mark --current`.
 - 2026-10-14: Source-file edits by PAGAN (`palette adjust`, `mark`, `style bump`) are line-level text edits, never YAML re-serialisation, so comments and layout survive.
-- 2026-10-15: numpy added (owner approved): the voxel renderer traces all rays in lockstep (same Amanatides-Woo algorithm and float operations as before, so output is byte-identical) and W007 is vectorised. Cold demo lint ~11s -> ~3s.
-- 2026-10-15: PAGAN's role (owner): a sprite service driven by an orchestrator agent; engine-agnostic, `manifest.json` is the contract; Godot export is a convenience.
+- 2026-10-15: numpy added (approved): the voxel renderer traces all rays in lockstep (same Amanatides-Woo algorithm and float operations as before, so output is byte-identical) and W007 is vectorised. Cold demo lint ~11s -> ~3s.
+- 2026-10-15: Decided, PAGAN's role: a sprite service driven by an orchestrator agent; engine-agnostic, `manifest.json` is the contract; Godot export is a convenience.
 - 2026-10-15: Every look setting is configurable and saved (`pagan config show/get/set`, registry in settings.py). `config set` validates the whole resulting config before writing and reports what refreshes (models re-render; hand-drawn 2D assets listed for review).
 - 2026-10-15: Engine lighting: `[light] baked = false` renders models with each material's middle step (flat albedo); `export` "normals" writes `<name>.normal.png` (OpenGL convention: x right, y up, z to viewer) and the Godot .tres wraps the sheet in a CanvasTexture with the normal map. Verified loading in Godot 4.7.2.
 - 2026-10-15: Godot TileSet `.tres` per tileset (format copied from Godot 4.7.2's ResourceSaver; one atlas source, every tile created, tile_size written explicitly); manifest gets `tiles: name -> [column, row]`. Pivots stay in the manifest (`godot_offset`), documented for game code.
-- 2026-10-15: Sizes are the requester's choice (owner): skill explains the detail trade-off and the two ways up (camera.scale for chunkier, more voxels for detail).
-- 2026-10-15: Release v0.1.0 tagged locally (owner approved); CHANGELOG.md defines what forces a version bump.
-- 2026-10-15: Release v0.2.0 tagged locally (owner approved): orchestrator reports R1-R6, Age of Boom log fixes, review round 3.
+- 2026-10-15: Sizes are the requester's choice (decided): skill explains the detail trade-off and the two ways up (camera.scale for chunkier, more voxels for detail).
+- 2026-10-15: Release v0.1.0 tagged locally (approved); CHANGELOG.md defines what forces a version bump.
+- 2026-10-15: Release v0.2.0 tagged locally (approved): orchestrator reports R1-R6, Age of Boom log fixes, review round 3.
 - 2026-10-16: Hidden model parts are overlays (never change normal frames; shown = drawn on top; hidden+carve = pose-only hole); an id is hidden or visible, not both.
 - 2026-10-16: Whole-model `roll`/`pitch` are rendered exactly (camera rotation, no resampling); part rotations resample voxels (forward + inverse mapping, no gaps).
-- 2026-10-16: Generators get `pagan.api` instead of more notation (owner, R11/R12); its functions are the ones the primitives use, and it's covered by versioning (`API_VERSION`).
+- 2026-10-16: Generators get `pagan.api` instead of more notation (decided, R11/R12); its functions are the ones the primitives use, and it's covered by versioning (`API_VERSION`).
 - 2026-10-16: Animated tiles: frames side by side in the atlas (new row if they don't fit); tilesets without animations keep the old layout byte for byte.
 - 2026-10-16: Per-asset `lint:` (disable / for) instead of tag-based defaults: explicit in the file.
-- 2026-10-16: Release v0.3.0 tagged locally (owner approved): orchestrator reports R7-R14.
-- 2026-10-16: Palette keys are any single Unicode letter/digit (owner, R16); KEY_ORDER recommends ASCII, then Latin-1, then non-Latin-looking Greek. Sources are NFC-normalized on load.
-- 2026-10-16: Variants carry a hex->hex `swap` table in the manifest; `variant_sheets = false` (owner: setting, default on) skips variant sheets and makes non-exact swaps an error.
-- 2026-10-16: PAGAN stays general-purpose (owner): features from one game's reports get generic names and docs examples; no game-specific notation.
+- 2026-10-16: Release v0.3.0 tagged locally (approved): orchestrator reports R7-R14.
+- 2026-10-16: Palette keys are any single Unicode letter/digit (decided, R16); KEY_ORDER recommends ASCII, then Latin-1, then non-Latin-looking Greek. Sources are NFC-normalized on load.
+- 2026-10-16: Variants carry a hex->hex `swap` table in the manifest; `variant_sheets = false` (decided: a setting, default on) skips variant sheets and makes non-exact swaps an error.
+- 2026-10-16: Decided, PAGAN stays general-purpose: features from one game's reports get generic names and docs examples; no game-specific notation.
 - 2026-10-16: R15: models `extends` a `template: true` base (own-identity fields not inherited; materials/animations/variants merge by name; `remove` drops base part ids). `variant_axes` combinations are variants named `a+b` ("+" can't occur in names, so no clashes); axes must change disjoint keys.
-- 2026-10-16: Release v0.4.0 tagged locally (owner approved): orchestrator reports R15-R17.
+- 2026-10-16: Release v0.4.0 tagged locally (approved): orchestrator reports R15-R17.
 - 2026-10-17: Space IO report S1-S10 (flat / vector arcade game): PAGAN isn't only pixel art. Smooth output is
   `supersample` (sources stay palette-keyed and linted; only build output blends); `[godot] mipmaps` edits just the
   `mipmaps/generate` line of Godot's `.import` (minimal file if none; Godot fills the rest), `filter` is a CanvasTexture
   `texture_filter` on SpriteFrames (TileSets: set on the TileMapLayer). Ellipses exclude edge-exact pixel centres (API_VERSION 2).
-- 2026-10-17: MCP server (owner approved): official `mcp` SDK 2.x as an optional extra (`pagan[mcp]`; in dev so mypy/tests
+- 2026-10-17: MCP server (approved): official `mcp` SDK 2.x as an optional extra (`pagan[mcp]`; in dev so mypy/tests
   cover it). Tools run the CLI handlers with `--json` (stdout captured, cwd pinned, one lock) so CLI and MCP share one
   contract; errors are `ok: false` results; one server per project; paths confined to project/output/preview; stdio only.
 - 2026-10-19: R20-R29 (Age of Boom PAGAN_LOG friction, filed by PAGAN): `nine_slice` and `font` on sprites (fonts
@@ -142,7 +142,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   libyaml's CSafeLoader when available (same marks/columns). Progress goes to stderr, only from the CLI (MCP off).
 - 2026-10-20: Mesh export (MESH_PLAN, D1-D4): `export` "mesh" writes `models/<name>.glb` per model; opt-in, 2D output byte-identical
   (tested against the committed demo build). glTF = (y, z, x) * voxel_size (front +Z, left +X, up +Y; a rotation, not the
-  plan's (-y, z, x), which mirrors). Mesh-only models: `directions: 0` (owner question 1's recommended default).
+  plan's (-y, z, x), which mirrors). Mesh-only models: `directions: 0` (question 1's recommended default, accepted).
 - 2026-10-20: Greedy meshing per node and surface, then every quad corner lying inside another quad's edge is inserted
   (centre fan): watertight, no T-junction cracks (tested: every directed edge has its reverse). Flat face normals; exact
   normals (sails) are ignored for meshes. Voxel slabs are closed solids, so two_sided only changes shading: a second
@@ -174,7 +174,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   world scale = texture pixels x [mesh] voxel_size, the meshes' texel density). Terrain heightmaps investigated, not
   built (MESH_PLAN M7 findings). Previews: `--orbit`/`--closeup` use PAGAN's renderer (any elevation, incl. below);
   `--engine` renders the built .tscn through Godot in a SubViewport (needs a display; orthographic camera).
-- 2026-10-20: Release v0.8.0 tagged and pushed (owner approved; all mesh defaults in the former QUESTIONS.md 11-18 accepted).
+- 2026-10-20: Release v0.8.0 tagged and pushed (approved; all mesh defaults in the former QUESTIONS.md 11-18 accepted).
 
 - 2026-10-20: D5: Godot's Compatibility renderer works in sRGB space (source_color textures arrive undecoded; DIFFUSE_LIGHT
   is still encoded at the end), so the ramp shader decodes under `#if CURRENT_RENDERER == RENDERER_COMPATIBILITY`.
@@ -182,7 +182,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-20: D6/D7: `remove` drops inherited rig entries of removed parts (children re-hang from the nearest survivor);
   W013 = a part id left with no voxels; `shell: true | N` on box/cylinder/ellipsoid (numpy face-erosion over the
   bounding box, which is capped at 64M cells). D9: manifest root `parent` is "" (not null).
-- 2026-10-20: 3D frozen (owner): PAGAN's voxel meshes stay supported as of v0.9.0, no new 3D features. A smooth "normal
+- 2026-10-20: 3D frozen (decided): PAGAN's voxel meshes stay supported as of v0.9.0, no new 3D features. A smooth "normal
   3D" look is out of scope for PAGAN (a separate agent-driven asset tool is being planned instead).
 - 2026-10-21: #2 (R31): translucent colours are `"#rrggbbaa"` in the palette (`Color.hex` keeps the alpha byte, `"ff"` is
   dropped so opaque colours have one spelling); 2D only: model materials must be opaque (3D frozen). Opt-in strictness is
