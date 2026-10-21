@@ -113,8 +113,10 @@ def sprite_frames_tres(
         ]
     entries = []
     for anim in animations:
+        durations = anim.durations or (1.0,) * len(anim.frames)
         frames = ", ".join(
-            "{\n" + '"duration": 1.0,\n' + f'"texture": SubResource("{frame_ids[f]}")\n' + "}" for f in anim.frames
+            "{\n" + f'"duration": {float(d)!r},\n' + f'"texture": SubResource("{frame_ids[f]}")\n' + "}"
+            for f, d in zip(anim.frames, durations, strict=True)
         )
         entries.append(
             "{\n"

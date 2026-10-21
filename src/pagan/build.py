@@ -200,7 +200,8 @@ def build(project: Project) -> BuildResult:
             entry["pivot"] = list(pivot)
             entry["godot_offset"] = list(centered_offset(size, pivot))
             entry["animations"] = {
-                a.name: {"frames": list(a.frames), "fps": a.fps, "loop": a.loop} for a in animations
+                a.name: {"frames": list(a.frames), "fps": a.fps, "loop": a.loop, **({"durations": list(a.durations)} if a.durations else {})}
+                for a in animations
             }
         if "animations" in entry:  # JSON objects are unordered (and the manifest sorts keys): the file's order
             entry["animation_order"] = [a.name for a in (animations if asset.kind != "tileset" else asset.animations.values())]

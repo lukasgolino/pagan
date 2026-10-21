@@ -202,8 +202,9 @@ def animation_gif(asset: Asset, animation: str, options: PreviewOptions, path: P
     # GIFs only have 1-bit alpha, so always composite onto an opaque background.
     opaque = PreviewOptions(scale=scale, grid=options.grid, background="checker" if options.background == "none" else options.background)
     frames = [upscale(frame_image(asset, f, variant), scale, opaque).convert("RGB") for f in anim.frames]
-    frame_ms = max(20, round(100 / anim.fps) * 10)  # GIF timing has 10ms resolution
-    durations = [frame_ms] * len(frames)
+    steps = anim.durations or (1.0,) * len(frames)
+    durations = [max(20, round(100 * step / anim.fps) * 10) for step in steps]  # GIF timing has 10ms resolution
+    frame_ms = durations[-1]
     if not anim.loop:
         durations[-1] = max(frame_ms, 1000)  # one-shot: hold the last frame, then replay for viewing
     path.parent.mkdir(parents=True, exist_ok=True)
