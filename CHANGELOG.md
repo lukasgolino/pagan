@@ -19,6 +19,18 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-21
+
+### Added
+
+- `sheet_columns: N` on sprites: frames per sheet row (default up to 8, as before) (#9, #1).
+- W014: the built sheet is over 16384 px on a side, which many engines (Godot included) can't load (#9, #1).
+
+### Changed
+
+- Sprite and tileset frames can be up to 4096x4096 (was 1024), e.g. a 1x 1920-wide splash or a parallax backdrop.
+  3D model frames stay at 1024 (#9).
+
 ## [0.15.0] - 2026-10-21
 
 ### Added
@@ -418,7 +430,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/lukasgolino/pagan/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/lukasgolino/pagan/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/lukasgolino/pagan/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/lukasgolino/pagan/compare/v0.13.0...v0.14.0

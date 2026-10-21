@@ -7,10 +7,11 @@ from pathlib import Path
 
 import numpy as np
 
-from pagan.asset import ASSET_SUFFIXES, Asset, Grid, load_asset
+from pagan.asset import ASSET_SUFFIXES, MAX_SHEET_SIDE, Asset, Grid, load_asset
 from pagan.findings import Finding, PaganError
 from pagan.palette import PALETTE_SUFFIX, TRANSPARENT, load_palette_file
 from pagan.project import Project
+from pagan.render import frame_rects
 
 WARNING_RULES = {
     "W001": "orphan pixel",
@@ -26,6 +27,7 @@ WARNING_RULES = {
     "W011": "rig pivot outside its part (mesh export)",
     "W012": "mesh-only model, but meshes aren't exported",
     "W013": "a model part's id has no voxels left (later parts cover it)",
+    "W014": "built sheet over 16384 px on a side",
 }
 
 
@@ -210,6 +212,24 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
                     f"animations.{anim.name}",
                 ),
                 anim.name,
+            )
+
+    if not asset.mesh_only:
+        factor = asset.supersample if asset.supersample is not None else project.config.supersample
+        rects = frame_rects(asset).values()
+        sheet_w = max(x + w for x, _, w, _ in rects) // factor
+        sheet_h = max(y + h for _, y, _, h in rects) // factor
+        if max(sheet_w, sheet_h) > MAX_SHEET_SIDE:
+            hint = "set sheet_columns to balance it, " if asset.kind == "sprite" else ""
+            add(
+                Finding(
+                    "W014",
+                    f"the built sheet is {sheet_w}x{sheet_h} px; textures over {MAX_SHEET_SIDE} px on a side fail to load in "
+                    f"many engines (Godot included). {hint}split the asset, or use fewer/smaller frames",
+                    asset.path,
+                    None,
+                    "sheet_columns" if asset.kind == "sprite" else ("columns" if asset.kind == "tileset" else "size"),
+                )
             )
 
     max_steps = project.config.lint.max_ramp_steps

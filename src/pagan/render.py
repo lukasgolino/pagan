@@ -40,9 +40,11 @@ def frame_image(asset: Asset, frame: str, variant: str | None = None) -> Image.I
 
 
 def sheet_columns(asset: Asset) -> int:
-    """Frames per row in sheets/atlases: a tileset's `columns`, else up to 8."""
+    """Frames per row in sheets/atlases: a tileset's `columns`, a sprite's `sheet_columns`, else up to 8."""
     count = len(asset.frames)
-    return asset.columns if asset.kind == "tileset" else max(1, min(count, 8))
+    if asset.kind == "tileset":
+        return asset.columns
+    return max(1, min(count, asset.sheet_columns or 8))
 
 
 def frame_rects(asset: Asset) -> dict[str, tuple[int, int, int, int]]:

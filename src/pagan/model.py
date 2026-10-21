@@ -21,6 +21,7 @@ from typing import Any
 import numpy as np
 
 from pagan.asset import (
+    MAX_MODEL_SIZE,
     MODEL_SUFFIX,
     NAME_RE,
     Animation,
@@ -935,7 +936,7 @@ def _setup(data: Any, path: Path | None, project: Project, error: ErrorFn, findi
     if "size" not in data and directions != 0:
         error("E001", "missing required field 'size' (the frame size in pixels)", _line(data), "size")
         return None
-    size = _parse_size(data["size"], "size", _line(data, "size"), error) if "size" in data else (0, 0)
+    size = _parse_size(data["size"], "size", _line(data, "size"), error, MAX_MODEL_SIZE) if "size" in data else (0, 0)
     if size is None or palette is None:
         return None
     width, height = size
