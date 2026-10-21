@@ -113,8 +113,8 @@ Then:
 questions, with your defaults: what it looks like (colors, key features), size, 2D or 3D, how many
 directions, which animations. Start with ONE asset and get it approved before making related ones.
 
-**Size is the requester's choice.** PAGAN makes any size (sprites/tiles up to 1024x1024; models any frame
-size). Small means less detail; that's the deal, so say so if a request is small for what it describes
+**Size is the requester's choice.** PAGAN makes any size (sprites/tiles up to 4096x4096, e.g. a 1x 1920-wide
+splash; model frames up to 1024). Small means less detail; that's the deal, so say so if a request is small for what it describes
 (e.g. "a 16px knight with a visible crest" won't read). To go bigger:
 - the same model, chunkier: raise `camera: { scale: 2 }` in the model and double `size`/`pivot`;
 - more detail: model it with more voxels at scale 1. For characters keep real depth and chunky parts

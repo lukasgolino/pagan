@@ -50,7 +50,8 @@ import` snaps to opaque colours only, and 3D model materials must be opaque (E01
 name: slime
 description: "Green slime enemy, front view."   # what it is / should look like (keep it current)
 palette: dusk                 # optional when pagan.toml has default_palette; open mode allows inline
-size: [16, 16]                # width, height of one frame (or "16x16")
+size: [16, 16]                # width, height of one frame (or "16x16"); up to 4096 each (models: 1024)
+sheet_columns: 8              # optional: frames per sheet row (default up to 8); W014 if the sheet passes 16384 px
 pivot: [8, 16]                # anchor in pixel-edge coords (0..w, 0..h); default [w//2, h]
 mirror: none                  # none | horizontal: author only the left ceil(w/2) columns
 outline: auto                 # none | auto: 1px outline added around opaque pixels (see "Outlines and shadows")
@@ -492,6 +493,8 @@ W008 too many shades from one ramp (sprites) / in one material (models), when `m
 Mesh export only (`export` has "mesh"): W009 a model overrides `[mesh] voxel_size`, W010 a part's voxels are
 separate pieces, W011 a rig pivot outside its part; W012 `directions: 0` (mesh only) without "mesh" in `export`.
 W013 (any model): a part id has no voxels left, because later parts cover (or carve) all of it.
+W014 (any asset): the built sheet is over 16384 px on a side (many engines, Godot too, won't load it): set
+`sheet_columns` (sprites) or `columns` (tilesets), or split the asset.
 Turn warnings off project-wide with `[lint] disable`, or per asset/frame/animation with the file's `lint:`.
 W001 isn't checked on 3D models (a rendered orphan can't be fixed pixel by pixel).
 

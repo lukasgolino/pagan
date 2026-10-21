@@ -23,7 +23,9 @@ MODEL_SUFFIX = ".model.yaml"
 ASSET_SUFFIXES = (SPRITE_SUFFIX, TILESET_SUFFIX, MODEL_SUFFIX)
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 FRAME_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-MAX_SIZE = 1024
+MAX_SIZE = 4096  # sprites and tilesets (frame / tile size)
+MAX_MODEL_SIZE = 1024  # 3D model frames (3D is frozen as of 0.9.0)
+MAX_SHEET_SIDE = 16384  # W014: the largest texture side many engines (Godot) accept
 DEFAULT_FPS = 8.0
 STATUSES = ("draft", "approved")
 MAX_PIXEL_FINDINGS = 8  # per frame, so one bad row doesn't drown everything else
@@ -39,7 +41,7 @@ _COMMON_FIELDS = (
 WARNING_ID_RE = re.compile(r"^W\d{3}$")
 _SPRITE_FIELDS = (
     *_COMMON_FIELDS, "size", "pivot", "mirror", "outline", "outline_color", "shadow", "frames", "animations", "nine_slice",
-    "font", "points",
+    "font", "points", "sheet_columns",
 )  # fmt: skip
 MAX_OUTLINE_WIDTH = 8  # per ring
 _FONT_FIELDS = ("glyphs", "cell", "baseline", "line_height", "advance", "spacing", "space")
@@ -104,6 +106,7 @@ class Asset:
     variants: dict[str, Variant] = field(default_factory=dict)
     pivot: tuple[int, int] = (0, 0)
     columns: int = 8  # tilesets: atlas layout
+    sheet_columns: int | None = None  # sprites: frames per sheet row (None = up to 8)
     mirror: bool = False
     outline: bool = False
     outline_color: str | None = None  # the first (innermost) outline ring's colour
@@ -356,17 +359,17 @@ def _shadow_clipped(grid: Grid, dx: int, dy: int) -> tuple[int, int] | None:
 # --- field helpers ----------------------------------------------------------------------------
 
 
-def _parse_size(raw: Any, field_name: str, line: int | None, error: ErrorFn) -> tuple[int, int] | None:
+def _parse_size(raw: Any, field_name: str, line: int | None, error: ErrorFn, limit: int = MAX_SIZE) -> tuple[int, int] | None:
     if isinstance(raw, str):
         match = re.fullmatch(r"(\d+)x(\d+)", raw.strip())
         raw = [int(match.group(1)), int(match.group(2))] if match else None
     if (
         isinstance(raw, list)
         and len(raw) == 2
-        and all(isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= MAX_SIZE for v in raw)
+        and all(isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= limit for v in raw)
     ):
         return (raw[0], raw[1])
-    error("E001", f"{field_name} must be [width, height] (or \"16x16\"), each 1-{MAX_SIZE}", line, field_name)
+    error("E001", f"{field_name} must be [width, height] (or \"16x16\"), each 1-{limit}", line, field_name)
     return None
 
 
@@ -1122,6 +1125,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
     shadow: tuple[int, int, str] | None = None
     pivot = (width // 2, height)
     columns = 8
+    sheet_columns: int | None = None
     if kind == "sprite":
         mirror_raw = data.get("mirror", "none")
         if mirror_raw not in ("none", "horizontal"):
@@ -1146,6 +1150,12 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             error("E011", "pagan.toml requires outlines: add `outline: auto`", _line(data), "outline")
         if "shadow" in data:
             shadow = _parse_shadow(data["shadow"], palette, _line(data, "shadow"), error)
+        if "sheet_columns" in data:
+            raw_columns = data["sheet_columns"]
+            if isinstance(raw_columns, bool) or not isinstance(raw_columns, int) or raw_columns < 1:
+                error("E001", "sheet_columns must be a positive integer (frames per sheet row)", _line(data, "sheet_columns"), "sheet_columns")
+            else:
+                sheet_columns = raw_columns
 
         if "pivot" in data:
             raw_pivot = data["pivot"]
@@ -1270,6 +1280,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             variants=variants,
             pivot=pivot,
             columns=columns,
+            sheet_columns=sheet_columns,
             mirror=mirror,
             outline=outline,
             outline_color=outline_color,

@@ -14,7 +14,7 @@ from string import Template
 from typing import Any
 
 from pagan import __version__, progress
-from pagan.asset import MODEL_SUFFIX, SPRITE_SUFFIX, TILESET_SUFFIX, Asset, load_asset_or_raise
+from pagan.asset import MAX_MODEL_SIZE, MAX_SIZE, MODEL_SUFFIX, SPRITE_SUFFIX, TILESET_SUFFIX, Asset, load_asset_or_raise
 from pagan.findings import Finding, PaganError, display_path
 from pagan.build import build
 from pagan.buildinfo import is_editable, version_string
@@ -225,9 +225,9 @@ palette:                  # inline palette (open mode); or name a palette file i
 """
 
 
-def _parse_size_arg(text: str) -> tuple[int, int]:
+def _parse_size_arg(text: str, limit: int = MAX_SIZE) -> tuple[int, int]:
     parts = text.lower().split("x")
-    if len(parts) != 2 or not all(p.isdigit() and 0 < int(p) <= 1024 for p in parts):
+    if len(parts) != 2 or not all(p.isdigit() and 0 < int(p) <= limit for p in parts):
         raise _usage_error(f"invalid size {text!r}: use WIDTHxHEIGHT, e.g. 16x16")
     return int(parts[0]), int(parts[1])
 
@@ -325,7 +325,7 @@ def cmd_new_model(args: argparse.Namespace, out: Output) -> int:
     if not NAME_RE.match(name):
         raise _usage_error(f"invalid name {name!r}: use lowercase letters, digits, '_' or '-'")
     project = _require_project()
-    width, height = _parse_size_arg(args.size)
+    width, height = _parse_size_arg(args.size, MAX_MODEL_SIZE)
     palette_name = args.palette or project.config.default_palette
     if palette_name is None and project.config.palette_mode != "open":
         raise _usage_error(

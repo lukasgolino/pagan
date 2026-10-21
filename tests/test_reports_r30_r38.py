@@ -1,7 +1,8 @@
 """LOOSE! title-logo reports R30-R38 (GitHub issues #1-#9): translucent palette colours (#2), wide/stacked
 outlines and drop shadows (#3), rotated/scaled derived frames (#4),
 per-frame attachment points (#5), numpy-friendly `pagan.api` (#6), faster lint of big
-sprites (#7), per-frame durations (#8)."""
+sprites (#7), per-frame durations (#8), bigger canvases,
+`sheet_columns` and the sheet-size warning (#9, R30c)."""
 
 from __future__ import annotations
 
@@ -414,3 +415,43 @@ def test_durations_in_manifest_godot_and_gif(tmp_path: Path) -> None:
             image.seek(i)
             shown.append(image.info["duration"])
     assert shown == [100, 300]
+
+
+# --- R38 (#9) + R30c (#1): canvases up to 4096, sheet_columns, W014 ------------------------------
+
+
+def _wide(width: int, frames: int, extra: str = "") -> str:
+    row = "1" + "." * (width - 1)
+    body = "".join(f"  f{i}: |\n    {row}\n" for i in range(frames))
+    return f"name: wide\nsize: [{width}, 1]\nlint: {{ disable: [W001] }}\n{extra}frames:\n{body}"
+
+
+def test_sprites_can_be_4096_wide_models_stay_1024(load: LoadFn, tmp_path: Path) -> None:
+    asset, findings = load(_wide(4096, 1), name="wide")
+    assert asset is not None, [f.format() for f in findings]
+    _, findings = load(_wide(4097, 1), name="wide")
+    assert rules(findings) == {"E001"} and "1-4096" in findings[0].message
+    (tmp_path / "m").mkdir()
+    project = make_project(tmp_path / "m")
+    (project.root / "models").mkdir()
+    path = project.root / "models" / "box.model.yaml"
+    path.write_text('name: box\nsize: [2048, 16]\nmaterials:\n  m: { keys: ["1"] }\nparts:\n  - { box: [0, 0, 0, 1, 1, 1], material: m }\n')
+    assert any("1-1024" in f.message for f in load_asset(path, project)[1])
+
+
+def test_sheet_columns_and_w014(tmp_path: Path) -> None:
+    from pagan.lint import lint_paths
+    from pagan.render import frame_rects
+
+    project = make_project(tmp_path)
+    path = project.root / "sprites" / "wide.sprite.yaml"
+    path.write_text(_wide(4096, 5))  # 5 in a row: 20480 px wide
+    result = lint_paths(project)
+    assert [f.rule for f in result.warnings] == ["W014"] and "20480x1" in result.warnings[0].message
+    path.write_text(_wide(4096, 5, "sheet_columns: 2\n"))
+    result = lint_paths(project)
+    assert not result.findings, [f.format() for f in result.findings]
+    asset = result.assets[0]
+    assert frame_rects(asset)["f2"] == (0, 1, 4096, 1)
+    path.write_text(_wide(16, 2, "sheet_columns: 0\n"))
+    assert rules(lint_paths(project).findings) == {"E001"}
