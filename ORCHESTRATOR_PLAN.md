@@ -339,3 +339,79 @@ filed them so each has an id and an answer.
   every asset with a `base_variant` (islands, water, ports: "variant temperate has neither a sheet nor a swap
   table"), so with v0.6.1 it would still have failed after R18. Checked: your whole `art/` (with a `font:` on
   font_small) builds and passes `--verify-godot` twice in a row on v0.7.0.
+
+
+## LOOSE! title logo: pushing 2D to its limits — 2026-10-20, pagan v0.9.0 (2bbb04c)
+
+LOOSE! (Godot 4.7.2, 1280x720 UI) built an animated, layered title logo with PAGAN: 5 sprites (`logo_letters`
+40 frames of 160x195, `logo_arrow` 20 of 256x131, `logo_fx` 26 of 237x154, `logo_shine` 14 of 622x219,
+`logo_rays` 10 of 640x300), a 46-colour palette with 6-8-step ramps, all written by a generator
+(`loose/art/tools/gen_logo.py`) on `pagan.api` + numpy/scipy. Everything lints clean and builds; the game
+composes the layers itself. What we hit, most important first. Generic proposals; repros are minimal.
+
+### R30 · feature · high · No trimmed / packed frames; layered art needs an anchor table outside PAGAN
+Every frame of a sprite is the same size on a fixed 8-column grid, so layers that must line up (letters, the arrow
+stuck in one of them, effects at the impact point) either use full-canvas frames (mostly transparent; a 40-frame
+1024x1024 sprite is an 8192x5120 sheet) or tight cells whose placement PAGAN can't express. We wrote our own
+`data/pixel_logo.json` (where each layer's pivot sits in logo space) next to the build output.
+Repro: any two sprites meant to overlay at a fixed offset; or one sprite with a 30x30 frame and a 600x200 frame.
+Proposal: (a) `trim: true`: frames cropped to content, manifest per frame `rect` + `offset` (Godot: AtlasTexture
+`margin`), so full-canvas layers cost nothing; (b) a `composite`/`layers` asset (or `anchors:` per sprite: named
+points in a shared space, in the manifest) so layer positions come from PAGAN; (c) `sheet_columns` / max sheet
+width with a warning before the sheet passes 16384 px (Godot's texture limit: 128 frames of 1024 px silently would).
+
+### R31 · feature · high · Palette colours have no alpha
+Drop shadows, glows, light rays and smoke need translucency; with opaque palette colours we draw shadows in the game
+(the same frames modulated to 50 % black) and the sunburst with an additive material, or dither (screen-door).
+Repro: `"s": { hex: "#00000080" }` -> E005. Proposal: `#rrggbbaa` (or `alpha:` per colour) for strict palettes;
+lint can keep pixel-art purists honest with an opt-in rule.
+
+### R32 · feature · high · Outline is 1 px only; no drop shadow
+`outline: auto` is a fixed 1 px of one colour. Pixel UI over smooth 3D needs 2-4 px outlines, double outlines (ink +
+light rim) and a drop shadow; we compute all three in the generator (distance transform).
+Proposal: `outline: { width: 3, color: "0" }`, a list for stacked outlines, and `shadow: { offset: [3, 4], color }`
+(with R31, a translucent one). E007 should account for the width.
+
+### R33 · feature · medium · Derived frames can't rotate or scale
+`from` supports `flip` and `shift` only. Squash/stretch (landing), wobble (a sign tipping about its base) and
+pulsing need rotate/scale about a point; we re-render geometry in the generator instead.
+Proposal: `{ from: idle, scale: [1.2, 0.8], rotate: 6, about: pivot }` (nearest-neighbour or RotSprite), linted
+like any frame.
+
+### R34 · feature · medium · Per-frame attachment points (sockets)
+An effect must follow a moving point (our fire rides the "!" while it wobbles; we export per-frame offsets in our
+own JSON). Proposal: `points: { impact: { wob00: [x, y], ... } }` (or per frame) -> manifest, so engines attach
+particles, weapons, hit boxes to animated sprites; `pagan preview` could draw them.
+
+### R35 · feature · medium · `pagan.api` is slow and list-based for big canvases; no dithering helper
+`Canvas` is a list of lists and draws per pixel in Python: fine at 16 px, painful at 640x300x60 frames. We did
+everything in numpy and only handed PAGAN row strings. Also missing: ordered dithering between ramp steps (the main
+pixel-art shading tool at this size), polygon/mask distance fields, normals from a height field.
+Proposal: `Canvas.from_array(np.ndarray)` / `.to_array()`, `api.dither(ramp, t, x, y, matrix=4)` (vectorised),
+`api.distance_field(mask)`, `api.bevel(mask, width, light)` returning a 0..1 shade, `api.text(canvas, font_asset,
+"THWACK!", x, y, scale)` using a project `font:` sprite. Nit: `api.sprite_yaml` crashes on numpy ints
+(`RepresenterError: np.int64`) in `pivot`/`size`; coercing to int would help.
+
+### R36 · friction · medium · Big sprites: huge YAML, slow lint/build
+Measured (WSL2, 6 cores): 40 frames of 1024x1024 = a 42 MB `.sprite.yaml`; `pagan lint` 83 s, `pagan build` 98 s
+(single-threaded; ~2 s per megapixel). Our logo (~6.6 MP over 110 frames) adds ~15 s to every build in CI.
+Repro: `api.Canvas(1024, 1024)` x 40 frames with an ellipse each -> `pagan lint`.
+Proposal: cache lint/render per sprite by content hash (as models are), parallelise sprites like models
+(`PAGAN_JOBS`), and allow indexed-PNG frame sources (`frames_png: logo.png` + a key map) or RLE rows for
+generator-made art.
+
+### R37 · feature · low · Animation timing is one fps per animation
+Holds (an impact frame shown 3x longer, a pause before a loop restarts) mean repeating frame names
+(`[impact4, impact4, impact4, ...]`, which works). Proposal: per-frame `durations: [1, 1, 3]` (Godot SpriteFrames
+supports frame duration natively) and `loop_from: N` (intro then loop in one animation).
+
+### R38 · feature · low · No 2D canvas cap above 1024 and no `supersample` for pixel art at 2x
+1024x1024 per frame is fine for UI at 2x (our 640x240 logo), but a 1x 1920-wide splash or a parallax backdrop is
+impossible; `size` > 1024 -> E001. Proposal: raise the cap (4096) with a lint warning about sheet size (see R30c).
+
+### R39 · ok · Strong points worth keeping
+Strict palettes with long ramps, `lint: { disable, max_ramps }` per asset, repeated frames in animations,
+SpriteFrames `.tres` per sprite with every animation (fps/loop) straight into AnimatedSprite2D, `pivot` in the
+manifest, `pagan preview` GIFs with change rows, and
+`Canvas.fade` for dissolving smoke and the THWACK text. v0.9.0 upgrade: rebuild was clean; D5/D10 fixes confirmed
+(`--verify-godot` back in our CI).
