@@ -165,3 +165,29 @@ def test_text_mask_errors() -> None:
         api.text_mask("H", _font(), size=10, cap_height=10)
     with pytest.raises(ValueError):
         api.text_mask("H", _font(), size=10, variation={"wght": 900})  # not a variable font
+
+
+def test_reference_api_calls_exist() -> None:
+    # #33: every call the skill's reference shows for `pagan.api` must exist where it says: `api.x` / bare `x(` on
+    # the module, `canvas.x(` / `Canvas.x(` on Canvas (bare calls may also be Canvas/TextMask methods, which the
+    # Canvas bullet lists without a prefix). Callbacks the reader writes are not API.
+    import re
+
+    reference = (Path(api.__file__).parent / "skill" / "reference.md").read_text(encoding="utf-8")
+    section = reference.split("## Generator scripts: `pagan.api`")[1].split("\n## ")[0]
+    callbacks = {"draw", "field", "paint"}
+    missing = []
+    for code in re.findall(r"`([^`]+)`", section):
+        for match in re.finditer(r"(?<![\w.])(api\.|canvas\.|Canvas\.)?([A-Za-z_]\w*)\(", code):
+            prefix, name = match.groups()
+            if prefix == "api.":
+                ok = name in api.__all__
+            elif prefix in ("canvas.", "Canvas."):
+                ok = hasattr(api.Canvas, name)
+            else:
+                ok = name in callbacks or name in api.__all__ or hasattr(api.Canvas, name) or hasattr(api.TextMask, name)
+            if not ok:
+                missing.append(match.group(0))
+        missing += [f"api.{name}" for name in re.findall(r"api\.(\w+)", code) if name not in api.__all__]
+    assert not missing
+    assert "canvas.text(" in section and not re.search(r"(?<![\w.])text\(", section)  # a Canvas method, not api.text
