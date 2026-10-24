@@ -19,6 +19,11 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+### Fixed
+
+- `--quiet` after a subcommand (`pagan preview <asset> --quiet`) no longer shares its attribute with the top-level
+  `--quiet`, so it turns progress lines off whatever argparse does with subcommand defaults (#38).
+
 ## [0.17.0] - 2026-10-21
 
 ### Added

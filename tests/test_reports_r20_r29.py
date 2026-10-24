@@ -208,6 +208,25 @@ def test_progress_lines_on_stderr_only(project: Project, capsys: pytest.CaptureF
     assert capsys.readouterr().err == ""  # cached: nothing slow to report
 
 
+@pytest.mark.parametrize("argv", [["preview", "boat", "--quiet"], ["preview", "--quiet", "boat"], ["--quiet", "preview", "boat"]])
+def test_preview_quiet_silences_progress(
+    argv: list[str], project: Project, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # #38: --quiet anywhere on the command line turns the render progress lines off.
+    monkeypatch.delenv("PAGAN_QUIET", raising=False)
+    monkeypatch.setenv("PAGAN_JOBS", "1")
+    (project.root / "models").mkdir()
+    (project.root / "models" / "boat.model.yaml").write_text(BOAT.replace("directions: 32", "directions: 4"))
+    monkeypatch.chdir(project.root)
+    assert main(argv) == 0
+    assert capsys.readouterr().err == ""
+    assert main(["preview", "boat"]) == 0
+    assert capsys.readouterr().err == ""  # cached
+    (project.root / "models" / "boat.model.yaml").write_text(BOAT.replace("directions: 32", "directions: 8"))
+    assert main(["preview", "boat"]) == 0
+    assert "pagan: rendering boat" in capsys.readouterr().err
+
+
 def test_godot_timeout_must_be_positive(tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
     project = _godot_project(tmp_path)
     monkeypatch.setenv("GODOT", "/nonexistent/godot")

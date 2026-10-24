@@ -1231,7 +1231,9 @@ def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     # SUPPRESS: a subcommand's --json doesn't reset a --json given before the subcommand.
     common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="machine-readable JSON output")
-    common.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help="no progress lines on stderr")
+    # Its own dest: whether the top-level parser's value survives a subparser's default differs between Python
+    # versions, so the two flags never share an attribute.
+    common.add_argument("--quiet", dest="sub_quiet", action="store_true", help="no progress lines on stderr")
 
     parser = argparse.ArgumentParser(
         prog="pagan",
@@ -1429,7 +1431,8 @@ def main(argv: Sequence[str] | None = None, *, show_progress: bool = True) -> in
     if handler is None:
         parser.print_help()
         return 0
-    progress.enabled = show_progress and not getattr(args, "quiet", False) and os.environ.get("PAGAN_QUIET", "") in ("", "0")
+    quiet = getattr(args, "quiet", False) or getattr(args, "sub_quiet", False)
+    progress.enabled = show_progress and not quiet and os.environ.get("PAGAN_QUIET", "") in ("", "0")
     out = Output(as_json=getattr(args, "json", False))
     try:
         return handler(args, out)
