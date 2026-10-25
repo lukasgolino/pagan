@@ -44,7 +44,7 @@ _SPRITE_FIELDS = (
     "font", "points", "sheet_columns",
 )  # fmt: skip
 MAX_OUTLINE_WIDTH = 8  # per ring
-_FONT_FIELDS = ("glyphs", "cell", "baseline", "line_height", "advance", "spacing", "space")
+_FONT_FIELDS = ("glyphs", "cell", "baseline", "line_height", "advance", "spacing", "space", "advances", "offsets", "skip_blank")
 Margins = tuple[int, int, int, int]  # left, top, right, bottom
 _TILESET_FIELDS = (*_COMMON_FIELDS, "tile_size", "columns", "tiles", "animations", "export_textures")
 
@@ -80,6 +80,9 @@ class Font:
     advance: int | None  # fixed advance; None = each glyph's drawn width + spacing
     spacing: int
     space: int  # advance of a blank glyph (" ") when advance is auto
+    advances: dict[str, int] = field(default_factory=dict)  # per-character advance, over `advance`
+    offsets: dict[str, tuple[int, int]] = field(default_factory=dict)  # per-character (x, y) draw offset from the pen
+    skip_blank: bool = False  # blank cells (other than whitespace characters) aren't glyphs: the engine falls back
 
 
 @dataclass(frozen=True)
@@ -1528,7 +1531,10 @@ def _parse_points(
 
 def _parse_font(raw: Any, frames: dict[str, Grid], size: tuple[int, int], line: int | None, error: ErrorFn) -> Font | None:
     """`font: { glyphs: "ABC...", cell: [6, 8], baseline: 7, advance: auto, spacing: 1, space: 3 }`."""
-    usage = "font must be { glyphs: \"ABC...\", cell: [w, h], baseline: N, line_height: N, advance: auto | N, spacing: N, space: N }"
+    usage = (
+        "font must be { glyphs: \"ABC...\", cell: [w, h], baseline: N, line_height: N, advance: auto | N, spacing: N, "
+        "space: N, advances: { char: N }, offsets: { char: x | [x, y] }, skip_blank: true }"
+    )
     if not isinstance(raw, dict):
         error("E001", usage, line, "font")
         return None
@@ -1581,13 +1587,67 @@ def _parse_font(raw: Any, frames: dict[str, Grid], size: tuple[int, int], line: 
     if len(glyphs) > cells:
         error("E001", f"font.glyphs has {len(glyphs)} characters but the frames hold {cells} glyph cells", where_line("glyphs"), "font.glyphs")
         return None
-    font = Font(glyphs, cell, baseline, line_height, advance, spacing, space)
+    per_char: dict[str, dict[str, Any]] = {}
+    for key in ("advances", "offsets"):
+        value = raw.get(key, {})
+        if not isinstance(value, dict) or any(not isinstance(c, str) or len(c) != 1 or c not in glyphs for c in value):
+            error("E001", f"font.{key} maps single characters of font.glyphs to numbers, e.g. {{ \"i\": 2 }}", where_line(key), f"font.{key}")
+            ok = False
+            continue
+        per_char[key] = value
+    advances: dict[str, int] = {}
+    for char, value in per_char.get("advances", {}).items():
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 4 * cell_w:
+            error("E001", f"font.advances[{char!r}] must be a whole number 0-{4 * cell_w}", where_line("advances"), f"font.advances.{char}")
+            ok = False
+        else:
+            advances[char] = value
+    offsets: dict[str, tuple[int, int]] = {}
+    for char, value in per_char.get("offsets", {}).items():
+        pair = [value, 0] if isinstance(value, int) and not isinstance(value, bool) else value
+        if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(v, int) and not isinstance(v, bool) for v in pair)) or not (
+            abs(pair[0]) <= cell_w and abs(pair[1]) <= cell_h
+        ):
+            error("E001", f"font.offsets[{char!r}] must be x or [x, y] in whole pixels, at most a cell ({cell_w}x{cell_h}) either way", where_line("offsets"), f"font.offsets.{char}")
+            ok = False
+        else:
+            offsets[char] = (pair[0], pair[1])
+    skip_blank = raw.get("skip_blank", False)
+    if not isinstance(skip_blank, bool):
+        error("E001", "font.skip_blank must be true or false", where_line("skip_blank"), "font.skip_blank")
+        ok, skip_blank = False, False
+    font = Font(glyphs, cell, baseline, line_height, advance, spacing, space, advances, offsets, skip_blank)
     for index, (frame, grid) in enumerate(glyph_cells(font, frames, size)):
         if index >= len(glyphs) and any(c != TRANSPARENT for row in grid for c in row):
             error("E001", f"frame {frame!r} has drawn glyph cells past the {len(glyphs)} characters in font.glyphs; add their characters", where_line("glyphs"), "font.glyphs")
             ok = False
             break
     return font if ok else None
+
+
+def font_glyphs(font: Font, frames: dict[str, Grid], size: tuple[int, int]) -> list[tuple[str, str, int, Grid]]:
+    """The font's glyphs in order: (character, frame name, cell index in that frame, cell pixels). With
+    `skip_blank`, blank cells of non-whitespace characters are left out (the font has no such glyph)."""
+    out: list[tuple[str, str, int, Grid]] = []
+    counters: dict[str, int] = {}
+    for char, (frame, grid) in zip(font.glyphs, glyph_cells(font, frames, size), strict=False):
+        index = counters.get(frame, 0)
+        counters[frame] = index + 1
+        if font.skip_blank and not char.isspace() and all(c == TRANSPARENT for row in grid for c in row):
+            continue
+        out.append((char, frame, index, grid))
+    return out
+
+
+def glyph_advance(font: Font, char: str, grid: Grid) -> int:
+    """How far the pen moves after `char`: font.advances, else the fixed advance, else the drawn width (to the
+    rightmost pixel) + spacing (`space` for a blank glyph)."""
+    if char in font.advances:
+        return font.advances[char]
+    if font.advance is not None:
+        return font.advance
+    drawn = max((i + 1 for row in grid for i, c in enumerate(row) if c != TRANSPARENT), default=0)
+    return drawn + font.spacing if drawn else font.space
 
 
 def glyph_cells(font: Font, frames: dict[str, Grid], size: tuple[int, int]) -> list[tuple[str, Grid]]:

@@ -134,6 +134,58 @@ def test_font_cell_must_divide_the_frame(load: LoadFn) -> None:
     assert asset is None and any("whole cells" in f.message for f in findings)
 
 
+FONT3 = """\
+name: font
+size: [12, 4]
+outline: none
+font: {{ glyphs: "lE?", cell: [4, 4], baseline: 3, advance: auto, space: 2{extra} }}
+lint: {{ disable: [W001] }}
+frames:
+  sheet: |
+    1...111.....
+    1...1.......
+    1...111.....
+    ............
+"""
+
+
+def test_font_advances_offsets_and_skip_blank(tmp_path: Path) -> None:
+    # #34: per-glyph advances and offsets reach the manifest and the .fnt; skip_blank leaves blank cells out.
+    project = _built_project(tmp_path)
+    (project.root / "sprites" / "font.sprite.yaml").write_text(FONT3.format(extra=""))
+    font = _manifest(project)["assets"]["font"]["font"]
+    assert font["glyphs"]["?"] == {"rect": [8, 0, 4, 4], "advance": 2}  # a blank cell is a space-wide glyph
+    extra = ', advances: { "l": 3 }, offsets: { "l": 1, "E": [-1, 1] }, skip_blank: true'
+    (project.root / "sprites" / "font.sprite.yaml").write_text(FONT3.format(extra=extra))
+    font = _manifest(project)["assets"]["font"]["font"]
+    assert set(font["glyphs"]) == {"l", "E"} and font["glyph_order"] == "lE?"
+    assert font["glyphs"]["l"] == {"rect": [0, 0, 4, 4], "advance": 3, "offset": [1, 0]}
+    assert font["glyphs"]["E"] == {"rect": [4, 0, 4, 4], "advance": 4, "offset": [-1, 1]}
+    fnt = (tmp_path / "out" / "fonts" / "font.fnt").read_text()
+    assert "chars count=2" in fnt and "char id=63" not in fnt
+    assert "char id=108 x=0 y=0 width=4 height=4 xoffset=1 yoffset=0 xadvance=3" in fnt
+    assert "char id=69 x=4 y=0 width=4 height=4 xoffset=-1 yoffset=1 xadvance=4" in fnt
+    asset = api.load(project.root / "sprites" / "font.sprite.yaml", load_project(project.root))
+    assert api.Canvas(8, 4).text(asset, "lE", 0, 0).rows() == [".1......", ".1111...", ".11.....", "..111..."]
+    with pytest.raises(ValueError, match="no glyph for '\\?'"):
+        api.Canvas(8, 4).text(asset, "?", 0, 0)
+
+
+@pytest.mark.parametrize(
+    "extra, where",
+    [
+        (', advances: { "x": 3 }', "font.advances"),
+        (', advances: { "l": -1 }', "font.advances.l"),
+        (', offsets: { "l": [1, 2, 3] }', "font.offsets.l"),
+        (', offsets: { "l": 9 }', "font.offsets.l"),
+        (", skip_blank: 1", "font.skip_blank"),
+    ],
+)
+def test_font_glyph_metric_errors(load: LoadFn, extra: str, where: str) -> None:
+    asset, findings = load(FONT3.format(extra=extra), "font")
+    assert asset is None and any(f.rule == "E001" and f.where == where for f in findings), [f.format() for f in findings]
+
+
 @needs_godot
 def test_godot_loads_the_font(tmp_path: Path) -> None:
     project = _godot_project(tmp_path)
