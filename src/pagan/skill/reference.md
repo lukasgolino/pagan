@@ -114,13 +114,14 @@ unless `about` says otherwise), then shift; E010 if opaque pixels would leave th
 ```yaml
 outline: { width: 3, color: "0" }                            # a 3px ring (round corners); color default: outline_color
 outline: [{ width: 2, color: "0" }, { width: 1, color: "7" }]  # stacked, innermost first: ink + light rim
+outline: { width: 1, skip_translucent: true }                # ring only opaque pixels: glows/halos ("#rrggbbaa") stay soft
 shadow: { offset: [3, 4], color: "s" }                       # drop shadow of the outlined shape (+x right, +y down)
 ```
 
 Width 1 is exactly `outline: auto`; wider rings take every transparent pixel within `width` pixels (centre to
 centre) of the shape, up to 8 per ring. The shadow goes under the sprite (only on transparent pixels); a
 translucent colour (`"#00000080"`) suits it. Leave a transparent border as wide as all rings together, and room
-for the shadow on its side (E007). With `supersample`, widths and offsets are in source pixels.
+for the shadow on its side (E007; with `skip_translucent` on every ring, translucent pixels may touch the edge). With `supersample`, widths and offsets are in source pixels.
 
 ## Tileset - `tiles/<name>.tiles.yaml`
 
