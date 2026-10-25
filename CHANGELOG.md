@@ -24,6 +24,13 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 - `skip_translucent: true` on an outline ring (`outline: { width: 1, skip_translucent: true }`): the ring goes around
   opaque pixels only, so translucent glows and halos (`"#rrggbbaa"` colours) keep their soft edge and aren't
   painted over. When every ring skips them, translucent pixels may touch the canvas edge (no E007) (#37).
+- `pagan fit <model> --write`: sets the file's `size` and `pivot` to the fit (in-place text edit, comments kept);
+  the `--json` result says whether it `written` anything (#35).
+
+### Changed
+
+- W003 for 3D models no longer counts flat one-key materials (`{ keys: ["a"] }` LEDs, screens) as ramps, unless a
+  shaded material uses the same key (#35).
 
 ### Fixed
 

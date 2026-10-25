@@ -351,8 +351,14 @@ def _bbox(grid: Grid) -> tuple[int, int, int, int] | None:
 
 
 def _ramps_used(asset: Asset) -> list[str]:
-    """Smallest set of ramps (greedy) covering the asset's colors; colors in no ramp are ignored."""
+    """Smallest set of ramps (greedy) covering the asset's colors; colors in no ramp are ignored. A model's
+    flat one-key materials (LEDs, screens: `{ keys: ["a"] }`) aren't shading ramps, so their keys don't count
+    unless a shaded material uses them too."""
     used = {c for grid in asset.base_frames.values() for row in grid for c in row if c != TRANSPARENT}
+    if asset.mesh is not None:
+        materials = asset.mesh.materials.values()
+        shaded = {k for m in materials if len(set(m.keys)) > 1 for k in m.keys}
+        used -= {m.keys[0] for m in materials if len(set(m.keys)) == 1} - shaded - {asset.outline_color}
     ramps = {name: set(keys) for name, keys in asset.palette.ramps.items()}
     uncovered = {k for k in used if any(k in keys for keys in ramps.values())}
     chosen: list[str] = []

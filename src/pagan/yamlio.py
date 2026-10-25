@@ -17,7 +17,7 @@ class LineMap(dict[Any, Any]):
         super().__init__()
         self.line: int | None = None
         self.key_lines: dict[Any, int] = {}
-        # key -> (line, start column, end column) of a scalar value, 1-based line, 0-based columns
+        # key -> (line, start column, end column) of a one-line scalar or [flow, list] value, 1-based line, 0-based columns
         self.value_spans: dict[Any, tuple[int, int, int]] = {}
 
     def line_of(self, key: Any) -> int | None:
@@ -77,7 +77,8 @@ def _construct_mapping(loader: _Loader, node: yaml.MappingNode) -> LineMap:
         result[key] = loader.construct_object(value_node, deep=True)
         result.key_lines[key] = line
         start, end = value_node.start_mark, value_node.end_mark
-        if isinstance(value_node, yaml.ScalarNode) and start.line == end.line:
+        one_line = isinstance(value_node, yaml.ScalarNode) or (isinstance(value_node, yaml.SequenceNode) and value_node.flow_style)
+        if one_line and start.line == end.line:  # scalars and [flow, lists] on one line can be edited in place
             result.value_spans[key] = (start.line + 1, start.column, end.column)
     return result
 

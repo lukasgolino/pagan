@@ -253,6 +253,25 @@ def test_fit_suggests_a_frame_for_every_pose(project: Project, capsys: pytest.Ca
     assert json.loads(capsys.readouterr().out)["clipped"] == []
 
 
+def test_fit_write_sets_size_and_pivot(project: Project, capsys: pytest.CaptureFixture[str]) -> None:
+    # #35: --write edits the file (keeping comments) so the model passes lint without a manual patch.
+    path = write_model(project, MAST.format(pose="{ mast: { pitch: -90 } }").replace("to: [0, 0, 9]", "to: [0, 0, 20]"))
+    path.write_text(path.read_text().replace("outline: none", "outline: auto  # keep me"))
+    _, findings = load_asset(path, load_project(project.root))
+    assert any(f.rule == "E007" for f in findings)
+    assert main(["fit", str(path), "--write", "--even", "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["written"] is True
+    text = path.read_text()
+    assert f"size: [{result['size'][0]}, {result['size'][1]}]" in text and f"pivot: [{result['pivot'][0]}, {result['pivot'][1]}]" in text
+    assert "outline: auto  # keep me" in text
+    asset, findings = load_asset(path, load_project(project.root))
+    assert asset is not None and not [f for f in findings if f.severity == "error"], [f.format() for f in findings]
+    assert main(["fit", str(path), "--write", "--even", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["written"] is False  # already fits: nothing to change
+    assert path.read_text() == text
+
+
 def test_fit_rejects_sprites(project: Project, load: LoadFn) -> None:
     load(BURST, "burst")
     assert main(["fit", str(project.root / "sprites" / "burst.sprite.yaml")]) == 1

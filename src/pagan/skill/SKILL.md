@@ -152,7 +152,7 @@ splash; model frames up to 1024). Small means less detail; that's the deal, so s
    A warning that's wrong *by design* for one asset (an expanding burst trips W005/W007) goes in that
    file's `lint: { disable: [...] }` or `lint: { for: { <frame>: [...] } }` - never in pagan.toml, which
    would hide real problems everywhere. Models: `pagan fit <model>` gives a size and pivot that fit
-   every heading and pose (after adding animations, run it again).
+   every heading and pose; `--write` puts them in the file (after adding animations, run it again).
 4. `pagan preview <name>` -> **open `previews/<name>/sheet.png` with the Read tool and look at it.**
    (It also writes 1x frames to `previews/<name>/native/` for scripted montages.)
 5. Self-review against STYLE.md and the reference assets (`pagan gallery` shows the whole set):

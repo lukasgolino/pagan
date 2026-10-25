@@ -21,7 +21,7 @@ from pagan.buildinfo import is_editable, version_string
 from pagan.exporters.godot import find_godot_binary, find_godot_project, res_path, verify_with_godot
 from pagan.importer import import_png, sprite_yaml
 from pagan.lint import lint_paths
-from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_style, catalogue, mark, outdated
+from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_style, catalogue, mark, outdated, set_top_level_field
 from pagan.palette import KEY_ORDER, NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.model import part_cells
@@ -804,9 +804,17 @@ def cmd_fit(args: argparse.Namespace, out: Output) -> int:
             f"the origin stays on the pivot{f', {fit.margin}px margin' if fit.margin else ''})")  # fmt: skip
     if fit.grown_for_pivot:
         out.say("  the model doesn't reach its origin (an overlay?): the frame is grown to hold the pivot")
-    if fit.clipped:
+    if fit.clipped and not args.write:
         shown = ", ".join(fit.clipped[:8]) + (f" and {len(fit.clipped) - 8} more" if len(fit.clipped) > 8 else "")
         out.say(f"  {len(fit.clipped)} frames don't fit the current size: {shown}")
+    written = False
+    if args.write and (fit.size, fit.pivot) != (fit.current_size, fit.current_pivot):
+        set_top_level_field(path, "size", f"[{w}, {h}]")
+        set_top_level_field(path, "pivot", f"[{px}, {py}]")
+        written = True
+        out.say(f"  wrote size and pivot to {display_path(path)}")
+    elif args.write:
+        out.say(f"  {display_path(path)} already has this size and pivot")
     out.result(
         {
             "asset": fit.name,
@@ -816,6 +824,7 @@ def cmd_fit(args: argparse.Namespace, out: Output) -> int:
             "current_pivot": list(fit.current_pivot),
             "clipped": fit.clipped,
             "grown_for_pivot": fit.grown_for_pivot,
+            "written": written,
         }
     )
     return 0
@@ -1307,6 +1316,7 @@ def build_parser() -> argparse.ArgumentParser:
     fit_cmd.add_argument("model", help="model file or name")
     fit_cmd.add_argument("--margin", type=int, default=0, help="extra empty pixels on every side (default 0)")
     fit_cmd.add_argument("--even", action="store_true", help="even width and height, so godot_offset is whole pixels")
+    fit_cmd.add_argument("--write", action="store_true", help="set the model file's size and pivot to the fit (a text edit: comments stay)")
     fit_cmd.set_defaults(handler=cmd_fit)
 
     imp = commands.add_parser("import", parents=[common], help="convert a PNG into a sprite source file")
