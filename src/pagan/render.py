@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from pagan.asset import Asset, Grid
+from pagan.asset import Asset, Grid, TileShape
 from pagan.palette import TRANSPARENT
 from pagan.project import Project
 
@@ -58,6 +58,58 @@ def frame_rects(asset: Asset) -> dict[str, tuple[int, int, int, int]]:
         name: ((i % columns) * width, (i // columns) * height, width, height)
         for i, name in enumerate(asset.frames)
     }
+
+
+def tile_origin(shape: TileShape, column: int, row: int, size: tuple[int, int]) -> tuple[int, int]:
+    """Top-left pixel of map cell (column, row) as Godot 4.7.2's TileMapLayer places it (map_to_local, measured),
+    for square and isometric tiles. Isometric positions step by half a tile; odd sizes round down."""
+    width, height = size
+    if shape.shape == "square":
+        return column * width, row * height
+    if shape.shape != "isometric":
+        raise ValueError(f"tile_shape {shape.shape} isn't supported here (square and isometric are)")
+    c, r = column, row
+    # In half tiles (x, y) from the map origin's tile.
+    if shape.layout in ("stacked", "stacked_offset"):
+        shift = r % 2 if shape.offset_axis == "horizontal" else c % 2
+        if shape.layout == "stacked_offset":
+            shift = 1 - shift
+        x, y = (2 * c + shift, r) if shape.offset_axis == "horizontal" else (c, 2 * r + shift)
+    elif shape.layout == "stairs_right":
+        x, y = 2 * c + r, r
+    elif shape.layout == "stairs_down":
+        x, y = c, c + 2 * r
+    elif shape.layout == "diamond_right":
+        x, y = c + r, r - c
+    else:  # diamond_down
+        x, y = c - r, c + r
+    return x * width // 2, y * height // 2
+
+
+def layout_image(asset: Asset, rows: list[list[str]], variant: str | None = None, shape: TileShape | None = None) -> Image.Image:
+    """Tiles placed on the map: rows of tile names ("." = empty), row r column c = map cell (c, r) in the
+    tileset's `tile_shape` (or `shape`). Drawn top to bottom, so tiles lower on screen overlap the ones above."""
+    shape = shape or asset.tile_shape
+    placed = sorted(
+        ((tile_origin(shape, c, r, asset.size), name) for r, row in enumerate(rows) for c, name in enumerate(row) if name != TRANSPARENT),
+        key=lambda item: (item[0][1], item[0][0]),
+    )
+    width, height = asset.size
+    if shape.shape == "square":  # the whole grid, empty cells included (as before)
+        left = top = 0
+        right, bottom = max((len(r) for r in rows), default=0) * width, len(rows) * height
+    elif placed:
+        left, top = min(x for (x, _), _ in placed), min(y for (_, y), _ in placed)
+        right, bottom = max(x for (x, _), _ in placed) + width, max(y for (_, y), _ in placed) + height
+    else:
+        left = top = right = bottom = 0
+    image = Image.new("RGBA", (right - left, bottom - top), CLEAR)
+    tiles: dict[str, Image.Image] = {}
+    for (x, y), name in placed:
+        if name not in tiles:
+            tiles[name] = frame_image(asset, name, variant)
+        image.alpha_composite(tiles[name], (x - left, y - top))
+    return image
 
 
 def tile_cells(asset: Asset) -> dict[str, tuple[int, int]]:

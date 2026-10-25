@@ -31,6 +31,13 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
   "g": [0, 1] }` (per-character draw offset: manifest glyph `offset`, `.fnt` `xoffset`/`yoffset`, `Canvas.text`) and
   `font.skip_blank: true` (blank cells of non-whitespace characters are left out of the glyph table and the `.fnt`, so
   an engine falls back to another font). Fonts without them are unchanged (#34).
+- Tilesets: `tile_shape` (square, isometric, half_offset_square, hexagon), `tile_layout` (stacked, stacked_offset,
+  stairs_right, stairs_down, diamond_right, diamond_down) and `tile_offset_axis` (horizontal, vertical), Godot's
+  TileSet settings: the generated `.tres` is ready for an isometric `TileMapLayer`, and the manifest gets
+  `tile_shape: { shape, layout, offset_axis }`. Square tilesets are unchanged (#30).
+- Isometric tilesets are previewed where Godot places the tiles (positions measured on Godot 4.7.2): the 3x3 tiling
+  and `pagan preview --scene` show the seams between diamonds. `api.compose(..., square=True)` keeps a plain grid;
+  `export_textures` still uses one (#30).
 
 ### Changed
 

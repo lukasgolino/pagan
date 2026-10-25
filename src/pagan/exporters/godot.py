@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 
-from pagan.asset import Animation
+from pagan.asset import TILE_LAYOUTS, TILE_OFFSET_AXES, TILE_SHAPES, Animation, TileShape
 from pagan.voxel import Light
 from pagan.progress import note
 
@@ -142,9 +142,20 @@ class AtlasTile:
     fps: float = 1.0
 
 
-def tileset_tres(atlas_res: str, tile_size: tuple[int, int], tiles: list[AtlasTile]) -> str:
-    """TileSet resource text: one TileSetAtlasSource over the atlas, a tile at every (column, row)."""
+def tileset_tres(atlas_res: str, tile_size: tuple[int, int], tiles: list[AtlasTile], shape: TileShape = TileShape()) -> str:
+    """TileSet resource text: one TileSetAtlasSource over the atlas, a tile at every (column, row). A non-square
+    `shape` sets tile_shape / tile_layout / tile_offset_axis (only values other than Godot's defaults, as Godot
+    4.7.2's ResourceSaver writes them)."""
     width, height = tile_size
+    shape_lines = [
+        f"{name} = {index}"
+        for name, index in (
+            ("tile_shape", TILE_SHAPES.index(shape.shape)),
+            ("tile_layout", TILE_LAYOUTS.index(shape.layout)),
+            ("tile_offset_axis", TILE_OFFSET_AXES.index(shape.offset_axis)),
+        )
+        if index
+    ]
     tile_lines: list[str] = []
     for tile in tiles:
         cell = f"{tile.column}:{tile.row}"
@@ -165,6 +176,7 @@ def tileset_tres(atlas_res: str, tile_size: tuple[int, int], tiles: list[AtlasTi
         *tile_lines,
         "",
         "[resource]",
+        *shape_lines,
         f"tile_size = Vector2i({width}, {height})",
         'sources/0 = SubResource("TileSetAtlasSource_0")',
         "",
