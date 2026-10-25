@@ -26,11 +26,18 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
   painted over. When every ring skips them, translucent pixels may touch the canvas edge (no E007) (#37).
 - `pagan fit <model> --write`: sets the file's `size` and `pivot` to the fit (in-place text edit, comments kept);
   the `--json` result says whether it `written` anything (#35).
+- `pagan preview --variants all`: every `variant_axes` combination, as before (#32).
 
 ### Changed
 
 - W003 for 3D models no longer counts flat one-key materials (`{ keys: ["a"] }` LEDs, screens) as ramps, unless a
   shaded material uses the same key (#35).
+- Previews of assets with `variant_axes` show the plain variants plus each axis option on its own
+  (`<axis>.<option>`, as in the manifest's `variant_axes`), not every combination: frames/, native/, sheet.png,
+  variants.png, scene_variants.png and the gallery stay the size of the options, not their product (#32).
+- With `variant_sheets = false`, `variant_axes` may make more than 256 combinations (no E006): nothing is built per
+  combination, so over 256 none are made and the manifest lists the axes only (the game composes them). Under 256
+  nothing changes. With `variant_sheets = true` the limit stays, and E006 says how to lift it (#31).
 
 ### Fixed
 

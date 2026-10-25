@@ -5,12 +5,12 @@ Previews are for humans and agents to *look at*; they are not build output and n
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from pagan.asset import Asset, Grid
+from pagan.asset import Asset, Grid, axis_combinations
 from pagan.palette import TRANSPARENT
 from pagan.render import downsample, frame_image, save_png, sheet_image
 from pagan.swatch import _font
@@ -34,6 +34,26 @@ class PreviewOptions:
     scale: int | None = None  # None = automatic
     grid: bool = False
     background: Background = "checker"
+
+
+def preview_variants(asset: Asset, every_combination: bool = False) -> Asset:
+    """The asset with the variants previews show. With `variant_axes`: its plain variants plus each axis option
+    on its own (named "<axis>.<option>", as in the manifest; options that leave the axis as it is are the base),
+    not every combination, which grows as the product of the axes. `every_combination`: every combination
+    instead of the options (as `variant_sheets = true` builds them)."""
+    if not asset.variant_axes:
+        return asset
+    plain = {name: v for name, v in asset.variants.items() if "+" not in name}  # "+" can't occur in a variant name
+    if every_combination:
+        combos = {name: v for name, v in asset.variants.items() if "+" in name}
+        return replace(asset, variants={**plain, **(combos or axis_combinations(asset.variant_axes, asset.palette))})
+    options = {
+        f"{axis}.{name}": replace(v, name=f"{axis}.{name}")
+        for axis, choices in asset.variant_axes.items()
+        for name, v in choices.items()
+        if any(target != key for key, target in v.keys.items())
+    }
+    return replace(asset, variants={**plain, **options})
 
 
 def auto_scale(size: tuple[int, int]) -> int:
