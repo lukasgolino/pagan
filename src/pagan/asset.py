@@ -41,7 +41,7 @@ _COMMON_FIELDS = (
 WARNING_ID_RE = re.compile(r"^W\d{3}$")
 _SPRITE_FIELDS = (
     *_COMMON_FIELDS, "size", "pivot", "mirror", "outline", "outline_color", "shadow", "frames", "animations", "nine_slice",
-    "font", "points", "sheet_columns",
+    "font", "points", "sheet_columns", "trim",
 )  # fmt: skip
 MAX_OUTLINE_WIDTH = 8  # per ring
 _FONT_FIELDS = ("glyphs", "cell", "baseline", "line_height", "advance", "spacing", "space", "advances", "offsets", "skip_blank")
@@ -131,6 +131,7 @@ class Asset:
     pivot: tuple[int, int] = (0, 0)
     columns: int = 8  # tilesets: atlas layout
     sheet_columns: int | None = None  # sprites: frames per sheet row (None = up to 8)
+    trim: bool = False  # sprites: frames cropped to their content and packed (resolved from `trim:` / [build] trim)
     mirror: bool = False
     outline: bool = False
     outline_color: str | None = None  # the first (innermost) outline ring's colour
@@ -1339,6 +1340,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
     points: dict[str, dict[str, tuple[int, int]]] = {}
     font: Font | None = None
     textures: Textures | None = None
+    trim = False
     if kind == "tileset" and data.get("export_textures") not in (None, False):
         textures = _parse_textures(data["export_textures"], frames, animations, _line(data, "export_textures"), error)
     if kind == "sprite":
@@ -1346,6 +1348,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
         points = _parse_points(data.get("points"), list(frames), size, _line(data, "points"), error)
         if "font" in data:
             font = _parse_font(data["font"], frames, size, _line(data, "font"), error)
+        trim = _parse_trim(data, project.config.build.trim, "nine_slice" in data, "font" in data, error)
 
     if has_errors(findings) or palette is None:
         return None, findings
@@ -1366,6 +1369,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             columns=columns,
             tile_shape=tile_shape,
             sheet_columns=sheet_columns,
+            trim=trim,
             mirror=mirror,
             outline=outline,
             outline_color=outline_color,
@@ -1383,6 +1387,26 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
         ),
         findings,
     )
+
+
+def _parse_trim(data: dict[str, Any], default: bool, nine_slice: bool, font: bool, error: ErrorFn) -> bool:
+    """`trim: true | false` on a sprite, else pagan.toml's `[build] trim`. Fonts and nine_slice sprites can't be
+    trimmed (their glyph cells / slice margins are positions in the full frame): an explicit `trim: true` is an
+    error, the project default leaves them untrimmed."""
+    if "trim" not in data:
+        return default and not (nine_slice or font)
+    raw = data["trim"]
+    line = _line(data, "trim")
+    if not isinstance(raw, bool):
+        error("E001", "trim must be true or false", line, "trim")
+        return False
+    if raw and font:
+        error("E001", "trim can't be combined with font: glyph cells are positions in the full frame. Remove trim", line, "trim")
+        return False
+    if raw and nine_slice:
+        error("E001", "trim can't be combined with nine_slice: the slice margins are measured from the full frame's edges. Remove trim", line, "trim")
+        return False
+    return raw
 
 
 def _parse_outlines(

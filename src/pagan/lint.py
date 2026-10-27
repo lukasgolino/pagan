@@ -11,7 +11,7 @@ from pagan.asset import ASSET_SUFFIXES, MAX_SHEET_SIDE, Asset, Grid, load_asset
 from pagan.findings import Finding, PaganError
 from pagan.palette import PALETTE_SUFFIX, TRANSPARENT, load_palette_file
 from pagan.project import Project
-from pagan.render import frame_rects
+from pagan.render import frame_rects, trim_layout
 from pagan.timeline import TIMELINE_SUFFIX, AssetCache, load_timeline
 
 WARNING_RULES = {
@@ -228,9 +228,13 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
 
     if not asset.mesh_only:
         factor = asset.supersample if asset.supersample is not None else project.config.supersample
-        rects = frame_rects(asset).values()
-        sheet_w = max(x + w for x, _, w, _ in rects) // factor
-        sheet_h = max(y + h for _, y, _, h in rects) // factor
+        if asset.trim:  # the packed layout is already in output pixels
+            cells = [f.rect for f in trim_layout(asset, factor).values()]
+            sheet_w, sheet_h = max(x + w for x, _, w, _ in cells), max(y + h for _, y, _, h in cells)
+        else:
+            rects = frame_rects(asset).values()
+            sheet_w = max(x + w for x, _, w, _ in rects) // factor
+            sheet_h = max(y + h for _, y, _, h in rects) // factor
         if max(sheet_w, sheet_h) > MAX_SHEET_SIDE:
             hint = "set sheet_columns to balance it, " if asset.kind == "sprite" else ""
             add(

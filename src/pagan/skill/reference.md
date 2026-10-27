@@ -53,6 +53,7 @@ description: "Green slime enemy, front view."   # what it is / should look like 
 palette: dusk                 # optional when pagan.toml has default_palette; open mode allows inline
 size: [16, 16]                # width, height of one frame (or "16x16"); up to 4096 each (models: 1024)
 sheet_columns: 8              # optional: frames per sheet row (default up to 8); W014 if the sheet passes 16384 px
+trim: true                    # optional: frames cropped to their content and packed (default: pagan.toml [build] trim)
 pivot: [8, 16]                # anchor in pixel-edge coords (0..w, 0..h); default [w//2, h]
 mirror: none                  # none | horizontal: author only the left ceil(w/2) columns
 outline: auto                 # none | auto: 1px outline added around opaque pixels (see "Outlines and shadows")
@@ -494,6 +495,9 @@ voxel_size = 0.0625                # metres per voxel (0.0625 = 16 per metre); c
 shading = "ramp"                   # ramp (palette-locked engine lighting) | baked | flat
 collision_suffixes = false         # Godot -convcol / -colonly node names for collision parts
 
+[build]
+trim = false                       # sprites without their own `trim:` are trimmed (fonts / nine_slice sprites never are)
+
 [godot]                            # with export "godot"
 mipmaps = false                    # true: PAGAN sets mipmaps/generate in each PNG's .import (kept across builds)
 filter = "inherit"                 # SpriteFrames texture filter: inherit (node/project) | nearest | linear
@@ -566,7 +570,7 @@ Mesh export only (`export` has "mesh"): W009 a model overrides `[mesh] voxel_siz
 separate pieces, W011 a rig pivot outside its part; W012 `directions: 0` (mesh only) without "mesh" in `export`.
 W013 (any model): a part id has no voxels left, because later parts cover (or carve) all of it.
 W014 (any asset): the built sheet is over 16384 px on a side (many engines, Godot too, won't load it): set
-`sheet_columns` (sprites) or `columns` (tilesets), or split the asset.
+`sheet_columns` (sprites) or `columns` (tilesets), `trim: true` (mostly transparent sprite frames), or split the asset.
 Turn warnings off project-wide with `[lint] disable`, or per asset/frame/animation with the file's `lint:`.
 W001 isn't checked on 3D models (a rendered orphan can't be fixed pixel by pixel).
 
@@ -593,6 +597,17 @@ a shader swap by exact colour misses the blended pixels: use variant sheets for 
 set) names the base, also listed under `variants` with its sheet and an empty swap. Pivots aren't stored
 in engine resources: apply them in the game.
 
+Trimmed sprites (`trim: true`, or `[build] trim = true`): each frame is cropped to its non-transparent pixels and
+the crops are packed in source order, `sheet_columns` per row (default up to 8), each row as tall as its tallest
+crop, 1 px transparent gap between cells, never rotated. The entry gets `trim: true`, and each `frames` value is an
+object instead of [x, y, w, h]: `size` (the full frame, unchanged), `trim_rect` ([x, y, w, h] of the crop in the
+sheet) and `offset` ([x, y] of the crop's top-left inside the full frame). Draw a frame by placing its `trim_rect`
+at `offset` within a `size` box: `pivot`, `godot_offset` and `points` stay in full-frame coordinates. A fully
+transparent frame keeps its top-left pixel (a 1x1 transparent crop at offset [0, 0]), so every frame has a
+region. The crop depends only on which source pixels are transparent, so variant sheets share the layout;
+supersampled sprites are cropped in output pixels (rounded outwards). Fonts and `nine_slice` sprites can't be
+trimmed (E001 with an explicit `trim: true`; the project default skips them); tilesets and models are never trimmed.
+
 ## Godot
 
 `pagan build` writes `sprites/<name>.png` + `<name>.tres` (SpriteFrames, one animation per PAGAN
@@ -602,6 +617,8 @@ the editor), plus `manifest.json`. Fonts: Godot imports `fonts/<name>.fnt` as a 
 (`load("res://.../fonts/font_small.fnt")`; use it as a Label's `theme_override_fonts/font`). 9-slice: set a
 NinePatchRect's `patch_margin_left/top/right/bottom` from the manifest's `nine_slice`.
 Apply the pivot in code: `sprite.centered = true; sprite.offset = Vector2(godot_offset[0], godot_offset[1])`.
+Trimmed sprites need nothing extra: each AtlasTexture's `margin` puts the crop back in place, so frames keep
+their full size (and the same pivot/`godot_offset`) in SpriteFrames.
 Project settings for crisp pixels: Default Texture Filter = Nearest, stretch mode `viewport`, scale mode
 `integer`, snap 2D transforms to pixel.
 Smooth, freely rotated or scaled sprites: `[godot] filter = "linear"` (the SpriteFrames' CanvasTexture

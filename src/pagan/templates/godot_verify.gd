@@ -110,6 +110,13 @@ func _check() -> int:
 					if t == null or t.get_width() != entry["size"][0] or t.get_height() != entry["size"][1]:
 						printerr("PAGAN_VERIFY_FAIL ", path, " ", anim, " frame ", i, " has the wrong size")
 						failures += 1
+					elif entry.get("trim", false):  # trimmed: the crop's region and offset as in the manifest
+						var info: Dictionary = entry["frames"][animations[anim]["frames"][i]]
+						var r: Array = info["trim_rect"]
+						var o: Array = info["offset"]
+						if not (t is AtlasTexture) or t.region != Rect2(r[0], r[1], r[2], r[3]) or t.margin.position != Vector2(o[0], o[1]):
+							printerr("PAGAN_VERIFY_FAIL ", path, " ", anim, " frame ", i, " region/margin differ from the manifest's trim_rect/offset")
+							failures += 1
 			sprite_frames_checked += 1
 		if entry.has("mesh"):
 			failures += _check_mesh(name, entry["mesh"])

@@ -42,6 +42,13 @@ class GodotConfig:
 
 
 @dataclass(frozen=True)
+class BuildConfig:
+    """`[build]`: project-wide defaults for how `pagan build` lays out sheets."""
+
+    trim: bool = False  # sprites without their own `trim:` crop frames to their content and pack them
+
+
+@dataclass(frozen=True)
 class MeshConfig:
     """`[mesh]`: how 3D models export as meshes (`export` has "mesh")."""
 
@@ -65,6 +72,7 @@ class Config:
     light: Light = field(default_factory=Light)
     godot: GodotConfig = field(default_factory=GodotConfig)
     mesh: MeshConfig = field(default_factory=MeshConfig)
+    build: BuildConfig = field(default_factory=BuildConfig)
 
 
 @dataclass(frozen=True)
@@ -166,7 +174,7 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
     defaults = Config()
     allowed = (
         "palette_mode", "default_palette", "output_dir", "preview_dir", "export", "style_version", "variant_sheets",
-        "supersample", "lint", "camera", "light", "godot", "mesh",
+        "supersample", "lint", "camera", "light", "godot", "mesh", "build",
     )  # fmt: skip
     for key in data:
         if key not in allowed:
@@ -212,6 +220,7 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
 
     godot = _parse_godot(data.get("godot", {}), error)
     mesh = _parse_mesh(data.get("mesh", {}), error)
+    build = _parse_build(data.get("build", {}), error)
     lint = _parse_lint(data.get("lint", {}), error)
     camera, light = parse_render(data.get("camera", {}), data.get("light", {}), error)
 
@@ -231,6 +240,7 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         light=light,
         godot=godot,
         mesh=mesh,
+        build=build,
     )
 
 
@@ -263,6 +273,21 @@ def _parse_mesh(data: Any, error: Callable[[str, str], None]) -> MeshConfig:
         error("mesh.collision_suffixes must be true or false", "mesh.collision_suffixes")
         suffixes = defaults.collision_suffixes
     return MeshConfig(voxel_size=float(voxel_size), shading=shading, collision_suffixes=suffixes)
+
+
+def _parse_build(data: Any, error: Callable[[str, str], None]) -> BuildConfig:
+    defaults = BuildConfig()
+    if not isinstance(data, dict):
+        error("[build] must be a table", "build")
+        return defaults
+    for key in data:
+        if key != "trim":
+            error(f"unknown build setting {key!r}; allowed: trim", f"build.{key}")
+    trim = data.get("trim", defaults.trim)
+    if not isinstance(trim, bool):
+        error("build.trim must be true or false", "build.trim")
+        trim = defaults.trim
+    return BuildConfig(trim=trim)
 
 
 def _parse_godot(data: Any, error: Callable[[str, str], None]) -> GodotConfig:

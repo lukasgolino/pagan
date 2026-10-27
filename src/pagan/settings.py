@@ -57,6 +57,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("light.baked", True, "true: shading baked into the pixels; false: flat colors for engines with their own lighting (add \"normals\" to export)", "models"),
     Setting("godot.mipmaps", False, "Godot imports the PNGs with mipmaps (for sprites drawn scaled down or rotated); written into each PNG's .import", "build"),
     Setting("godot.filter", "inherit", 'SpriteFrames texture filter: "inherit" (node/project setting decides), "nearest" (crisp pixels), "linear" (smooth)', "build"),
+    Setting("build.trim", False, "sprites without their own `trim:` crop each frame to its content and pack the crops into the sheet (manifest frames gain trim_rect/offset; Godot AtlasTexture margin keeps the full frame size). Font and nine_slice sprites stay untrimmed", "build"),
     Setting("mesh.voxel_size", 0.0625, "metres per voxel when 3D models export as meshes (0.0625 = 16 voxels per metre); pick it per game from the closest camera distance", "meshes"),
     Setting("mesh.shading", "ramp", '"ramp": palette-locked lighting in the engine (PAGAN ramp shader); "baked": project light baked per face (no shader); "flat": middle ramp step, engine lights it', "meshes"),
     Setting("mesh.collision_suffixes", False, "name collision parts with Godot's -col/-convcol/-colonly suffixes (changes node names)", "meshes"),
