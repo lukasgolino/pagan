@@ -49,6 +49,12 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
   `then`, `variant`). `pagan preview scenes/<name>.timeline.yaml [--at 0.5,2.0]` writes `frames/f0000.png...`,
   `timeline.gif` and an `at.png` contact sheet under `previews/<name>.timeline/`. `pagan lint` checks timelines
   (E016); `pagan build` ignores them (preview only, no manifest change) (#16).
+- Exact pixel dimetric camera for 2:1 isometric tile games: `[camera] projection = "dimetric"` with `tile`
+  (pixels per grid cell, default `[64, 32]`), `cell` (voxels per cell side, default 16) and `z_step` (pixels
+  per voxel of height, default tile height / cell). Every voxel steps whole pixels, a one-cell floor renders to
+  the hand-drawn tile diamond and tiles at the grid pitch with no gaps or overlap, and 1-voxel pose offsets
+  move whole pixels (no re-rasterised bobs, W007 stays quiet). Only the 4 diagonal headings render in it
+  (`heading: 45`, `directions: 4`); others are E013. The default orthographic camera is unchanged (#29, #36).
 
 ### Changed
 

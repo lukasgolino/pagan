@@ -199,3 +199,11 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   frames never depend on float rounding. `duration` with `from`/`to` = how long the move takes (the layer stays at
   `to`); otherwise how long the layer is shown. Output goes to `previews/<name>.timeline/` (a dot can't occur in
   asset names, so it never meets an asset's previews). Timelines are targets by path; `--scene` stays the tileset layout.
+- 2026-10-27: #29/#36: the 3D freeze is lifted for the exact pixel dimetric projection only (`[camera] projection =
+  "dimetric"`, `tile`, `cell`, `z_step`). It is the orthographic ray caster with the screen axes scaled apart
+  (x: tile width / (2 cell) x sqrt 2 px per world unit; y: sqrt(2 down^2 + z_step^2)), so shading, shadows, normals and
+  outlines are unchanged and meshes ignore it. Pixel centres are sampled 1/(64 down), 1/(256 down) px off-centre:
+  centres that fall exactly on voxel edges (even `down`) always pick the same side, so voxel and cell footprints stay
+  congruent tilers. Diagonal headings only (E013 otherwise). `z_step` 0 = tile height / cell (2 px for 64x32 / 16,
+  a 1-cell cube 64 px tall, the usual 2:1 block; true dimetric would be 2.45). Orthographic output and cache keys are
+  byte-identical (no RENDERER_VERSION bump).

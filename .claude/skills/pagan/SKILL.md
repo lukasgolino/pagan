@@ -54,6 +54,7 @@ setting, its current value, its default and what it means. Every one can change 
 | `light.baked` + `export` "normals" | true / off | "the game has its own lighting" (flat colors + normal maps) |
 | `default_palette` | (chosen at setup) | "try a different palette" |
 | `camera.scale` | 1 | "everything 3D should be bigger/smaller" |
+| `camera.projection` + `tile` / `cell` / `z_step` | "orthographic" / [64, 32] / 16 / 0 | "models must match our 2:1 iso tiles exactly" -> "dimetric" (models: heading 45, directions 4) |
 | `supersample` | 1 (off) | "smooth edges", "sprites rotate freely", "not pixel art" (draw at 2x, build smooths) |
 | `godot.filter` / `godot.mipmaps` | inherit / false | "blurry/shimmering when rotated or scaled" (linear + mipmaps) |
 

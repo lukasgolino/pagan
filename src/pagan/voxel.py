@@ -38,10 +38,39 @@ class Material:
     two_sided: bool = False  # thin surfaces (cloth, leaves): lit from either side
 
 
+PROJECTIONS = ("orthographic", "dimetric")
+DIMETRIC_HEADINGS = (45.0, 135.0, 225.0, 315.0)  # the only headings whose voxels land on whole pixels
+
+
 @dataclass(frozen=True)
 class Camera:
     elevation: float = 42.0  # degrees above the horizon (90 = straight down)
     scale: float = 1.0  # pixels per voxel
+    # "dimetric": an exact pixel 2:1 projection (elevation and scale unused). One grid cell of `cell` x `cell`
+    # voxels is a `tile` px diamond, so every voxel steps whole pixels: tile width / (2 cell) across and
+    # tile height / (2 cell) down along x and y, and `z_step` px up per voxel of height (0 = tile height / cell).
+    projection: str = "orthographic"
+    tile: tuple[int, int] = (64, 32)
+    cell: int = 16
+    z_step: int = 0
+
+    def dimetric_steps(self) -> tuple[int, int, int]:
+        """(across, down, up): whole pixels per voxel along x/y (across and down) and z (up)."""
+        across, down = self.tile[0] // (2 * self.cell), self.tile[1] // (2 * self.cell)
+        return across, down, self.z_step or 2 * down
+
+    def pixels_per_voxel(self) -> float:
+        """The most pixels one voxel of length can span on screen (for sizing canvases)."""
+        if self.projection != "dimetric":
+            return self.scale
+        across, down, up = self.dimetric_steps()
+        return max(across * math.sqrt(2), math.sqrt(2 * down * down + up * up))
+
+    def cache_key(self) -> dict[str, object]:
+        """The settings that change the pixels (orthographic keys stay as they were before dimetric existed)."""
+        if self.projection != "dimetric":
+            return {"elevation": self.elevation, "scale": self.scale}
+        return {"projection": self.projection, "tile": list(self.tile), "cell": self.cell, "z_step": self.dimetric_steps()[2]}
 
 
 @dataclass(frozen=True)
@@ -475,8 +504,20 @@ def render_heading_full(
         return Rendered(tuple(TRANSPARENT * width for _ in range(height)), normals_out)
     dense = _dense(model)
     lo, hi = dense.lo, dense.hi
-    elev = math.radians(camera.elevation)
-    ce, se = _clean(math.cos(elev)), _clean(math.sin(elev))
+    if camera.projection == "dimetric":
+        # An orthographic view whose screen axes are scaled apart so that, at the diagonal headings, every voxel
+        # steps whole pixels: x/y `across` px sideways and `down` px down, z `up` px up. Pixel centres are sampled
+        # a hair off-centre, so a centre that falls exactly on a voxel edge always picks the same side.
+        across, down, up_px = camera.dimetric_steps()
+        rise = math.sqrt(2 * down * down + up_px * up_px)
+        ce, se = _clean(up_px / rise), _clean(math.sqrt(2) * down / rise)
+        scale_x, scale_y = _clean(across * math.sqrt(2)), _clean(rise)
+        bias_x, bias_y = 1 / (64 * down), 1 / (256 * down)
+    else:
+        elev = math.radians(camera.elevation)
+        ce, se = _clean(math.cos(elev)), _clean(math.sin(elev))
+        scale_x = scale_y = camera.scale
+        bias_x = bias_y = 0.0
     world = rotation_matrix(roll, pitch, heading)  # model -> world: tilt, then turn to the heading
     model_from_world = _transpose(world)
 
@@ -496,8 +537,8 @@ def render_heading_full(
     xs_screen, ys_screen = [], []
     for cx, cy, cz in corners:
         wx, wy, wz = _apply(world, (cx - origin[0], cy - origin[1], cz - origin[2]))
-        xs_screen.append(pivot[0] + wx * camera.scale)
-        ys_screen.append(pivot[1] - (wy * up[1] + wz * up[2]) * camera.scale)
+        xs_screen.append(pivot[0] + wx * scale_x)
+        ys_screen.append(pivot[1] - (wy * up[1] + wz * up[2]) * scale_y)
     x0, x1 = max(0, math.floor(min(xs_screen)) - 1), min(width, math.ceil(max(xs_screen)) + 1)
     y0, y1 = max(0, math.floor(min(ys_screen)) - 1), min(height, math.ceil(max(ys_screen)) + 1)
     if x0 >= x1 or y0 >= y1:
@@ -505,8 +546,8 @@ def render_heading_full(
 
     py, px = np.mgrid[y0:y1, x0:x1]
     py, px = py.ravel(), px.ravel()
-    sx = (px + 0.5 - pivot[0]) / camera.scale
-    sy = (pivot[1] - (py + 0.5)) / camera.scale
+    sx = (px + 0.5 + bias_x - pivot[0]) / scale_x
+    sy = (pivot[1] - (py + 0.5 + bias_y)) / scale_y
     wx, wy, wz = sx - reach * forward[0], sy * up[1] - reach * forward[1], sy * up[2] - reach * forward[2]
     (a0, a1, a2), (b0, b1, b2), (c0, c1, c2) = model_from_world
     starts = np.stack(

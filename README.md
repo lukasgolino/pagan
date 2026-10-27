@@ -67,6 +67,23 @@ for any engine. With `export = ["png", "godot"]` it also writes Godot 4 resource
 - **Tilesets:** `tiles/<name>.tres` is a TileSet with every tile in atlas source 0; the manifest's `tiles`
   gives each tile name's atlas coordinates. Terrains, collision and other tile data are set up in Godot.
 
+### Isometric tile games: the dimetric camera
+
+For a 2:1 isometric TileMap (e.g. Godot's `TileMapLayer`, 64x32 cells), set the exact pixel dimetric camera:
+
+```toml
+[camera]
+projection = "dimetric"   # default "orthographic" (any elevation, `scale` px per voxel)
+tile = [64, 32]           # pixels per grid cell: the floor diamond
+cell = 16                 # voxels per grid cell side
+z_step = 0                # pixels per voxel of height; 0 = tile height / cell (2 here)
+```
+
+A `cell` x `cell` floor then renders to the hand-drawn 64x32 diamond (rows 2, 6, ... 62, 62, ... 6, 2) and
+tiles at the grid pitch with no gaps or overlap; walls and furniture share that scale, and a 1-voxel move is
+always whole pixels (2 across and 1 down along x/y, `z_step` up). Models use `heading: 45` with `directions: 4`
+(frames ne, nw, sw, se); other headings can't land on whole pixels and are an error. Meshes are unaffected.
+
 ### 3D games: meshes
 
 For a free 3D camera, add `"mesh"` to `export`: every 3D model also builds `models/<name>.glb` (binary glTF:
