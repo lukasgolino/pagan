@@ -5,6 +5,7 @@ size: [16, 16]
 pivot: [8, 14]
 mirror: horizontal
 outline: auto
+trim: true                       # frames cropped to their content in the sheet (full 16x16 in the game)
 status: draft
 style_version: 1
 tags: [enemy, creature]

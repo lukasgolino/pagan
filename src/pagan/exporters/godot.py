@@ -85,8 +85,12 @@ def sprite_frames_tres(
     animations: list[Animation],
     normal_res: str | None = None,
     filter_mode: int | None = None,
+    margins: dict[str, tuple[int, int, int, int]] | None = None,
 ) -> str:
     """SpriteFrames resource text: one AtlasTexture per frame, shared by every animation using it.
+
+    `margins` (trimmed sprites): frame -> AtlasTexture margin (crop x, y in the full frame, full size minus crop
+    size), so each frame keeps its full logical size and draws its crop in place.
 
     With `normal_res` (and/or a `filter_mode`), frames come from a CanvasTexture wrapping the sheet:
     the normal map lets Godot's 2D lights shade the sprite, the filter overrides the node's.
@@ -109,8 +113,10 @@ def sprite_frames_tres(
             f'[sub_resource type="AtlasTexture" id="{frame_ids[name]}"]',
             f"atlas = {atlas}",
             f"region = Rect2({x}, {y}, {w}, {h})",
-            "",
         ]
+        if margins is not None:
+            lines.append("margin = Rect2({}, {}, {}, {})".format(*margins[name]))
+        lines.append("")
     entries = []
     for anim in animations:
         durations = anim.durations or (1.0,) * len(anim.frames)

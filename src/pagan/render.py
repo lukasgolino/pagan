@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -157,6 +158,67 @@ def sheet_image(asset: Asset, variant: str | None = None) -> Image.Image:
     table = color_table(asset, variant)
     for name, (x, y, _, _) in rects.items():
         sheet.paste(grid_image(asset.frames[name], table), (x, y))
+    return sheet
+
+
+TRIM_GAP = 1  # transparent pixels between trimmed cells, so filtering never bleeds a neighbour in
+
+
+@dataclass(frozen=True)
+class TrimmedFrame:
+    """Where a trimmed frame's crop sits, in output pixels: `rect` (x, y, w, h) in the sheet, `offset` (x, y)
+    of the crop's top-left corner within the full logical frame."""
+
+    rect: tuple[int, int, int, int]
+    offset: tuple[int, int]
+
+
+def content_box(grid: Grid, factor: int = 1) -> tuple[int, int, int, int]:
+    """(x, y, w, h) of the grid's non-transparent pixels, in output pixels (`factor` source pixels each, rounded
+    outwards so a box-filtered frame is cropped exactly). A fully transparent frame keeps its top-left pixel
+    (1x1 at 0, 0), so every frame has a real region in the sheet."""
+    left, right, top, bottom = len(grid[0]), 0, None, 0
+    for y, row in enumerate(grid):
+        stripped = row.rstrip(TRANSPARENT)
+        if not stripped:
+            continue
+        left = min(left, len(row) - len(row.lstrip(TRANSPARENT)))
+        right = max(right, len(stripped))
+        if top is None:
+            top = y
+        bottom = y + 1
+    if top is None:
+        return (0, 0, 1, 1)
+    x0, y0 = left // factor, top // factor
+    return (x0, y0, -(-right // factor) - x0, -(-bottom // factor) - y0)
+
+
+def trim_layout(asset: Asset, factor: int = 1) -> dict[str, TrimmedFrame]:
+    """Trimmed frames shelf-packed in source order, in output pixels: `sheet_columns` crops per row (default up to
+    8, as untrimmed), each row as tall as its tallest crop, TRIM_GAP transparent pixels between cells. Never rotated.
+    The layout only depends on which pixels are transparent, so every variant shares it."""
+    columns = sheet_columns(asset)
+    layout: dict[str, TrimmedFrame] = {}
+    x = y = row_height = 0
+    for i, name in enumerate(asset.frames):
+        if i and i % columns == 0:
+            x, y, row_height = 0, y + row_height + TRIM_GAP, 0
+        ox, oy, w, h = content_box(asset.frames[name], factor)
+        layout[name] = TrimmedFrame((x, y, w, h), (ox, oy))
+        x += w + TRIM_GAP
+        row_height = max(row_height, h)
+    return layout
+
+
+def trimmed_sheet(asset: Asset, layout: dict[str, TrimmedFrame], variant: str | None = None, factor: int = 1) -> Image.Image:
+    """The trimmed sheet, at output size: each frame box-filtered by `factor`, cropped and pasted at its cell."""
+    width = max(f.rect[0] + f.rect[2] for f in layout.values())
+    height = max(f.rect[1] + f.rect[3] for f in layout.values())
+    sheet = Image.new("RGBA", (width, height), CLEAR)
+    for name, frame in layout.items():
+        (x, y, w, h), (ox, oy) = frame.rect, frame.offset
+        image = downsample(frame_image(asset, name, variant), factor)
+        sheet.paste(image.crop((ox, oy, ox + w, oy + h)), (x, y))
     return sheet
 
 

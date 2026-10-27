@@ -55,6 +55,12 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
   the hand-drawn tile diamond and tiles at the grid pitch with no gaps or overlap, and 1-voxel pose offsets
   move whole pixels (no re-rasterised bobs, W007 stays quiet). Only the 4 diagonal headings render in it
   (`heading: 45`, `directions: 4`); others are E013. The default orthographic camera is unchanged (#29, #36).
+- `trim: true` on sprites (or `[build] trim = true` for every sprite without its own `trim:`): frames are cropped to
+  their content and packed into the sheet in source order (`sheet_columns` per row, 1 px gap, no rotation). The
+  manifest's `frames` keep the full logical `size` and gain `trim_rect` (in the sheet) and `offset` (in the frame);
+  Godot AtlasTextures get a `margin`, so frames keep their full size in SpriteFrames. A fully transparent frame
+  becomes a 1x1 transparent crop at offset [0, 0]. Fonts and nine_slice sprites can't be trimmed (E001). Sprites
+  without trim build exactly as before. The demo slime is trimmed (#1).
 
 ### Changed
 

@@ -40,6 +40,20 @@ def test_generated_resources_load_in_godot(copies: tuple[Path, Path]) -> None:
     assert check.ok, check.output
 
 
+def test_trimmed_sprites_load_in_godot(copies: tuple[Path, Path]) -> None:
+    """#1: with [build] trim every demo sprite is trimmed; each AtlasTexture keeps the full frame size (margin)
+    and its region/margin match the manifest's trim_rect/offset (checked by the verify script)."""
+    demo, godot_root = copies
+    with (demo / "pagan.toml").open("a") as config:
+        config.write("\n[build]\ntrim = true\n")
+    result = build(load_project(demo))
+    assert not result.errors
+    assert GODOT is not None
+    check = verify_with_godot(GODOT, godot_root, "res://assets/generated/manifest.json")
+    assert check.ok, check.output
+    assert "margin = Rect2(" in (godot_root / "assets" / "generated" / "sprites" / "potion.tres").read_text()
+
+
 def test_demo_scene_shows_every_asset(copies: tuple[Path, Path]) -> None:
     demo, godot_root = copies
     build(load_project(demo))

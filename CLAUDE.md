@@ -207,3 +207,9 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   congruent tilers. Diagonal headings only (E013 otherwise). `z_step` 0 = tile height / cell (2 px for 64x32 / 16,
   a 1-cell cube 64 px tall, the usual 2:1 block; true dimetric would be 2.45). Orthographic output and cache keys are
   byte-identical (no RENDERER_VERSION bump).
+- 2026-10-27: #1 (R30a): `trim` crops sprite frames to their non-transparent source pixels (rounded outwards to output
+  pixels when supersampled, so variants share one layout) and packs them `sheet_columns` per row with a 1 px gap. Manifest
+  `frames` values become `{size, trim_rect, offset}` objects (only for trimmed sprites, so a reader expecting
+  [x, y, w, h] fails loudly instead of drawing the wrong pixels); Godot AtlasTexture `margin` = (offset, full size - crop
+  size), format verified against Godot 4.7.2's ResourceSaver. Fully transparent frame = 1x1 crop at [0, 0] (an empty
+  AtlasTexture region would mean the whole atlas). Fonts / nine_slice can't be trimmed; tilesets and models never are.

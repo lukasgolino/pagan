@@ -1820,18 +1820,38 @@
       },
       "description": "Green slime enemy, front view, symmetric (mirror). Idle: a slow squash and stretch between two frames.",
       "frames": {
-        "idle_0": [
-          0,
-          0,
-          16,
-          16
-        ],
-        "idle_1": [
-          16,
-          0,
-          16,
-          16
-        ]
+        "idle_0": {
+          "offset": [
+            0,
+            4
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "trim_rect": [
+            0,
+            0,
+            16,
+            11
+          ]
+        },
+        "idle_1": {
+          "offset": [
+            0,
+            5
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "trim_rect": [
+            17,
+            0,
+            16,
+            10
+          ]
+        }
       },
       "godot_offset": [
         0.0,
@@ -1855,6 +1875,7 @@
         "enemy",
         "creature"
       ],
+      "trim": true,
       "variants": {}
     },
     "water": {

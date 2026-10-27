@@ -35,7 +35,7 @@ from pagan.findings import Finding
 from pagan.lint import LintResult, lint_paths
 from pagan.palette import TRANSPARENT
 from pagan.project import Project
-from pagan.render import downsample, frame_rects, save_png, sheet_image, supersample_factor, tile_cells
+from pagan.render import downsample, frame_rects, save_png, sheet_image, supersample_factor, tile_cells, trim_layout, trimmed_sheet
 
 MANIFEST = "manifest.json"
 
@@ -162,6 +162,11 @@ def build(project: Project) -> BuildResult:
         factor = supersample_factor(asset, project)
         size = (asset.size[0] // factor, asset.size[1] // factor)
         rects = {name: (x // factor, y // factor, w // factor, h // factor) for name, (x, y, w, h) in frame_rects(asset).items()}
+        trimmed = trim_layout(asset, factor) if asset.trim else None
+        margins: dict[str, tuple[int, int, int, int]] | None = None
+        if trimmed is not None:
+            rects = {name: frame.rect for name, frame in trimmed.items()}
+            margins = {name: (*f.offset, size[0] - f.rect[2], size[1] - f.rect[3]) for name, f in trimmed.items()}
         animations = _animations_for(asset) if asset.kind != "tileset" else []
         font = font_metrics(asset, factor) if asset.font is not None else None
         sheet_size = (max(x + w for x, _, w, _ in rects.values()), max(y + h for _, y, _, h in rects.values()))
@@ -173,7 +178,10 @@ def build(project: Project) -> BuildResult:
         def emit(variant: str | None) -> dict[str, Any]:
             stem = asset.name if variant is None else f"{asset.name}.{variant}"
             sheet = folder / f"{stem}.png"
-            write_png(sheet, downsample(sheet_image(asset, variant), factor))
+            if trimmed is not None:
+                write_png(sheet, trimmed_sheet(asset, trimmed, variant, factor))
+            else:
+                write_png(sheet, downsample(sheet_image(asset, variant), factor))
             info: dict[str, Any] = {"sheet": _ref(sheet, out, godot_root)}
             if font is not None:
                 # The font gets its own copy of the sheet: an engine's font importer may claim its page image
@@ -191,7 +199,7 @@ def build(project: Project) -> BuildResult:
                     info["godot_tileset"] = res_path(tres, godot_root)
                 else:
                     normal_res = res_path(normal_sheet, godot_root) if normal_sheet is not None else None
-                    text = sprite_frames_tres(res_path(sheet, godot_root), rects, animations, normal_res, filter_mode)
+                    text = sprite_frames_tres(res_path(sheet, godot_root), rects, animations, normal_res, filter_mode, margins)
                     info["godot_sprite_frames"] = res_path(tres, godot_root)
                 _write(tres, text.encode("utf-8"), result)
                 produced.add(tres.resolve())
@@ -208,6 +216,11 @@ def build(project: Project) -> BuildResult:
             **emit(None),
             "frames": {name: list(rect) for name, rect in rects.items()},
         }
+        if trimmed is not None:  # full logical size per frame, plus where its crop is in the sheet and in the frame
+            entry["trim"] = True
+            entry["frames"] = {
+                name: {"size": list(size), "trim_rect": list(f.rect), "offset": list(f.offset)} for name, f in trimmed.items()
+            }
         if asset.textures is not None:
             entry["textures"] = _texture_outputs(asset, project, out, godot_root, write_png, write_file, factor)
         if asset.kind == "tileset":
