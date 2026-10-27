@@ -23,6 +23,8 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 - `--quiet` after a subcommand (`pagan preview <asset> --quiet`) no longer shares its attribute with the top-level
   `--quiet`, so it turns progress lines off whatever argparse does with subcommand defaults (#38).
+- The skill reference showed lettering with a font sprite as `text(...)`; it is the `Canvas.text(...)` method
+  (`canvas.text(font_sprite, "THWACK!", x, y)`). A test checks every `pagan.api` call the reference shows (#33).
 
 ## [0.17.0] - 2026-10-21
 
