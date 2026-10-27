@@ -165,7 +165,7 @@ def build(project: Project) -> BuildResult:
             if godot_root is not None:
                 tres = folder / f"{stem}.tres"
                 if asset.kind == "tileset":
-                    text = tileset_tres(res_path(sheet, godot_root), size, _atlas_tiles(asset))
+                    text = tileset_tres(res_path(sheet, godot_root), size, _atlas_tiles(asset), asset.tile_shape)
                     info["godot_tileset"] = res_path(tres, godot_root)
                 else:
                     normal_res = res_path(normal_sheet, godot_root) if normal_sheet is not None else None
@@ -190,6 +190,9 @@ def build(project: Project) -> BuildResult:
             entry["textures"] = _texture_outputs(asset, project, out, godot_root, write_png, write_file, factor)
         if asset.kind == "tileset":
             entry["columns"] = asset.columns
+            if not asset.tile_shape.is_default:
+                shape = asset.tile_shape
+                entry["tile_shape"] = {"shape": shape.shape, "layout": shape.layout, "offset_axis": shape.offset_axis}
             entry["tiles"] = {name: list(cell) for name, cell in _tile_names(asset).items()}
             if asset.animations:
                 entry["animations"] = {
@@ -300,7 +303,7 @@ def _texture_outputs(
         layout = [" ".join(row) for row in rows]
         entry: dict[str, Any] = {}
         for variant in (None, *(asset.variants if project.config.variant_sheets else ())):
-            image = downsample(compose(asset, layout, variant), factor)
+            image = downsample(compose(asset, layout, variant, square=True), factor)  # textures repeat on a square grid
             stem = f"{asset.name}.{name}" if variant is None else f"{asset.name}.{name}.{variant}"
             path = folder / f"{stem}.png"
             write_png(path, image)

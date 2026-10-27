@@ -26,12 +26,12 @@ import numpy as np
 import yaml
 from PIL import Image, ImageDraw, ImageFont
 
-from pagan.asset import Asset, font_glyphs, glyph_advance, load_asset_or_raise
+from pagan.asset import Asset, TileShape, font_glyphs, glyph_advance, load_asset_or_raise
 from pagan.lint import _orphans
 from pagan.model import SailCell, _Builder, hull_reach, sail_cells
 from pagan.palette import TRANSPARENT, Palette
 from pagan.project import Project, discover_project
-from pagan.render import frame_image
+from pagan.render import frame_image, layout_image
 from pagan.voxel import Cell, Material, VoxelModel, heading_angles
 
 API_VERSION = 2  # 2: ellipse/ring exclude pixel centres exactly on the edge
@@ -682,21 +682,16 @@ def corner_tiles(
     return tiles
 
 
-def compose(tileset: Asset, layout: Sequence[str] | str, variant: str | None = None) -> Image.Image:
+def compose(tileset: Asset, layout: Sequence[str] | str, variant: str | None = None, square: bool = False) -> Image.Image:
     """A scene made of tiles, to check seams between *different* tiles: `layout` rows hold tile names
-    separated by spaces ("." = empty). Layer several by alpha-compositing the results."""
+    separated by spaces ("." = empty); row r, column c is map cell (c, r), placed as the tileset's
+    `tile_shape`/`tile_layout` say (isometric tiles as Godot's TileMapLayer places them; the image is cropped to
+    the tiles). `square`: a plain grid whatever the shape. Layer several by alpha-compositing the results."""
     rows = [r.split() for r in (layout.strip("\n").split("\n") if isinstance(layout, str) else layout) if r.strip()]
-    width, height = tileset.size
-    image = Image.new("RGBA", (max((len(r) for r in rows), default=0) * width, len(rows) * height), (0, 0, 0, 0))
     unknown = sorted({name for row in rows for name in row if name != TRANSPARENT and name not in tileset.frames})
     if unknown:
         raise ValueError(f"{tileset.name} has no tile(s) {', '.join(unknown)}")
-    for ty, row in enumerate(rows):
-        for tx, name in enumerate(row):
-            if name != TRANSPARENT:
-                tile = frame_image(tileset, name, variant)
-                image.alpha_composite(tile, (tx * width, ty * height))
-    return image
+    return layout_image(tileset, rows, variant, TileShape() if square else None)
 
 
 # --- 3D geometry (what the model primitives fill) ----------------------------------------------

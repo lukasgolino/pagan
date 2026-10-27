@@ -46,7 +46,27 @@ _SPRITE_FIELDS = (
 MAX_OUTLINE_WIDTH = 8  # per ring
 _FONT_FIELDS = ("glyphs", "cell", "baseline", "line_height", "advance", "spacing", "space", "advances", "offsets", "skip_blank")
 Margins = tuple[int, int, int, int]  # left, top, right, bottom
-_TILESET_FIELDS = (*_COMMON_FIELDS, "tile_size", "columns", "tiles", "animations", "export_textures")
+_TILESET_FIELDS = (
+    *_COMMON_FIELDS, "tile_size", "columns", "tiles", "animations", "export_textures", "tile_shape", "tile_layout", "tile_offset_axis",
+)
+# Godot's TileSet enums, in their order (index = the value Godot stores)
+TILE_SHAPES = ("square", "isometric", "half_offset_square", "hexagon")
+TILE_LAYOUTS = ("stacked", "stacked_offset", "stairs_right", "stairs_down", "diamond_right", "diamond_down")
+TILE_OFFSET_AXES = ("horizontal", "vertical")
+
+
+@dataclass(frozen=True)
+class TileShape:
+    """How a tileset's tiles sit on the map (Godot's TileSet tile_shape / tile_layout / tile_offset_axis)."""
+
+    shape: str = "square"
+    layout: str = "stacked"
+    offset_axis: str = "horizontal"
+
+    @property
+    def is_default(self) -> bool:
+        return self == TileShape()
+
 
 
 @dataclass(frozen=True)
@@ -133,6 +153,7 @@ class Asset:
     font: Font | None = None  # sprites: the frames are a font's glyphs
     points: dict[str, dict[str, tuple[int, int]]] = field(default_factory=dict)  # sprites: point -> frame -> [x, y]
     textures: Textures | None = None  # tilesets: `export_textures` (repeatable PNGs for 3D surfaces)
+    tile_shape: TileShape = TileShape()  # tilesets: square (default), isometric, ... with its layout
     # 3D models only: renders screen-space normal maps per frame on demand (H x W x 3 arrays)
     normal_maps: Callable[[], dict[str, Any]] | None = field(default=None, compare=False, repr=False)
     # 3D models only: what mesh export needs (pagan.model.MeshSource); mesh_only = `directions: 0` (no sprites)
@@ -1150,6 +1171,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
     pivot = (width // 2, height)
     columns = 8
     sheet_columns: int | None = None
+    tile_shape = TileShape()
     if kind == "sprite":
         mirror_raw = data.get("mirror", "none")
         if mirror_raw not in ("none", "horizontal"):
@@ -1200,6 +1222,19 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             error("E001", "columns must be a positive integer", _line(data, "columns"), "columns")
         else:
             columns = raw_columns
+        shape_values: dict[str, str] = {}
+        enums: tuple[tuple[str, tuple[str, ...]], ...] = (
+            ("tile_shape", TILE_SHAPES), ("tile_layout", TILE_LAYOUTS), ("tile_offset_axis", TILE_OFFSET_AXES),
+        )
+        for key, choices in enums:
+            if key in data:
+                if data[key] in choices:
+                    shape_values[key] = data[key]
+                else:
+                    error("E001", f"{key} must be one of {', '.join(choices)}", _line(data, key), key)
+        tile_shape = TileShape(
+            shape_values.get("tile_shape", "square"), shape_values.get("tile_layout", "stacked"), shape_values.get("tile_offset_axis", "horizontal")
+        )
 
     if frames_field not in data:
         error("E001", f"missing required field {frames_field!r}", _line(data), frames_field)
@@ -1307,6 +1342,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             variants=variants,
             pivot=pivot,
             columns=columns,
+            tile_shape=tile_shape,
             sheet_columns=sheet_columns,
             mirror=mirror,
             outline=outline,

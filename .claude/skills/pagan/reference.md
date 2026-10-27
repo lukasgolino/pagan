@@ -134,6 +134,9 @@ for the shadow on its side (E007; with `skip_translucent` on every ring, translu
 name: meadow
 tile_size: [16, 16]
 columns: 8                    # atlas width in tiles; tiles fill rows in file order (append-safe)
+tile_shape: isometric         # optional: square (default) | isometric | half_offset_square | hexagon (Godot's TileSet)
+tile_layout: diamond_down     # optional: stacked (default) | stacked_offset | stairs_right | stairs_down | diamond_right | diamond_down
+tile_offset_axis: horizontal  # optional: horizontal (default) | vertical
 tiles:
   grass: |
     ...16 rows of 16...
@@ -148,7 +151,10 @@ lint: { for: { shore_0000: [W004] } }   # e.g. a corner set's fully transparent 
 ```
 
 No mirror/outline. Tiles should be seamless (preview shows a 3x3 tiling; `pagan preview <tileset>
---scene layout.txt` draws a layout of different tiles to check the seams between them). An animated
+--scene layout.txt` draws a layout of different tiles to check the seams between them). With `tile_shape`
+the Godot TileSet gets that shape/layout and the manifest a `tile_shape` entry; isometric tiles are previewed
+(3x3 tiling, `--scene`) where Godot's TileMapLayer puts them (layout row r, column c = map cell (c, r)), so a 2:1
+diamond (rows 2, 6, ..., 6, 2 for 8x4) shows its seams; `api.compose(tileset, layout, square=True)` = a plain grid. An animated
 tile's frames sit side by side in the atlas (a new row if they don't fit, or always with `new_row: true`, so
 the layout doesn't depend on how many tiles come before; longer than `columns`: a block `columns` wide); each
 tile is a frame of at most one animation (the manifest's `tiles` gives every cell either way). Godot gets an animated atlas tile.

@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw
 
 from pagan.asset import Asset, Grid, axis_combinations
 from pagan.palette import TRANSPARENT
-from pagan.render import downsample, frame_image, save_png, sheet_image
+from pagan.render import downsample, frame_image, layout_image, save_png, sheet_image
 from pagan.swatch import _font
 from pagan.views import View, closeup_views, orbit_views, thumbnail
 from pagan.voxel import Camera
@@ -208,6 +208,8 @@ def change_image(asset: Asset, before: str, after: str) -> Image.Image:
 
 
 def tiled(asset: Asset, tile: str, repeat: int) -> Image.Image:
+    if asset.tile_shape.shape == "isometric":  # neighbours as the map places them
+        return layout_image(asset, [[tile] * repeat for _ in range(repeat)])
     single = frame_image(asset, tile)
     out = Image.new("RGBA", (single.width * repeat, single.height * repeat), (0, 0, 0, 0))
     for ty in range(repeat):
