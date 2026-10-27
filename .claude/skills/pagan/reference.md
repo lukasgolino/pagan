@@ -280,7 +280,8 @@ the part's bottom centre); rotated parts are resampled, so keep rotations for th
 Sizing: `pagan fit <model>` renders every heading and pose and prints the smallest `size` and `pivot`
 that hold them all (origin stays on the pivot), plus the frames the current size clips. The frame always
 holds the pivot, so overlays whose origin is their parent's pivot get a lint-valid size. `--even` pads to
-even sizes so a centred Godot sprite's `godot_offset` is whole pixels.
+even sizes so a centred Godot sprite's `godot_offset` is whole pixels. `--write` puts the fit into the
+file (`size` and `pivot` edited in place, comments kept), so a generator can write -> `pagan fit --write` -> lint.
 
 ## Meshes (3D games) - `export` has "mesh"
 
@@ -437,7 +438,7 @@ filter = "inherit"                 # SpriteFrames texture filter: inherit (node/
 
 [lint]
 max_ramps_per_sprite = 3            # W003 for sprites/tilesets
-max_ramps_per_model = 6             # W003 for 3D models           # W003
+max_ramps_per_model = 6             # W003 for 3D models (flat one-key materials don't count)           # W003
 max_frame_change = 0.4             # W007
 max_ramp_steps = 0                 # W008: most shades per ramp/material (0 = no limit)
 disable = []                       # warning ids only
@@ -469,7 +470,7 @@ checkouts of the same art (e.g. agents' git worktrees), so a fresh checkout does
 | `pagan palette adjust <pal> [--lightness d] [--contrast k] [--saturation k] [--hue deg] [--warmth d] [--ramp r] [--keys ...] [--out new] [--dry-run]` | change the look globally |
 | `pagan import <png> [--palette P \| --open] [--scale N] [--name] [--out]` | PNG -> sprite (snaps colors, report) |
 | `pagan bake <model> [--name]` | model -> editable sprite (default name `<model>_baked`) |
-| `pagan fit <model> [--margin N] [--even]` | smallest size + pivot that fit every heading and pose |
+| `pagan fit <model> [--margin N] [--even] [--write]` | smallest size + pivot that fit every heading and pose |
 | `pagan status` | catalogue + what needs attention |
 | `pagan config show` / `get <key>` / `set <key> <value>` / `unset <key>` | project settings: value, default, meaning; validated edits; unset = back to default |
 | `pagan mark <asset...> [--status approved] [--current] [--outdated]` | record reviews |

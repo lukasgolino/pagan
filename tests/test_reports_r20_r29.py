@@ -444,3 +444,21 @@ def test_verify_godot_accepts_a_swap_only_base_variant(tmp_path: Path) -> None:
     assert GODOT is not None
     check = verify_with_godot(GODOT, tmp_path / "game", "res://gen/manifest.json")
     assert check.ok, check.output
+
+
+def test_w003_skips_flat_one_key_model_materials(tmp_path: Path) -> None:
+    # #35: LEDs and screens (`{ keys: ["a"] }`) aren't shading ramps, so they don't count towards W003.
+    project = make_project(tmp_path, 'default_palette = "test"\n[lint]\nmax_ramps_per_model = 1\n')
+    (project.root / "models").mkdir()
+    path = project.root / "models" / "panel.model.yaml"
+    body = (
+        "name: panel\nsize: [24, 24]\npivot: [12, 16]\ndirections: 1\noutline: none\nmaterials:\n"
+        "  case: {{ ramp: red }}\n  led: {led}\n  screen: {{ keys: [\"4\", \"4\"] }}\nparts:\n"
+        "  - box: {{ from: [-3, -1, 0], to: [3, 1, 4], material: case }}\n"
+        "  - box: {{ from: [-1, -2, 3], to: [-1, -2, 3], material: led }}\n"
+        "  - box: {{ from: [1, -2, 1], to: [2, -2, 2], material: screen }}\n"
+    )
+    path.write_text(body.format(led='{ keys: ["5"] }'))
+    assert "W003" not in rules(lint_paths(project).findings)
+    path.write_text(body.format(led="{ ramp: blue }").replace('keys: [\"4\", \"4\"]', "ramp: green"))
+    assert "W003" in rules(lint_paths(project).findings)  # shaded materials still count
