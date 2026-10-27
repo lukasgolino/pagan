@@ -104,6 +104,9 @@ font:                         # optional: the frames are a font's glyphs (manife
   spacing: 1                  # auto advance: pixels after each glyph
   space: 3                    # auto advance of blank glyphs such as " " (default: half the cell)
   line_height: 9              # default: cell height
+  advances: { "i": 4, "1": 5 }  # optional: per-character advance (source metrics), over advance/auto
+  offsets: { "j": -1, "g": [0, 1] }  # optional: per-character draw offset x or [x, y] from the pen (.fnt xoffset/yoffset)
+  skip_blank: true            # optional: blank cells aren't glyphs (except " " etc.), so the engine falls back to another font
 ```
 
 Frame order in the file = order in the sprite sheet (generated frames of mirrored animations come
@@ -525,7 +528,7 @@ y up, z towards the viewer), `animation_order` (animation names in file order: J
 `nine_slice` (frame -> [left, top, right, bottom]), `mesh` (models with "mesh" exported: see Meshes),
 `textures` (tilesets with `export_textures`: per texture `png`, `size`, `metres`, `tiles`, `variants`,
 `godot_material`) and, for fonts, `font` (`glyph_order`, `glyphs`: char ->
-`rect` [x, y, w, h] in the sheet + `advance`, `cell`, `ascent`, `descent`, `line_height`) and `font_file`
+`rect` [x, y, w, h] in the sheet + `advance` (+ `offset` [x, y] when set), `cell`, `ascent`, `descent`, `line_height`) and `font_file`
 (an AngelCode BMFont `fonts/<name>.fnt` with its own copy of the sheet, `fonts/<name>.png`). Supersampled assets: `size`, frame rects and `pivot` are in output pixels
 (`pivot` may be fractional), plus `supersample` and `source_size`; their sheets blend colours at edges, so
 a shader swap by exact colour misses the blended pixels: use variant sheets for them. `base_variant` (when

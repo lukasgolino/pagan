@@ -16,7 +16,7 @@ import numpy as np
 from PIL import Image
 
 from pagan import __version__
-from pagan.asset import Animation, Asset, Variant, glyph_cells
+from pagan.asset import Animation, Asset, Variant, font_glyphs, glyph_advance
 from pagan.exporters.godot import (
     AtlasTile,
     centered_offset,
@@ -397,18 +397,15 @@ def font_metrics(asset: Asset, factor: int = 1) -> dict[str, Any]:
     cell_w, cell_h = font.cell
     per_row = asset.size[0] // cell_w
     glyphs: dict[str, Any] = {}
-    counters: dict[str, int] = {}
-    for char, (frame, grid) in zip(font.glyphs, glyph_cells(font, asset.frames, asset.size), strict=False):
-        index = counters.get(frame, 0)
-        counters[frame] = index + 1
+    for char, frame, index, grid in font_glyphs(font, asset.frames, asset.size):
         x, y, _, _ = rects[frame]
         left, top = x + (index % per_row) * cell_w, y + (index // per_row) * cell_h
-        drawn = max((i + 1 for row in grid for i, c in enumerate(row) if c != TRANSPARENT), default=0)
-        advance = font.advance if font.advance is not None else (drawn + font.spacing if drawn else font.space)
         glyphs[char] = {
             "rect": [left // factor, top // factor, cell_w // factor, cell_h // factor],
-            "advance": -(-advance // factor),
+            "advance": -(-glyph_advance(font, char, grid) // factor),
         }
+        if char in font.offsets:
+            glyphs[char]["offset"] = [v // factor for v in font.offsets[char]]
     return {
         "glyph_order": font.glyphs,
         "glyphs": glyphs,
@@ -431,7 +428,8 @@ def bmfont_text(name: str, font: dict[str, Any], page: str, sheet_size: tuple[in
     ]
     for char, glyph in sorted(font["glyphs"].items(), key=lambda item: ord(item[0])):
         x, y, w, h = glyph["rect"]
-        lines.append(f"char id={ord(char)} x={x} y={y} width={w} height={h} xoffset=0 yoffset=0 xadvance={glyph['advance']} page=0 chnl=15")
+        dx, dy = glyph.get("offset", (0, 0))
+        lines.append(f"char id={ord(char)} x={x} y={y} width={w} height={h} xoffset={dx} yoffset={dy} xadvance={glyph['advance']} page=0 chnl=15")
     return "\n".join(lines) + "\n"
 
 

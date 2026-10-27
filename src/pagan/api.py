@@ -26,7 +26,7 @@ import numpy as np
 import yaml
 from PIL import Image, ImageDraw, ImageFont
 
-from pagan.asset import Asset, glyph_cells, load_asset_or_raise
+from pagan.asset import Asset, font_glyphs, glyph_advance, load_asset_or_raise
 from pagan.lint import _orphans
 from pagan.model import SailCell, _Builder, hull_reach, sail_cells
 from pagan.palette import TRANSPARENT, Palette
@@ -142,22 +142,24 @@ class Canvas:
 
     def text(self, font: Asset, text: str, x: int, y: int, scale: int = 1, key: str | None = None) -> Canvas:
         """Write `text` with a project font sprite (`font:`), its top-left at (x, y), each glyph pixel `scale` x
-        `scale`; advances as in the build's font metrics. `key` paints every glyph pixel one key (else the font's)."""
+        `scale`; advances and offsets as in the build's font metrics. `key` paints every glyph pixel one key (else
+        the font's)."""
         if font.font is None:
             raise ValueError(f"{font.name!r} isn't a font sprite (it has no font: section)")
-        glyphs = dict(zip(font.font.glyphs, (grid for _, grid in glyph_cells(font.font, font.frames, font.size)), strict=False))
+        metrics = font.font
+        glyphs = {char: grid for char, _, _, grid in font_glyphs(metrics, font.frames, font.size)}
         pen = x
         for char in text:
             grid = glyphs.get(char)
             if grid is None:
                 raise ValueError(f"font {font.name!r} has no glyph for {char!r}")
+            ox, oy = metrics.offsets.get(char, (0, 0))
+            left, top = pen + ox * scale, y + oy * scale
             for gy, row in enumerate(grid):
                 for gx, value in enumerate(row):
                     if value != TRANSPARENT:
-                        self.rect(pen + gx * scale, y + gy * scale, pen + gx * scale + scale - 1, y + gy * scale + scale - 1, key or value)
-            drawn = max((i + 1 for row in grid for i, c in enumerate(row) if c != TRANSPARENT), default=0)
-            advance = font.font.advance if font.font.advance is not None else (drawn + font.font.spacing if drawn else font.font.space)
-            pen += advance * scale
+                        self.rect(left + gx * scale, top + gy * scale, left + gx * scale + scale - 1, top + gy * scale + scale - 1, key or value)
+            pen += glyph_advance(metrics, char, grid) * scale
         return self
 
     def copy(self) -> Canvas:

@@ -27,6 +27,10 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 - `pagan fit <model> --write`: sets the file's `size` and `pivot` to the fit (in-place text edit, comments kept);
   the `--json` result says whether it `written` anything (#35).
 - `pagan preview --variants all`: every `variant_axes` combination, as before (#32).
+- Font sprites: `font.advances: { "i": 4 }` (per-character advance over `advance`/auto), `font.offsets: { "j": -1,
+  "g": [0, 1] }` (per-character draw offset: manifest glyph `offset`, `.fnt` `xoffset`/`yoffset`, `Canvas.text`) and
+  `font.skip_blank: true` (blank cells of non-whitespace characters are left out of the glyph table and the `.fnt`, so
+  an engine falls back to another font). Fonts without them are unchanged (#34).
 
 ### Changed
 
