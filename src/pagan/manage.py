@@ -52,7 +52,7 @@ class AssetStatus:
 
 
 def catalogue(project: Project) -> list[AssetStatus]:
-    result = lint_paths(project)
+    result = lint_paths(project, scenes=False)
     by_path = {a.path.resolve(): a for a in result.assets if a.path is not None}
     out: list[AssetStatus] = []
     for path in result.files:

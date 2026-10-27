@@ -99,7 +99,7 @@ def _png_bytes(image: Any, scratch: Path) -> bytes:
 
 def build(project: Project) -> BuildResult:
     """Build the whole project (a partial build would leave an incomplete manifest)."""
-    lint = lint_paths(project)
+    lint = lint_paths(project, scenes=False)
     result = BuildResult(lint=lint)
     if lint.errors:
         result.errors = lint.errors

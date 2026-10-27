@@ -1,0 +1,11 @@
+# Several sprites together in time, for looking at (`pagan preview scenes/yard.timeline.yaml --at 0.5,2`).
+# A preview only: `pagan build` never reads scenes/.
+size: [96, 48]
+fps: 12
+duration: 3
+background: "#1d3b53"
+layers:
+  - {sprite: barrel, anim: main, at: [20, 40]}
+  - {sprite: slime, anim: idle, at: [48, 40], start: 0.25, fade_in: 0.5}
+  - {sprite: potion, anim: main, from: [104, 8], to: [74, 41], start: 1, duration: 0.5}
+  - {sprite: barrel, anim: main, at: [84, 40], start: 2, alpha: 0.5, fade_out: 1}

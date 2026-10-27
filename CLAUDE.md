@@ -35,6 +35,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `asset.py` sprite + tileset parsing (grids, mirror, derived frames, outline, animations, variants, metadata);
   - `render.py` frames/sheets to RGBA images + deterministic PNG saving; `lint.py` warnings W001-W006;
   - `preview.py` upscaled frames, contact sheets (with animation "changes" rows), GIFs, tiling check, gallery;
+  - `timeline.py` timeline previews (`scenes/<name>.timeline.yaml`: sprites composed in time; lint E016, never built);
   - `views.py` 3D review views of models (orbit from below to straight down, part closeups, gallery thumbnails);
   - `color.py` OKLab/OKLCh conversions + gamut mapping; `importer.py` PNG -> sprite (scale detection, snapping);
   - `voxel.py` voxel model + renderer (grid ray traversal, smoothed/exact normals, wrap light, soft shadows);
@@ -193,3 +194,8 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-21: #4 (R33): derived-frame scale/rotate is inverse-mapped nearest neighbour (output pixel centre -> source
   pixel), not RotSprite; trig rounded to 12 and mapped coordinates to 9 decimals for cross-platform stability.
   Tilesets' `about: pivot` = centre (tiles have no pivot).
+- 2026-10-27: #16: timeline previews are preview only (no build output, no manifest change; `pagan build`, `gallery`
+  and `status` skip `scenes/`). Times are exact fractions (decimals read as written), positions round half up, so
+  frames never depend on float rounding. `duration` with `from`/`to` = how long the move takes (the layer stays at
+  `to`); otherwise how long the layer is shown. Output goes to `previews/<name>.timeline/` (a dot can't occur in
+  asset names, so it never meets an asset's previews). Timelines are targets by path; `--scene` stays the tileset layout.

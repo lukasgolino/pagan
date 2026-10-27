@@ -91,6 +91,11 @@ class Project:
         return self.root / "models"
 
     @property
+    def scenes_dir(self) -> Path:
+        """Timeline previews (`<name>.timeline.yaml`): previews only, never built."""
+        return self.root / "scenes"
+
+    @property
     def preview_dir(self) -> Path:
         return self.root / self.config.preview_dir
 
