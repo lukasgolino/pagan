@@ -25,7 +25,7 @@ from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_st
 from pagan.palette import KEY_ORDER, NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.model import part_cells
-from pagan.preview import PreviewOptions, gallery, write_closeup, write_native, write_orbit, write_previews
+from pagan.preview import PreviewOptions, gallery, preview_variants, write_closeup, write_native, write_orbit, write_previews
 from pagan.render import supersample_factor
 from pagan.settings import BY_KEY, Change, describe, set_in_toml, set_setting, unset_setting
 from pagan.swatch import render_swatch
@@ -524,6 +524,7 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
     assets, findings = _load_targets(args.assets, project)
     outputs: list[dict[str, Any]] = []
     for asset in assets:
+        asset = preview_variants(asset, args.variants == "all")
         if args.frame is not None and args.frame not in asset.frames:
             findings.append(Finding("E000", f"--frame: {asset.name} has no frame {args.frame!r}", asset.path))
             continue
@@ -670,7 +671,8 @@ def cmd_gallery(args: argparse.Namespace, out: Output) -> int:
     result = lint_paths(project)
     path = Path(args.out) if args.out else project.preview_dir / "gallery.png"
     path.parent.mkdir(parents=True, exist_ok=True)
-    gallery(result.assets, options, f"{project.root.name} gallery", project.config.camera).save(path)
+    assets = [preview_variants(asset) for asset in result.assets]
+    gallery(assets, options, f"{project.root.name} gallery", project.config.camera).save(path)
     out.say(f"wrote {display_path(path)} ({len(result.assets)} assets)")
     if result.errors:
         out.say(f"{len(result.errors)} errors: assets with errors are missing; run `pagan lint`")
@@ -1349,6 +1351,10 @@ def build_parser() -> argparse.ArgumentParser:
     preview.add_argument("--closeup", metavar="PART", action="append", help="3D models: closeup_<PART>.png, one part filling the view (repeatable)")
     preview.add_argument("--engine", action="store_true", help="3D models: engine.png, the built mesh rendered by Godot (needs a display)")
     preview.add_argument("--all-previews", action="store_true", help="with --orbit/--closeup/--engine: also write the usual sprite previews")
+    preview.add_argument(
+        "--variants", choices=["options", "all"], default="options",
+        help="assets with variant_axes: show each axis option on its own (default), or every combination",
+    )  # fmt: skip
     preview.set_defaults(handler=cmd_preview)
 
     gallery_cmd = commands.add_parser(

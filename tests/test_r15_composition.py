@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from conftest import LoadFn, make_project
 from pagan.asset import load_asset
 from pagan.build import build
@@ -123,6 +125,71 @@ def test_axes_in_the_manifest(tmp_path: Path) -> None:
         assert entry["variant_axes"]["team"]["plain"]["swap"] == {}
         assert (set(entry["variants"]) == {"green+white", "green+blue", "plain+white", "plain+blue"}) is sheets
         assert (project.output_dir / "sprites" / "flag.green+white.png").exists() is sheets
+
+
+def _many_axes(options: tuple[int, ...]) -> str:
+    """A sprite with one axis per entry, each with that many options recolouring its own key (keys 0..6)."""
+    keys = "0123456"
+    axes = "".join(
+        f"  a{i}: {{ base: {{}}, "
+        + ", ".join(f'o{j}: {{ key_swap: {{ "{keys[i]}": "{keys.replace(keys[i], "")[j % 6]}" }} }}' for j in range(n - 1))
+        + " }\n"
+        for i, n in enumerate(options)
+    )
+    return f"name: crew\nsize: [{len(options)}, 1]\nframes:\n  a: |\n    {keys[: len(options)]}\nvariant_axes:\n{axes}"
+
+
+def test_axis_combination_cap_needs_variant_sheets(tmp_path: Path) -> None:
+    # #31: 5 x 6 x 10 = 300 combinations is over the cap only when a sheet is built per combination.
+    text = _many_axes((5, 6, 10))
+    for sheets in (True, False):
+        root = tmp_path / str(sheets)
+        root.mkdir()
+        project = make_project(root, f'default_palette = "test"\nvariant_sheets = {str(sheets).lower()}\n')
+        (project.root / "sprites" / "crew.sprite.yaml").write_text(text)
+        asset, findings = load_asset(project.root / "sprites" / "crew.sprite.yaml", project)
+        if sheets:
+            assert asset is None and any("300 combinations" in f.message and "variant_sheets = false" in f.message for f in findings)
+            continue
+        assert asset is not None and not findings, [f.format() for f in findings]
+        assert asset.variants == {} and [len(o) for o in asset.variant_axes.values()] == [5, 6, 10]
+        result = build(load_project(project.root))
+        assert not result.errors, [f.format() for f in result.errors]
+        entry = json.loads((project.output_dir / "manifest.json").read_text())["assets"]["crew"]
+        assert entry["variants"] == {} and len(entry["variant_axes"]["a2"]) == 10
+    # Under the cap nothing changes: the combinations are still made (and named) with variant_sheets = false.
+    (project.root / "sprites" / "crew.sprite.yaml").write_text(_many_axes((2, 3)))
+    asset, findings = load_asset(project.root / "sprites" / "crew.sprite.yaml", project)
+    assert asset is not None and len(asset.variants) == 6, [f.format() for f in findings]
+
+
+def test_preview_shows_axis_options_not_combinations(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # #32: previews show each axis option once; --variants all shows every combination.
+    from pagan.cli import main
+    from pagan.preview import preview_variants
+
+    project = make_project(tmp_path, 'default_palette = "test"\nvariant_sheets = false\n')
+    (project.root / "sprites" / "crew.sprite.yaml").write_text(_many_axes((5, 6, 10)) + "variants:\n  ghost: { key_swap: { \"0\": \"6\" } }\n")
+    asset, findings = load_asset(project.root / "sprites" / "crew.sprite.yaml", project)
+    assert asset is not None, [f.format() for f in findings]
+    shown = preview_variants(asset)
+    assert list(shown.variants)[:3] == ["ghost", "a0.o0", "a0.o1"] and len(shown.variants) == 1 + 4 + 5 + 9
+    assert shown.variants["a1.o2"].keys == {"1": "3"}
+    assert len(preview_variants(asset, every_combination=True).variants) == 1 + 300
+    monkeypatch.chdir(project.root)
+    assert main(["preview", "crew", "--quiet"]) == 0
+    native = project.preview_dir / "crew" / "native"
+    assert sorted(p.name for p in native.iterdir() if p.is_dir())[:3] == ["a0.o0", "a0.o1", "a0.o2"]
+    assert len([p for p in native.iterdir() if p.is_dir()]) == 1 + 1 + 4 + 5 + 9  # + frames/
+    assert main(["preview", "crew", "--quiet", "--variants", "all"]) == 0
+    assert (native / "o0+o1+base").is_dir()
+    assert main(["gallery", "--quiet"]) == 0
+    (tmp_path / "plain").mkdir()
+    plain = make_project(tmp_path / "plain")
+    (plain.root / "sprites" / "flag.sprite.yaml").write_text(AXES.format(extra=""))
+    flag, _ = load_asset(plain.root / "sprites" / "flag.sprite.yaml", plain)
+    assert flag is not None and set(preview_variants(flag).variants) == {"team.green", "stripe.white"}
+    assert set(preview_variants(flag, every_combination=True).variants) == set(flag.variants)
 
 
 RIGGED = """\

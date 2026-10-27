@@ -817,10 +817,10 @@ def _parse_variant_axes(
     """`variant_axes: { team: { red: {ramp_swap: ...}, blue: ... }, trim: { gold: ..., steel: ... } }`.
 
     Independent recolours that combine: axes must change disjoint keys, so any choice per axis is just
-    every chosen swap applied together. Returns (axes, combinations named "red+gold" in axis order).
+    every chosen swap applied together. Returns (axes, combinations named "red+gold" in axis order). With
+    `variant_sheets = false` nothing is built per combination, so more than MAX_VARIANT_COMBINATIONS is fine:
+    then no combinations are made at all (the manifest lists the axes; previews show each option).
     """
-    import itertools
-
     if raw is None:
         return {}, {}
     if not isinstance(raw, dict) or not raw:
@@ -872,19 +872,36 @@ def _parse_variant_axes(
     for options in axes.values():
         count *= len(options)
     if count > MAX_VARIANT_COMBINATIONS:
-        error("E006", f"variant_axes make {count} combinations (limit {MAX_VARIANT_COMBINATIONS})", line, "variant_axes")
+        if not project.config.variant_sheets:
+            return axes, {}
+        error(
+            "E006",
+            f"variant_axes make {count} combinations (limit {MAX_VARIANT_COMBINATIONS}, one sheet each); with "
+            "variant_sheets = false (the game composes the axes' swaps) there is no limit",
+            line,
+            "variant_axes",
+        )
         return {}, {}
+    combos = axis_combinations(axes, palette)
+    clash = next((name for name in combos if name in plain), None)
+    if clash is not None:
+        error("E006", f"variant {clash!r} is defined in variants and made by variant_axes; rename one", line, "variant_axes")
+        return {}, {}
+    return axes, combos
+
+
+def axis_combinations(axes: dict[str, dict[str, Variant]], palette: Palette) -> dict[str, Variant]:
+    """Every choice of one option per axis as a variant named "red+gold" (axis order), all its swaps applied."""
+    import itertools
+
     combos: dict[str, Variant] = {}
     for choice in itertools.product(*(options.values() for options in axes.values())):
         name = "+".join(v.name for v in choice)
         keys: dict[str, str] = {}
         for v in choice:
             keys.update({k: t for k, t in v.keys.items() if t != k})
-        if name in plain:
-            error("E006", f"variant {name!r} is defined in variants and made by variant_axes; rename one", line, "variant_axes")
-            return {}, {}
         combos[name] = Variant(name=name, keys=keys, palette=palette)
-    return axes, combos
+    return combos
 
 
 def _parse_animations(raw: Any, frames_known: set[str], line: int | None, error: ErrorFn) -> dict[str, Animation]:
