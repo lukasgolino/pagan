@@ -12,6 +12,7 @@ from pagan.findings import Finding, PaganError
 from pagan.palette import PALETTE_SUFFIX, TRANSPARENT, load_palette_file
 from pagan.project import Project
 from pagan.render import frame_rects
+from pagan.timeline import TIMELINE_SUFFIX, AssetCache, load_timeline
 
 WARNING_RULES = {
     "W001": "orphan pixel",
@@ -46,10 +47,11 @@ class LintResult:
         return [f for f in self.findings if f.severity == "warning"]
 
 
-def source_files(project: Project, paths: list[Path] | None = None) -> list[Path]:
-    """Palette and asset files under `paths` (default: the project's palettes/, sprites/, tiles/, models/)."""
-    roots = paths or [project.palettes_dir, project.sprites_dir, project.tiles_dir, project.models_dir]
-    suffixes = (PALETTE_SUFFIX, *ASSET_SUFFIXES)
+def source_files(project: Project, paths: list[Path] | None = None, scenes: bool = True) -> list[Path]:
+    """Palette, asset and (with `scenes`) timeline files under `paths` (default: the project's palettes/,
+    sprites/, tiles/, models/ and scenes/)."""
+    roots = paths or [project.palettes_dir, project.sprites_dir, project.tiles_dir, project.models_dir, project.scenes_dir]
+    suffixes = (PALETTE_SUFFIX, *ASSET_SUFFIXES, *((TIMELINE_SUFFIX,) if scenes else ()))
     found: set[Path] = set()
     for root in roots:
         if root.is_file():
@@ -59,12 +61,18 @@ def source_files(project: Project, paths: list[Path] | None = None) -> list[Path
     return sorted(found)
 
 
-def lint_paths(project: Project, paths: list[Path] | None = None) -> LintResult:
-    files = source_files(project, paths)
+def lint_paths(project: Project, paths: list[Path] | None = None, scenes: bool = True) -> LintResult:
+    """Lint sources. `scenes=False` skips timeline files (`pagan build` and the gallery: they're previews only)."""
+    files = source_files(project, paths, scenes)
     linted = {f.resolve() for f in files}
     findings: list[Finding] = []
     assets: list[Asset] = []
+    parsed: dict[Path, Asset | None] = {}
+    timelines: list[Path] = []
     for path in files:
+        if path.name.endswith(TIMELINE_SUFFIX):
+            timelines.append(path)
+            continue
         if path.name.endswith(PALETTE_SUFFIX):
             try:
                 load_palette_file(path)
@@ -79,6 +87,7 @@ def lint_paths(project: Project, paths: list[Path] | None = None) -> LintResult:
         findings.extend(kept)
         if asset is None and not any(f.severity == "error" for f in kept):
             findings.append(Finding("E005", "this file's palette is invalid; run `pagan lint` on palettes/", path))
+        parsed[path.resolve()] = asset
         if asset is not None:
             assets.append(asset)
             findings.extend(lint_asset(asset, project))
@@ -101,6 +110,9 @@ def lint_paths(project: Project, paths: list[Path] | None = None) -> LintResult:
                     "name",
                 )
             )
+    cache = AssetCache(project, parsed)
+    for path in timelines:  # after the assets, so the sprites they show are parsed once
+        findings.extend(load_timeline(path, project, cache)[1])
     disabled = set(project.config.lint.disable)
     findings = [f for f in findings if f.rule not in disabled]
     return LintResult(files=files, findings=_dedupe(findings), assets=assets)

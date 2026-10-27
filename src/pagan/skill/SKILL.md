@@ -155,6 +155,9 @@ splash; model frames up to 1024). Small means less detail; that's the deal, so s
    every heading and pose; `--write` puts them in the file (after adding animations, run it again).
 4. `pagan preview <name>` -> **open `previews/<name>/sheet.png` with the Read tool and look at it.**
    (It also writes 1x frames to `previews/<name>/native/` for scripted montages.)
+   Sprites meant to play together (a title, a hit and its sparks, a cutscene): put them in a
+   `scenes/<name>.timeline.yaml` (reference: Timeline preview) and `pagan preview scenes/<name>.timeline.yaml
+   --at 1.9,2.0` -> look at `previews/<name>.timeline/at.png` (and timeline.gif).
 5. Self-review against STYLE.md and the reference assets (`pagan gallery` shows the whole set):
    silhouette readable at 1x? light from the right side? ramps used dark->light? no pillow shading?
    (flat style: clean shapes, even rims, no stray pixels.) Supersampled: judge `built_1x.png`, not the source.

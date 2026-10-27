@@ -9,6 +9,7 @@ values (`"0"`, `"#1a1c2c"`): an unquoted `#` starts a YAML comment.
 pagan.toml   BRIEF.md   STYLE.md
 palettes/<name>.pal.yaml     sprites/<name>.sprite.yaml
 tiles/<name>.tiles.yaml      models/<name>.model.yaml
+scenes/<name>.timeline.yaml  (previews of sprites together in time; never built)
 previews/  (scratch, gitignored)    .pagan-cache/ (model render cache, gitignored)
 ```
 
@@ -348,6 +349,34 @@ For a free 3D camera (flying, below models, close up), models also build as real
 - **Review:** `pagan preview <model> --orbit` (every heading from -30 to 90 degrees elevation),
   `--closeup <part>`, `--engine` (the built .tscn rendered by Godot; needs a display).
 
+## Timeline preview - `scenes/<name>.timeline.yaml`
+
+Several sprites (or 3D models' frames) composed in time, to judge how they play together (does the flash
+line up with the hit, is the glint readable over the letters). A preview only: `pagan build` and the
+manifest never read it. `pagan lint` checks it with the project (E016; all problems, with lines and fixes).
+
+```yaml
+size: [640, 240]              # canvas, in output pixels (supersampled sprites are shown as built)
+fps: 30                       # timeline frames per second (frames/f0000.png at t = 0, 1/30, ...)
+duration: 6                   # seconds
+background: "#101018"         # optional; default transparent (previews then show --bg)
+layers:                       # drawn in list order (later on top), alpha-composited
+  - {sprite: bg_smoke, anim: smoke, at: [0, 0], alpha: 0.6}
+  - {sprite: letters, anim: a, at: [75, 200], start: 0.25, fade_in: 0.45}
+  - {sprite: arrow, anim: fly, from: [-400, -60], to: [583, 131], start: 1.87, duration: 0.12, then: shudder}
+  - {sprite: fx, anim: sparks, at: [583, 131], start: 1.99, variant: blue}
+```
+
+Layer fields (no others): `sprite` (asset name; sprites and 3D models, not tilesets), `anim` (an animation,
+or a frame name shown still), `at: [x, y]` (where the sprite's pivot goes), `start` (seconds, default 0),
+`duration`, `alpha` (0-1, default 1), `fade_in` / `fade_out` (seconds), `from` / `to` (instead of `at`:
+a straight move over `duration`, rounded to whole pixels; the layer then stays at `to`), `then` (the
+animation that follows when a one-shot `anim` (`loop: false`) ends; without it the last frame holds),
+`variant`. `duration` without `from`/`to` = how long the layer is shown (default: to the end); `fade_out`
+ends where the layer ends (with a move: the end of the timeline). Animations play from the layer's `start`
+with their own fps, loop and `durations`. No easing, rotation or scale: use derived frames for those.
+Times are exact (0.1 is 1/10 s), so output is identical on every machine.
+
 ## Recipes
 
 **Top-down character (3D, ~22px tall in a 32x32 frame, walk cycle).** Separate parts with ids for
@@ -484,6 +513,7 @@ checkouts of the same art (e.g. agents' git worktrees), so a fresh checkout does
 | `pagan lint [paths] [--warnings-as-errors]` | errors + style warnings |
 | `pagan preview <model> --orbit \| --closeup PART \| --engine [--all-previews]` | 3D review: orbit.png (8 headings x elevations -30, 0, 30, 60, 90: undersides too), closeup_<PART>.png (one part filling the view, in place and alone), engine.png (the built .tscn through Godot: needs a display); only these unless `--all-previews` |
 | `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb] [--scene FILE] [--frame NAME] [--variants options\|all]` | sheet.png (labelled), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale, plus native/ (1x frames and sheet, as `pagan render`); variants.png + variants_1x.png (base and every variant side by side: the first frame with pixels, or `--frame`) when the asset has variants (with `variant_axes`: each axis option on its own, named `<axis>.<option>`; `--variants all` = every combination); `--scene` (tilesets): scene.png from a layout file (rows of tile names, `.` = empty) and scene_variants.png; supersampled assets also get an "as built" row and built_1x.png (what the game gets) |
+| `pagan preview scenes/<name>.timeline.yaml [--at 0.5,2.0] [--scale N] [--grid] [--bg ...]` | timeline: `previews/<name>.timeline/` frames/f0000.png..., timeline.gif, and with `--at` at.png (a contact sheet of those times) |
 | `pagan gallery` | every asset in one image |
 | `pagan render <asset...>` | native-size PNGs |
 | `pagan palette show [palettes]` | swatches |
@@ -514,7 +544,7 @@ Errors: E000 command/usage, E001 YAML/field, E002 unknown pixel key, E003 grid s
 animation frame, E005 palette problem, E006 variant problem, E007 outline or shadow clipped at the edge, E008 pivot,
 E009 inline palette in strict mode, E010 derived frame, E011 outline required, E012 duplicate asset name,
 E013 model problem, E014 rig / mesh problem (unknown rig id or parent, parent cycle, a hidden carving part when
-meshes are exported), E015 translucent colour with `require_opaque`. E003 also: a size that isn't a multiple of `supersample`.
+meshes are exported), E015 translucent colour with `require_opaque`, E016 timeline problem (`scenes/*.timeline.yaml`). E003 also: a size that isn't a multiple of `supersample`.
 
 Warnings: W001 orphan pixel, W002 unused frame, W003 too many ramps, W004 empty frame, W005 visible area
 jumps between frames, W006 made under an older style version, W007 too much change between frames,

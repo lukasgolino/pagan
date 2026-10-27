@@ -519,10 +519,20 @@ def _preview_options(args: argparse.Namespace) -> PreviewOptions:
 
 
 def cmd_preview(args: argparse.Namespace, out: Output) -> int:
+    from pagan.timeline import TIMELINE_SUFFIX
+
     project = project_for(args.assets)
     options = _preview_options(args)
-    assets, findings = _load_targets(args.assets, project)
-    outputs: list[dict[str, Any]] = []
+    timelines = [t for t in args.assets if t.endswith(TIMELINE_SUFFIX)]
+    targets = [t for t in args.assets if not t.endswith(TIMELINE_SUFFIX)]
+    if args.at is not None and not timelines:
+        raise _usage_error(f"--at needs a timeline target (scenes/<name>{TIMELINE_SUFFIX})")
+    asset_options = [o for o, on in (("--scene", args.scene), ("--frame", args.frame), ("--orbit", args.orbit),
+                     ("--closeup", args.closeup), ("--engine", args.engine), ("--all-previews", args.all_previews)) if on]  # fmt: skip
+    if asset_options and not targets:
+        raise _usage_error(f"{', '.join(asset_options)}: options for assets; a timeline takes --at, --scale, --grid and --bg")
+    assets, findings = _load_targets(targets, project)
+    outputs: list[dict[str, Any]] = _timeline_previews(timelines, project, options, args.at, out, findings)
     for asset in assets:
         asset = preview_variants(asset, args.variants == "all")
         if args.frame is not None and args.frame not in asset.frames:
@@ -599,6 +609,48 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
     return 0
 
 
+def _timeline_previews(
+    targets: list[str], project: Project, options: PreviewOptions, at: str | None, out: Output, findings: list[Finding]
+) -> list[dict[str, Any]]:
+    """Timeline targets: frames/, timeline.gif and (--at) at.png under <previews>/<name>.timeline/."""
+    from pagan.timeline import AssetCache, load_timeline, parse_times, write_timeline_previews
+
+    try:
+        times = parse_times(at) if at is not None else None
+    except ValueError as exc:
+        raise _usage_error(str(exc)) from None
+    cache = AssetCache(project)
+    outputs: list[dict[str, Any]] = []
+    for target in targets:
+        path = Path(target)
+        if not path.is_file():
+            findings.append(Finding("E000", f"no such timeline file: {target}"))
+            continue
+        timeline, problems = load_timeline(path, project, cache)
+        if timeline is None:
+            findings.extend(problems)
+            continue
+        late = [t for t in times or [] if t > timeline.duration]
+        if late:
+            findings.append(Finding("E000", f"--at: {', '.join(f'{float(t):g}' for t in late)}s is past the end of {timeline.name} ({float(timeline.duration):g}s)", path))
+            continue
+        result = write_timeline_previews(timeline, project.preview_dir, options, times)
+        out.say(f"{timeline.name}: {display_path(result.gif)}  (x{result.scale}, {len(result.frames)} frames at {float(timeline.fps):g}fps)")
+        out.say(f"  frames: {display_path(result.folder / 'frames')}/")
+        if result.at is not None:
+            out.say(f"  at {at}: {display_path(result.at)}")
+        outputs.append(
+            {
+                "timeline": timeline.name,
+                "scale": result.scale,
+                "gif": display_path(result.gif),
+                "frames": [display_path(f) for f in result.frames],
+                **({"at": display_path(result.at)} if result.at is not None else {}),
+            }
+        )
+    return outputs
+
+
 def _engine_preview(asset: Asset, project: Project, options: PreviewOptions) -> tuple[Path | None, str]:
     """engine.png: the built .tscn rendered by Godot from 8 sides, above and below. Needs a build with "godot" and
     "mesh" exported, a Godot binary and a display."""
@@ -668,7 +720,7 @@ def _scene_preview(asset: Asset, layout_file: Path, folder: Path, options: Previ
 def cmd_gallery(args: argparse.Namespace, out: Output) -> int:
     project = discover_project()
     options = _preview_options(args)
-    result = lint_paths(project)
+    result = lint_paths(project, scenes=False)
     path = Path(args.out) if args.out else project.preview_dir / "gallery.png"
     path.parent.mkdir(parents=True, exist_ok=True)
     assets = [preview_variants(asset) for asset in result.assets]
@@ -1341,10 +1393,15 @@ def build_parser() -> argparse.ArgumentParser:
     preview = commands.add_parser(
         "preview", parents=[common, view], help="upscaled previews: contact sheet, frames, animated GIFs"
     )
-    preview.add_argument("assets", nargs="+", help="asset files or names")
+    preview.add_argument("assets", nargs="+", help="asset files or names, or timeline files (scenes/<name>.timeline.yaml)")
+    preview.add_argument(
+        "--at", metavar="TIMES",
+        help="timelines: also at.png, a contact sheet of the timeline at these times in seconds (e.g. 0.5,2.0)",
+    )  # fmt: skip
     preview.add_argument(
         "--scene", metavar="FILE",
-        help="tilesets: also draw FILE's layout (rows of tile names, '.' = empty) to scene.png (and scene_variants.png)",
+        help="tilesets: also draw FILE's layout (rows of tile names, '.' = empty) to scene.png (and scene_variants.png); "
+        "not a timeline (give those as targets)",
     )  # fmt: skip
     preview.add_argument("--frame", metavar="NAME", help="the frame variants.png compares (default: the first with pixels)")
     preview.add_argument("--orbit", action="store_true", help="3D models: orbit.png, every heading from below (-30) to straight down (90)")

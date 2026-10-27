@@ -44,6 +44,11 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
   `animation_finished`. Preview GIFs play the intro once, then the loop; W007 checks the seam last -> frame N (#8).
 - Per-frame `durations` on tile animations (as on sprite animations), in the manifest and the Godot TileSet's
   `animation_frame_N/duration` (#8).
+- Timeline previews: `scenes/<name>.timeline.yaml` composes sprites in time (`size`, `fps`, `duration`, optional
+  `background`; layers with `sprite`, `anim`, `at`, `start`, `duration`, `alpha`, `fade_in`/`fade_out`, `from`/`to`,
+  `then`, `variant`). `pagan preview scenes/<name>.timeline.yaml [--at 0.5,2.0]` writes `frames/f0000.png...`,
+  `timeline.gif` and an `at.png` contact sheet under `previews/<name>.timeline/`. `pagan lint` checks timelines
+  (E016); `pagan build` ignores them (preview only, no manifest change) (#16).
 
 ### Changed
 
