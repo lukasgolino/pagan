@@ -1,7 +1,7 @@
 """LOOSE! title-logo reports R30-R38 (GitHub issues #1-#9): translucent palette colours (#2), wide/stacked
 outlines and drop shadows (#3), rotated/scaled derived frames (#4),
 per-frame attachment points (#5), numpy-friendly `pagan.api` (#6), faster lint of big
-sprites (#7), per-frame durations (#8), bigger canvases,
+sprites (#7), per-frame durations, `loop_from` and tile durations (#8), bigger canvases,
 `sheet_columns` and the sheet-size warning (#9, R30c)."""
 
 from __future__ import annotations
@@ -494,3 +494,113 @@ def test_outline_skip_translucent_ignores_glows_at_the_canvas_edge(tmp_path: Pat
     assert asset.frames["a"] == ("ggg", "g1g", "ggg")  # the only opaque pixel is fully surrounded by glow
     _, findings = load_asset(_sprite(project, "outline: { width: 1, skip_translucent: 1 }\n" + body), project)
     assert rules(findings) == {"E001"}
+
+
+# --- R37 (#8): loop_from (intro, then a loop) and tile animation durations -------------------------
+
+INTRO = "name: hit\nsize: [2, 1]\nframes:\n  a: |\n    1.\n  b: |\n    .1\n  c: |\n    11\nanimations:\n{anims}lint: {{ disable: [W001] }}\n"
+
+
+def test_loop_from_parses_and_mirrors(load: LoadFn) -> None:
+    asset, findings = load(INTRO.format(anims="  rise: { frames: [a, b, c, b], loop_from: 2 }\n  back: { from: rise, flip: horizontal }\n"), name="hit")
+    assert asset is not None, [f.format() for f in findings]
+    assert asset.animations["rise"].loop_from == 2 and asset.animations["back"].loop_from == 2
+    plain, _ = load(INTRO.format(anims="  rise: [a, b]\n"), name="hit")
+    assert plain is not None and plain.animations["rise"].loop_from is None
+
+
+@pytest.mark.parametrize(
+    ("anims", "hint"),
+    [
+        ("  rise: { frames: [a, b, c], loop_from: 0 }\n", "from 1 to 2"),
+        ("  rise: { frames: [a, b, c], loop_from: 3 }\n", "from 1 to 2"),
+        ("  rise: { frames: [a, b, c], loop_from: true }\n", "from 1 to 2"),
+        ("  rise: { frames: [a, b, c], loop_from: 1.5 }\n", "from 1 to 2"),
+        ("  rise: { frames: [a, b, c], loop_from: 1, loop: false }\n", "remove loop: false"),
+        ("  rise: { frames: [a, b, c], loop_from: 1 }\n  rise_loop: [c]\n", "'rise_loop', which is already an animation"),
+    ],
+)
+def test_loop_from_errors(load: LoadFn, anims: str, hint: str) -> None:
+    _, findings = load(INTRO.format(anims=anims), name="hit")
+    assert rules(findings) == {"E001"} and hint in findings[0].message, [f.format() for f in findings]
+    assert findings[0].where == "animations.rise"
+
+
+def test_loop_from_in_manifest_godot_and_gif(tmp_path: Path) -> None:
+    from pagan.preview import LOOP_FROM_REPEATS, PreviewOptions, animation_gif
+
+    (tmp_path / "game" / "art").mkdir(parents=True)
+    (tmp_path / "game" / "project.godot").write_text("config_version=5\n")
+    project = make_project(tmp_path / "game" / "art", 'default_palette = "test"\noutput_dir = "../gen"\nexport = ["png", "godot"]\n')
+    anims = "  idle: [a]\n  rise: { frames: [a, b, c, b], fps: 10, durations: [2, 1, 1, 3], loop_from: 2 }\n"
+    (project.root / "sprites" / "hit.sprite.yaml").write_text(INTRO.format(anims=anims))
+    result = build(load_project(project.root))
+    assert not result.errors and result.manifest is not None, [f.format() for f in result.errors]
+    entry = json.loads(result.manifest.read_text())["assets"]["hit"]
+    assert entry["animation_order"] == ["idle", "rise", "rise_loop"]
+    assert entry["animations"]["idle"] == {"frames": ["a"], "fps": 8.0, "loop": True}
+    assert entry["animations"]["rise"] == {"frames": ["a", "b"], "fps": 10.0, "loop": False, "durations": [2.0, 1.0], "loop_from": 2, "next": "rise_loop"}
+    assert entry["animations"]["rise_loop"] == {"frames": ["c", "b"], "fps": 10.0, "loop": True, "durations": [1.0, 3.0]}
+    tres = (tmp_path / "game" / "gen" / "sprites" / "hit.tres").read_text()
+    assert '"loop": false,\n"name": &"rise"' in tres and '"loop": true,\n"name": &"rise_loop"' in tres
+    asset = load_asset(project.root / "sprites" / "hit.sprite.yaml", load_project(project.root))[0]
+    assert asset is not None
+    gif = tmp_path / "rise.gif"
+    animation_gif(asset, "rise", PreviewOptions(scale=1), gif)
+    with Image.open(gif) as image:
+        shown = []
+        for i in range(getattr(image, "n_frames", 1)):
+            image.seek(i)
+            shown.append(image.info["duration"])
+    assert shown == [200, 100] + [100, 300] * LOOP_FROM_REPEATS  # the intro once, then the loop
+
+
+def test_loop_from_seam_lint_skips_the_intro(tmp_path: Path) -> None:
+    from pagan.lint import lint_paths
+
+    project = make_project(tmp_path, 'default_palette = "test"\n[lint]\nmax_frame_change = 0.01\n')
+    path = project.root / "sprites" / "hit.sprite.yaml"
+    path.write_text(INTRO.format(anims="  rise: { frames: [a, c, c, c, c], loop_from: 1 }\n"))
+    pairs = [f.message.split(":")[0] for f in lint_paths(load_project(project.root)).findings if f.rule == "W007"]
+    assert pairs == ["a -> c"]  # the loop's seam is c -> c, not c -> a
+
+
+TILE_HOLD = """\
+name: sea
+tile_size: [2, 2]
+columns: 4
+tiles:
+  rock: |
+    00
+    00
+  w0: |
+    11
+    11
+  w1: |
+    22
+    22
+animations:
+  water: {spec}
+"""
+
+
+def test_tile_animation_durations(tmp_path: Path, load: LoadFn) -> None:
+    asset, findings = load(TILE_HOLD.format(spec="{ frames: [w0, w1], fps: 4, durations: [3, 0.5] }"), "sea", kind="tileset")
+    assert asset is not None, [f.format() for f in findings]
+    assert asset.animations["water"].durations == (3.0, 0.5)
+    for bad in ("[1]", "[1, 0]", "[true, 1]"):
+        _, findings = load(TILE_HOLD.format(spec=f"{{ frames: [w0, w1], durations: {bad} }}"), "sea", kind="tileset")
+        assert rules(findings) == {"E001"} and "durations" in findings[0].message, bad
+    _, findings = load(TILE_HOLD.format(spec="{ frames: [w0, w1], loop_from: 1 }"), "sea", kind="tileset")
+    assert rules(findings) == {"E001"} and "always loop" in findings[0].message
+
+    (tmp_path / "game" / "art").mkdir(parents=True)
+    (tmp_path / "game" / "project.godot").write_text("config_version=5\n")
+    project = make_project(tmp_path / "game" / "art", 'default_palette = "test"\noutput_dir = "../gen"\nexport = ["png", "godot"]\n')
+    (project.root / "tiles" / "sea.tiles.yaml").write_text(TILE_HOLD.format(spec="{ frames: [w0, w1], fps: 4, durations: [3, 0.5] }"))
+    result = build(load_project(project.root))
+    assert not result.errors and result.manifest is not None, [f.format() for f in result.errors]
+    tres = (tmp_path / "game" / "gen" / "tiles" / "sea.tres").read_text()
+    assert "1:0/animation_speed = 4.0\n1:0/animation_frame_0/duration = 3.0\n1:0/animation_frame_1/duration = 0.5\n" in tres
+    water = json.loads(result.manifest.read_text())["assets"]["sea"]["animations"]["water"]
+    assert water == {"frames": ["w0", "w1"], "fps": 4.0, "loop": True, "durations": [3.0, 0.5]}

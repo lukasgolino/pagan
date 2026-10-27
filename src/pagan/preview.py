@@ -175,7 +175,10 @@ def contact_sheet(asset: Asset, options: PreviewOptions, supersample: int = 1) -
             cells.append((f"{previous}->{name}", upscale(change_image(asset, previous, name), scale, options)))
         rows.append((f"{anim.name}: changes (magenta = changed/new pixel, cyan = pixel removed)", cells))
     if asset.animations and asset.kind != "model":
-        summary = ", ".join(f"{a.name} ({len(a.frames)}f @ {a.fps:g}fps{'' if a.loop else ', once'})" for a in asset.animations.values())
+        summary = ", ".join(
+            f"{a.name} ({len(a.frames)}f @ {a.fps:g}fps{'' if a.loop else ', once'}{'' if a.loop_from is None else f', loops from {a.loop_from}'})"
+            for a in asset.animations.values()
+        )
         rows.append((f"animations: {summary}", []))
     width, height = asset.size
     palette = asset.palette.name or "inline palette"
@@ -218,6 +221,9 @@ def tiled(asset: Asset, tile: str, repeat: int) -> Image.Image:
     return out
 
 
+LOOP_FROM_REPEATS = 3  # preview GIFs of a `loop_from` animation show its looping part this many times per replay
+
+
 def animation_gif(asset: Asset, animation: str, options: PreviewOptions, path: Path, variant: str | None = None) -> None:
     anim = asset.animations[animation]
     scale = options.scale or auto_scale(asset.size)
@@ -226,6 +232,10 @@ def animation_gif(asset: Asset, animation: str, options: PreviewOptions, path: P
     frames = [upscale(frame_image(asset, f, variant), scale, opaque).convert("RGB") for f in anim.frames]
     steps = anim.durations or (1.0,) * len(frames)
     durations = [max(20, round(100 * step / anim.fps) * 10) for step in steps]  # GIF timing has 10ms resolution
+    if anim.loop_from is not None:  # a GIF can only replay everything: the intro once, then the loop LOOP_FROM_REPEATS times
+        n = anim.loop_from
+        frames += frames[n:] * (LOOP_FROM_REPEATS - 1)
+        durations += durations[n:] * (LOOP_FROM_REPEATS - 1)
     frame_ms = durations[-1]
     if not anim.loop:
         durations[-1] = max(frame_ms, 1000)  # one-shot: hold the last frame, then replay for viewing

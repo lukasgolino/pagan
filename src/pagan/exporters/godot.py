@@ -133,13 +133,14 @@ def sprite_frames_tres(
 @dataclass(frozen=True)
 class AtlasTile:
     """One tile of a TileSet atlas. An animated tile's frames follow it to the right (wrapping every
-    `columns` cells when columns > 0), each shown for 1/fps seconds."""
+    `columns` cells when columns > 0), each shown for duration/fps seconds (durations None = all 1)."""
 
     column: int
     row: int
     frames: int = 1
     columns: int = 0
     fps: float = 1.0
+    durations: tuple[float, ...] | None = None
 
 
 def tileset_tres(atlas_res: str, tile_size: tuple[int, int], tiles: list[AtlasTile], shape: TileShape = TileShape()) -> str:
@@ -163,7 +164,8 @@ def tileset_tres(atlas_res: str, tile_size: tuple[int, int], tiles: list[AtlasTi
             if tile.columns:
                 tile_lines.append(f"{cell}/animation_columns = {tile.columns}")
             tile_lines.append(f"{cell}/animation_speed = {float(tile.fps)!r}")
-            tile_lines += [f"{cell}/animation_frame_{i}/duration = 1.0" for i in range(tile.frames)]
+            durations = tile.durations or (1.0,) * tile.frames
+            tile_lines += [f"{cell}/animation_frame_{i}/duration = {float(d)!r}" for i, d in enumerate(durations)]
         tile_lines.append(f"{cell}/0 = 0")
     lines = [
         '[gd_resource type="TileSet" format=3]',
