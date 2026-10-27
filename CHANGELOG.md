@@ -19,6 +19,12 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+### Added
+
+- `skip_translucent: true` on an outline ring (`outline: { width: 1, skip_translucent: true }`): the ring goes around
+  opaque pixels only, so translucent glows and halos (`"#rrggbbaa"` colours) keep their soft edge and aren't
+  painted over. When every ring skips them, translucent pixels may touch the canvas edge (no E007) (#37).
+
 ### Fixed
 
 - `--quiet` after a subcommand (`pagan preview <asset> --quiet`) no longer shares its attribute with the top-level

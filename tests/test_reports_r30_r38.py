@@ -147,7 +147,7 @@ def test_outline_auto_is_unchanged_by_the_ring_code(load: LoadFn) -> None:
     auto, findings = load(DOT.format(extra="outline: auto\n"), name="dot")
     ring, _ = load(DOT.format(extra="outline: { width: 1 }\n"), name="dot")
     assert auto is not None and ring is not None, [f.format() for f in findings]
-    assert auto.frames == ring.frames and auto.outlines == ((1, "0"),)
+    assert auto.frames == ring.frames and auto.outlines == ((1, "0", False),)
     grid = ("....", ".12.", "..2.", "....")
     assert _outline_ring(grid, "0", 1) == _outline(grid, "0")
 
@@ -455,3 +455,42 @@ def test_sheet_columns_and_w014(tmp_path: Path) -> None:
     assert frame_rects(asset)["f2"] == (0, 1, 4096, 1)
     path.write_text(_wide(16, 2, "sheet_columns: 0\n"))
     assert rules(lint_paths(project).findings) == {"E001"}
+
+
+# --- #37: outlines that skip translucent glows -------------------------------------------------
+
+
+def test_outline_skip_translucent_leaves_glows_unringed(tmp_path: Path) -> None:
+    project = _alpha_project(tmp_path)
+    rows = [".......", ".......", "..ggg..", "..g1g..", "..ggg..", "...1...", "......."]
+    frames = "frames:\n  a: |\n" + "".join(f"    {row}\n" for row in rows)
+
+    def outlined(outline: str) -> tuple[str, ...]:
+        path = project.root / "sprites" / "icon.sprite.yaml"
+        path.write_text(f"name: icon\nsize: [7, 7]\noutline: {outline}\n{frames}")
+        asset, findings = load_asset(path, project)
+        assert asset is not None and not findings, [f.format() for f in findings]
+        return asset.frames["a"]
+
+    assert outlined("auto") == (".......", "..000..", ".0ggg0.", ".0g1g0.", ".0ggg0.", "..010..", "...0...")
+    # Only the opaque pixel below the glow is ringed; the glow keeps its soft edge and isn't painted over.
+    assert outlined("{ width: 1, skip_translucent: true }") == (
+        ".......", ".......", "..ggg..", "..g1g..", "..ggg..", "..010..", "...0...",
+    )
+    from pagan.asset import _outline_ring
+
+    wide = _outline_ring(tuple(rows), "0", 2, frozenset("g"))  # the numpy path for wider rings
+    # Distances still run through the glow (the ring is `width` from the opaque pixels), but no glow pixel is ringed.
+    assert wide == (".......", "...0...", "..ggg..", ".0g1g0.", "..ggg..", ".00100.", "..000..")
+
+
+def test_outline_skip_translucent_ignores_glows_at_the_canvas_edge(tmp_path: Path) -> None:
+    project = _alpha_project(tmp_path)
+    body = "frames:\n  a: |\n    ggg\n    g1g\n    ggg\n"
+    _, findings = load_asset(_sprite(project, "outline: auto\n" + body), project)
+    assert rules(findings) == {"E007"}  # the glow touches the edge
+    asset, findings = load_asset(_sprite(project, "outline: { width: 1, skip_translucent: true }\n" + body), project)
+    assert asset is not None and not findings, [f.format() for f in findings]
+    assert asset.frames["a"] == ("ggg", "g1g", "ggg")  # the only opaque pixel is fully surrounded by glow
+    _, findings = load_asset(_sprite(project, "outline: { width: 1, skip_translucent: 1 }\n" + body), project)
+    assert rules(findings) == {"E001"}

@@ -110,7 +110,8 @@ class Asset:
     mirror: bool = False
     outline: bool = False
     outline_color: str | None = None  # the first (innermost) outline ring's colour
-    outlines: tuple[tuple[int, str], ...] = ()  # sprites: (width, colour) rings, innermost first; () = no outline
+    # sprites: (width, colour, skip_translucent) rings, innermost first; () = no outline
+    outlines: tuple[tuple[int, str, bool], ...] = ()
     shadow: tuple[int, int, str] | None = None  # sprites: drop shadow (dx, dy, colour) under the outlined pixels
     description: str | None = None
     tags: tuple[str, ...] = ()
@@ -290,14 +291,14 @@ def opaque(grid: Grid, x: int, y: int) -> bool:
     return 0 <= y < len(grid) and 0 <= x < len(grid[y]) and grid[y][x] != TRANSPARENT
 
 
-def _outline(grid: Grid, color: str) -> Grid:
-    """Paint `color` on transparent pixels 4-adjacent to opaque ones."""
+def _outline(grid: Grid, color: str, ignore: frozenset[str] = frozenset()) -> Grid:
+    """Paint `color` on transparent pixels 4-adjacent to opaque ones (pixels keyed `ignore` don't count)."""
     height = len(grid)
     width = len(grid[0]) if grid else 0
     rows = [list(row) for row in grid]
     for y, row in enumerate(grid):
         for x, char in enumerate(row):
-            if char == TRANSPARENT:
+            if char == TRANSPARENT or char in ignore:
                 continue
             for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
                 if 0 <= nx < width and 0 <= ny < height and grid[ny][nx] == TRANSPARENT:
@@ -305,16 +306,18 @@ def _outline(grid: Grid, color: str) -> Grid:
     return tuple("".join(r) for r in rows)
 
 
-def _outline_ring(grid: Grid, color: str, width: int) -> Grid:
+def _outline_ring(grid: Grid, color: str, width: int, ignore: frozenset[str] = frozenset()) -> Grid:
     """Paint `color` on transparent pixels within `width` pixels (centre to centre, Euclidean) of an opaque one:
-    width 1 is the 4-adjacent outline, wider rings get round corners."""
+    width 1 is the 4-adjacent outline, wider rings get round corners. Pixels keyed `ignore` (translucent glows
+    with `skip_translucent`) are neither ringed nor painted over."""
     if width == 1:
-        return _outline(grid, color)
+        return _outline(grid, color, ignore)
     import numpy as np  # local import: only wide outlines need it
 
     height, row_width = len(grid), len(grid[0]) if grid else 0
     solid = np.array([[c != TRANSPARENT for c in row] for row in grid], dtype=bool)
-    padded = np.pad(solid, width)
+    source = np.array([[c != TRANSPARENT and c not in ignore for c in row] for row in grid], dtype=bool) if ignore else solid
+    padded = np.pad(source, width)
     near = np.zeros_like(solid)
     for dy in range(-width, width + 1):
         for dx in range(-width, width + 1):
@@ -336,12 +339,13 @@ def _drop_shadow(grid: Grid, dx: int, dy: int, color: str) -> Grid:
     return tuple("".join(r) for r in rows)
 
 
-def _edge_pixel(grid: Grid, margin: int = 1) -> tuple[int, int] | None:
-    """First opaque pixel closer than `margin` to the canvas edge (an outline that wide there would be clipped)."""
+def _edge_pixel(grid: Grid, margin: int = 1, ignore: frozenset[str] = frozenset()) -> tuple[int, int] | None:
+    """First opaque pixel closer than `margin` to the canvas edge (an outline that wide there would be clipped);
+    pixels keyed `ignore` get no outline, so they don't count."""
     height = len(grid)
     for y, row in enumerate(grid):
         for x, char in enumerate(row):
-            if char != TRANSPARENT and min(x, y, len(row) - 1 - x, height - 1 - y) < margin:
+            if char != TRANSPARENT and char not in ignore and min(x, y, len(row) - 1 - x, height - 1 - y) < margin:
                 return (x, y)
     return None
 
@@ -1121,7 +1125,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
     mirror = False
     outline = False
     outline_color: str | None = None
-    outlines: tuple[tuple[int, str], ...] = ()
+    outlines: tuple[tuple[int, str, bool], ...] = ()
     shadow: tuple[int, int, str] | None = None
     pivot = (width // 2, height)
     columns = 8
@@ -1207,7 +1211,10 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
     if outlines or shadow is not None:
         clipped: set[str] = set()
         authored_width = -(-width // 2) if mirror else width
-        border = sum(w for w, _ in outlines)
+        border = sum(w for w, _, _ in outlines)
+        # Translucent keys a ring skips; the clipping check ignores them only when every ring does.
+        see_through = frozenset(k for k, c in palette.colors.items() if c.alpha < 255) if palette is not None else frozenset()
+        ignored = see_through if outlines and all(skip for _, _, skip in outlines) else frozenset()
 
         def clip_error(frame_name: str, pixel: tuple[int, int], message: str) -> None:
             clipped.add(frame_name)
@@ -1220,15 +1227,15 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             error("E007", message, frame_lines.get(frame_name), f"{frames_field}.{frame_name} row {y + 1} col {x + 1}")
 
         for frame_name, grid in base_frames.items():
-            edge = _edge_pixel(grid, border) if outlines else None
+            edge = _edge_pixel(grid, border, ignored) if outlines else None
             if edge is not None:
                 if border == 1:
                     message = "outline: auto would be clipped: an opaque pixel touches the canvas edge. Leave a 1px transparent border (or grow the canvas)"
                 else:
                     message = f"the outline ({border}px in all) would be clipped: an opaque pixel is closer than {border}px to the canvas edge. Leave a {border}px transparent border (or grow the canvas)"
                 clip_error(frame_name, edge, message)
-            for ring_width, ring_color in outlines:
-                grid = _outline_ring(grid, ring_color, ring_width)
+            for ring_width, ring_color, skip in outlines:
+                grid = _outline_ring(grid, ring_color, ring_width, see_through if skip else frozenset())
             if shadow is not None and edge is None:
                 off = _shadow_clipped(grid, shadow[0], shadow[1])
                 if off is not None:
@@ -1302,13 +1309,13 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
 
 def _parse_outlines(
     raw: Any, palette: Palette | None, default_color: str | None, line: int | None, error: ErrorFn
-) -> tuple[tuple[int, str], ...]:
+) -> tuple[tuple[int, str, bool], ...]:
     """`outline: none | auto | { width: 3, color: "0" } | [ { width: 2, color: "0" }, { width: 1, color: "7" } ]`.
 
     A list stacks rings outwards (the first hugs the sprite). `auto` = `{ width: 1 }`; a ring without `color`
-    uses `outline_color`.
+    uses `outline_color`; `skip_translucent: true` rings only the opaque pixels (glows and halos stay unringed).
     """
-    usage = 'outline must be none, auto, { width: N, color: "<key>" } or a list of those (innermost first)'
+    usage = 'outline must be none, auto, { width: N, color: "<key>", skip_translucent: true } or a list of those (innermost first)'
     if raw == "none":
         return ()
     if raw == "auto":
@@ -1318,22 +1325,26 @@ def _parse_outlines(
     if not isinstance(raw, list) or not raw:
         error("E001", usage, line, "outline")
         return ()
-    rings: list[tuple[int, str]] = []
+    rings: list[tuple[int, str, bool]] = []
     for i, ring in enumerate(raw):
         where = "outline" if len(raw) == 1 else f"outline.{i}"
-        if not isinstance(ring, dict) or any(k not in ("width", "color") for k in ring):
+        if not isinstance(ring, dict) or any(k not in ("width", "color", "skip_translucent") for k in ring):
             error("E001", usage, line, where)
             return ()
         ring_width = ring.get("width", 1)
         if isinstance(ring_width, bool) or not isinstance(ring_width, int) or not 1 <= ring_width <= MAX_OUTLINE_WIDTH:
             error("E001", f"outline width must be a whole number of pixels, 1-{MAX_OUTLINE_WIDTH}", line, f"{where}.width")
             return ()
+        skip = ring.get("skip_translucent", False)
+        if not isinstance(skip, bool):
+            error("E001", "outline skip_translucent must be true or false", line, f"{where}.skip_translucent")
+            return ()
         color = str(ring["color"]) if "color" in ring else default_color
         if palette is not None and (color is None or color not in palette.colors):
             error("E005", f"outline color {color!r} isn't a palette key", line, f"{where}.color")
             return ()
         if color is not None:
-            rings.append((ring_width, color))
+            rings.append((ring_width, color, skip))
     return tuple(rings)
 
 
