@@ -203,7 +203,7 @@ heading: 0                    # first heading in degrees; 1 direction defaults t
                               # Frames are named by where they actually face: heading 45 with 4 directions
                               # gives ne, nw, sw, se; off-compass angles are named d010, d100, ...
 outline: auto                 # default auto for models
-camera: { elevation: 42, scale: 1 }               # optional override of pagan.toml [camera]
+camera: { elevation: 42, scale: 1 }               # optional override of any pagan.toml [camera] key
 light: { direction: [-0.5, 0.45, 0.75], ambient: 0.2, shadows: true }   # optional override of any [light] key
 materials:                    # shade with a palette ramp (dark -> light)
   hull: { keys: ["6", "7", "8", "9"] }
@@ -268,10 +268,19 @@ lint: { for: { sinking: [W005] } }   # a pose animation name covers all its head
 ```
 
 Coordinates: x = the model's front, y = its left, z = up; whole voxels (1 voxel = `camera.scale`
-pixels). Sizes count voxels: `cylinder` `height: 3` is 3 layers; `radius: 0` is 1 voxel wide, `radius: r` is
+pixels; with the dimetric camera, see below). Sizes count voxels: `cylinder` `height: 3` is 3 layers; `radius: 0` is 1 voxel wide, `radius: r` is
 about 2r+1 wide; `box` corners are inclusive (`from: [0,0,0], to: [0,0,0]` is one voxel).
 Pivot: from above at elevation e, the front of a round base sits about r·sin(e) pixels *below* the origin,
 so put the pivot a few pixels above the frame's bottom (E007 tells you if the outline would be clipped). Heading 0 shows the front pointing right ("e"), 90 away from the camera ("n"), 270 towards it.
+**Isometric tile games** (2:1 TileMap, e.g. 64x32 cells): `[camera] projection = "dimetric"`, `tile = [64, 32]`,
+`cell = 16`. Every voxel then steps whole pixels: tile width / (2 cell) across and tile height / (2 cell) down
+along x and y (2 and 1 here), `z_step` up (default tile height / cell = 2). A `cell` x `cell` floor is exactly
+the hand-drawn tile diamond (rows 2, 6, ... 62, 62, ... 6, 2) and tiles at the grid pitch with no gaps or
+overlap, so build floors, walls and furniture on whole cells (a 1-cell wall: 16 voxels wide). Use
+`heading: 45` + `directions: 4` (frames ne, nw, sw, se); other headings are E013. A 1-voxel pose offset moves
+whole pixels, so bobs and walk cycles don't shimmer (orthographic: one voxel of height is
+cos(elevation) x scale px, e.g. 0.87 px at 30 degrees, and re-rasterises). Shading, outlines, normal maps
+and meshes are as for the orthographic camera; `camera.scale` and `elevation` are unused.
 `top:` gives a shape's top layer another material; `rim:` adds a 1-voxel wall around its top edge.
 `shell: true` on a `box`, `cylinder` or `ellipsoid` keeps only its outer wall, 1 voxel thick (`shell: 2`: 2 thick):
 a helmet that covers a head without swallowing it, or a big tower that stays under the 2M-voxel cap.
@@ -467,6 +476,10 @@ style_version = 1
 [camera]                           # used by every model
 elevation = 42                     # degrees above the horizon (90 = straight down)
 scale = 1                          # pixels per voxel
+projection = "orthographic"        # or "dimetric": exact pixel 2:1 tiles (elevation/scale unused; below)
+tile = [64, 32]                    # dimetric: pixels per grid cell (width = 2 x height)
+cell = 16                          # dimetric: voxels per grid cell side (must divide half the tile height)
+z_step = 0                         # dimetric: pixels per voxel of height (0 = tile height / cell)
 
 [light]
 direction = [-0.5, 0.45, 0.75]     # towards the light: x right, y up-screen, z up

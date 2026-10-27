@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from pagan.findings import Finding, PaganError
 from pagan.palette import NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
-from pagan.voxel import Camera, Light
+from pagan.voxel import PROJECTIONS, Camera, Light
 
 CONFIG_NAME = "pagan.toml"
 PALETTE_MODES = ("strict", "open")
@@ -344,6 +344,14 @@ def _number(value: Any) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def _whole(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _divisors(n: int) -> list[int]:
+    return [d for d in range(1, n + 1) if n % d == 0]
+
+
 def parse_render(
     camera_raw: Any,
     light_raw: Any,
@@ -357,17 +365,34 @@ def parse_render(
     if not isinstance(camera_raw, dict):
         error("[camera] must be a table", "camera")
     else:
+        allowed_camera = ("elevation", "scale", "projection", "tile", "cell", "z_step")
         for key in camera_raw:
-            if key not in ("elevation", "scale"):
-                error(f"unknown camera setting {key!r}; allowed: elevation, scale", f"camera.{key}")
+            if key not in allowed_camera:
+                error(f"unknown camera setting {key!r}; allowed: {', '.join(allowed_camera)}", f"camera.{key}")
         elevation = camera_raw.get("elevation", camera.elevation)
         scale = camera_raw.get("scale", camera.scale)
+        projection = camera_raw.get("projection", camera.projection)
+        tile = camera_raw.get("tile", list(camera.tile))
+        cell = camera_raw.get("cell", camera.cell)
+        z_step = camera_raw.get("z_step", camera.z_step)
         if not (_number(elevation) and 10 <= elevation <= 90):
             error("camera.elevation must be 10-90 degrees above the horizon (90 = straight down)", "camera.elevation")
         elif not (_number(scale) and 0.25 <= scale <= 16):
             error("camera.scale must be 0.25-16 pixels per voxel", "camera.scale")
+        elif projection not in PROJECTIONS:
+            error('camera.projection must be "orthographic" (any elevation) or "dimetric" (exact pixel 2:1 tiles)', "camera.projection")
+        elif not (isinstance(tile, list) and len(tile) == 2 and all(_whole(v) and v > 0 for v in tile) and tile[0] == 2 * tile[1] and tile[1] % 2 == 0):
+            error("camera.tile must be [width, height] in pixels with width = 2 x height (2:1 dimetric) and an even height, e.g. [64, 32]", "camera.tile")
+        elif not (_whole(cell) and cell > 0 and tile[1] % (2 * cell) == 0):
+            error(
+                f"camera.cell (voxels per grid cell side) must divide half the tile height ({tile[1] // 2} px) so every "
+                f"voxel steps whole pixels; with tile {list(tile)}: {', '.join(str(c) for c in _divisors(tile[1] // 2))}",
+                "camera.cell",
+            )
+        elif not (_whole(z_step) and 0 <= z_step <= 64):
+            error("camera.z_step must be 0-64 whole pixels per voxel of height (0 = tile height / cell)", "camera.z_step")
         else:
-            camera = Camera(float(elevation), float(scale))
+            camera = Camera(float(elevation), float(scale), str(projection), (int(tile[0]), int(tile[1])), int(cell), int(z_step))
     if not isinstance(light_raw, dict):
         error("[light] must be a table", "light")
     else:

@@ -46,6 +46,7 @@ from pagan.progress import note
 from pagan.project import Project, parse_render, valid_voxel_size
 from pagan.yamlio import LineMap, YamlError, load_yaml
 from pagan.voxel import (
+    DIMETRIC_HEADINGS,
     DIRECTION_NAMES,
     Camera,
     Cell,
@@ -963,6 +964,16 @@ def _setup(data: Any, path: Path | None, project: Project, error: ErrorFn, findi
         error("E005", f"outline_color {outline_color!r} isn't a palette key", _line(data, "outline_color"), "outline_color")
 
     camera, light = _camera_and_light(project, data, error)
+    if camera.projection == "dimetric" and directions and _num(heading):
+        off = [a for _, a in heading_angles(directions, float(heading)) if not any(abs(a - d) < 1e-9 for d in DIMETRIC_HEADINGS)]
+        if off:
+            error(
+                "E013",
+                f"the dimetric camera only renders the 4 diagonal headings (45, 135, 225, 315), so voxels land on whole "
+                f"pixels; this model asks for {', '.join(f'{a:g}' for a in off)}. Use heading: 45 with directions: 4 (or 1)",
+                _line(data, "heading") or _line(data, "directions"),
+                "heading" if "heading" in data else "directions",
+            )
     materials = _parse_materials(data.get("materials"), palette, _line(data, "materials"), error)
     max_steps = project.config.lint.max_ramp_steps
     if max_steps:
@@ -1478,7 +1489,7 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
     material_keys = {m.name: [list(m.keys), m.two_sided] for m in setup.materials.values()}
     cache_key = hashlib.sha256(
         json.dumps(
-            [RENDERER_VERSION, source_text, material_keys, camera.__dict__, light.__dict__, setup.origin, pivot, size, setup.heading, setup.directions],
+            [RENDERER_VERSION, source_text, material_keys, camera.cache_key(), light.__dict__, setup.origin, pivot, size, setup.heading, setup.directions],
             sort_keys=True,
             default=str,
         ).encode()
@@ -1604,7 +1615,7 @@ def fit_model(path: Path, project: Project, margin: int = 0, even: bool = False)
     chains = [(move, *move.then) for _, _, pose in setup.jobs for _, move in pose.moves]  # a rigged part adds its parents' moves
     reach += max((sum(max(abs(o) for o in m.offset) for m in chain) for chain in chains), default=0)
     reach *= 2 if any(m.roll or m.pitch or m.yaw for chain in chains for m in chain) else 1
-    half = math.ceil(reach * setup.camera.scale) + 4
+    half = math.ceil(reach * setup.camera.pixels_per_voxel()) + 4
     canvas, centre = (2 * half, 2 * half), (half, half)
     border = (1 if setup.outline else 0) + margin
     boxes: dict[str, tuple[int, int, int, int]] = {}  # frame -> drawn x0, y0, x1, y1 relative to the pivot
