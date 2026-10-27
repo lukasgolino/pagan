@@ -289,7 +289,8 @@ a helmet that covers a head without swallowing it, or a big tower that stays und
 `ring` is a flat open annulus (no caps, unlike a `cylinder` shell): the cells whose centres lie `inner` to `outer`
 voxels from the axis through `center`, `height` layers (default 1) from the center's layer towards +axis.
 `center` (or `centre`) is a whole voxel along the axis; across it a half voxel (`[0.5, 0.5, 2]` with axis z)
-gives even widths. `outer: 4, inner: 3` is a ring about 9 voxels across, 1 thick; `inner: 0` fills the disc.
+gives even widths. `outer: 4, inner: 3` is a ring 9 voxels across, about 1 thick (its diagonals touch only at
+corners; `outer - inner` of 1.5 or more closes them); `inner: 0` fills the disc.
 `box` is inclusive of both corners. `hull` and `cylinder` are symmetric about their centre voxel, so their
 widths are odd: `beam: 10` gives 9 voxels (use 11 for 11). `sail` `at` is where the sail's bottom edge
 meets the mast: `rig: square` (default) hangs across the hull just forward of the mast (`brace` turns it
