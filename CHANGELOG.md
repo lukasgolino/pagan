@@ -70,6 +70,13 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
   `sheet.<animation>.2.png`, `.3`, ... when taller (the overview in `sheet.2.png`). Sheets within 4096 px are
   unchanged. `pagan preview --json` lists the pages in `sheet_pages`; the MCP `preview` tool takes `page`
   (an animation) to return a page's image. Preview output only: build output doesn't change (#32).
+- `ring` model part: a flat open annulus (no caps), `ring: { center: [x, y, z], outer: R, inner: r, height: h, axis: z,
+  material: m }` fills the cells whose centres lie `inner` to `outer` voxels from the axis, `height` layers along it
+  from the center's layer (gauges, handwheels, bolt circles, fan grilles, rotor ducts). `centre` is accepted for
+  `center`; `top`, `rim`, `id`, `mirror`, `carve` and `hidden` work as on `cylinder`; `pagan.api.shape_cells("ring", ...)`
+  gives its voxels (#35).
+- MCP `fit` tool: `write: true` sets the model file's `size` and `pivot` like `pagan fit --write`; the tool is now
+  annotated as writing (not read-only) (#35).
 
 ### Changed
 

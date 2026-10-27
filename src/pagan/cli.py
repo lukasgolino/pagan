@@ -380,7 +380,7 @@ materials:
   body:   {{ ramp: {main_ramp} }}
   accent: {{ ramp: {accent_ramp} }}
 
-# Shapes: box, hull, cylinder, ellipsoid, line, sail, triangle, layers. Whole voxels; x forward, y left, z up.
+# Shapes: box, hull, cylinder, ring, ellipsoid, line, sail, triangle, layers. Whole voxels; x forward, y left, z up.
 # Per part: `mirror: true` reflects across y = 0, `carve: true` removes voxels, `id:` names it for poses.
 parts:
   - box: {{ from: [-4, -3, 0], to: [4, 3, 5], material: body, top: accent }}

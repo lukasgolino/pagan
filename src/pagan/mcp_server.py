@@ -467,15 +467,19 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
         path = result.get("gallery")
         return _with_image(result, _image(pagan.root / path) if path else None, path)
 
-    @server.tool(annotations=READ)
-    def fit(model: str, margin: int = 0, even: bool = False) -> dict[str, Any]:
+    @server.tool(annotations=WRITE)
+    def fit(model: str, margin: int = 0, even: bool = False, write: bool = False) -> dict[str, Any]:
         """The smallest frame size and pivot that fit every heading and pose of a 3D model (always holding the
-        pivot). `even`: even width and height, so godot_offset is whole pixels."""
+        pivot). `even`: even width and height, so godot_offset is whole pixels. `write`: also set the model
+        file's `size` and `pivot` to the fit (a text edit: comments stay); without it nothing is written."""
         try:
-            path = pagan.rel(pagan.find_asset(model))
+            found = pagan.find_asset(model)
+            if write:
+                pagan.inside(found)  # the file that gets edited (a symlink out of the project is refused)
+            path = pagan.rel(found)
         except PaganError as exc:
             return _failure(exc.findings)
-        return pagan.cli("fit", path, f"--margin={margin}", *(["--even"] if even else []))
+        return pagan.cli("fit", path, f"--margin={margin}", *(["--even"] if even else []), *(["--write"] if write else []))
 
     @server.tool(annotations=WRITE)
     def mark(

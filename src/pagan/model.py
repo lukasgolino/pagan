@@ -65,7 +65,7 @@ from pagan.voxel import (
 )
 
 RENDERER_VERSION = "4"  # bump when rendering changes, to invalidate caches
-PART_TYPES = ("box", "hull", "cylinder", "ellipsoid", "line", "sail", "triangle", "layers")
+PART_TYPES = ("box", "hull", "cylinder", "ring", "ellipsoid", "line", "sail", "triangle", "layers")
 _MODEL_FIELDS = (
     "name", "description", "palette", "variants", "tags", "status", "style_version",
     "size", "pivot", "origin", "outline", "outline_color", "directions", "heading",
@@ -428,6 +428,51 @@ class _Builder:
                             cells.add((base[0] + a, base[1] + along, base[2] + b))
         return self._with_top_and_rim(cells, material, spec, line, where)
 
+    def _ring(self, spec: dict[str, Any], line: int | None, where: str) -> dict[Cell, str] | None:
+        """A flat open annulus (no caps): cells whose centres lie between `inner` and `outer` from the axis,
+        `height` layers along it from the centre's layer (gauges, handwheels, bolt circles, ducts)."""
+        if not self._check_fields(spec, ("center", "centre", "outer", "inner", "height", "axis", "material", "top", "rim"), line, where):
+            return None
+        if "center" in spec and "centre" in spec:
+            self.error("E013", "give the ring's center once (center or centre, not both)", line, where)
+            return None
+        centre = _vec(_get(spec, "centre" if "centre" in spec else "center"))
+        outer, inner, height = _get(spec, "outer"), _get(spec, "inner"), _get(spec, "height", 1)
+        axis = _get(spec, "axis", "z")
+        material = self._material(spec, "material", line, where)
+        along = "xyz".index(axis) if axis in ("x", "y", "z") else 0
+        if centre is None or axis not in ("x", "y", "z") or not centre[along].is_integer():
+            self.error("E013", "ring needs center: [x, y, z] (whole voxels along its axis; across it, half voxels give even widths) and axis x|y|z", line, where)
+            return None
+        if not (_num(outer) and outer > 0) or not (_num(inner) and inner >= 0):
+            self.error("E013", "ring needs outer > 0 and inner >= 0 (radii in voxels, from the axis to cell centres)", line, where)
+            return None
+        if inner >= outer:
+            self.error("E013", f"ring inner ({inner}) must be less than outer ({outer})", line, where)
+            return None
+        if not (isinstance(height, int) and not isinstance(height, bool) and height > 0):
+            self.error("E013", "ring height must be a whole number of voxels > 0 (layers along its axis)", line, where)
+            return None
+        if material is None:
+            return None
+        outer, inner = float(outer), float(inner)
+        across = [i for i in range(3) if i != along]  # the two coordinates of the ring's plane
+        ca, cb = centre[across[0]], centre[across[1]]
+        lo2, hi2 = inner * inner - 1e-9, outer * outer + 1e-9
+        cells: set[Cell] = set()
+        start = int(centre[along])
+        for a in range(math.floor(ca - outer), math.ceil(ca + outer) + 1):
+            for b in range(math.floor(cb - outer), math.ceil(cb + outer) + 1):
+                if lo2 <= (a - ca) ** 2 + (b - cb) ** 2 <= hi2:
+                    for step in range(height):
+                        cell = [0, 0, 0]
+                        cell[along], cell[across[0]], cell[across[1]] = start + step, a, b
+                        cells.add((cell[0], cell[1], cell[2]))
+        if not cells:
+            self.error("E013", "ring is too thin to fill any voxels; widen outer - inner (or move center by half a voxel)", line, where)
+            return None
+        return self._with_top_and_rim(cells, material, spec, line, where)
+
     def _ellipsoid(self, spec: dict[str, Any], line: int | None, where: str) -> dict[Cell, str] | None:
         if not self._check_fields(spec, ("center", "radii", "material", "top", "rim", "shell"), line, where):
             return None
@@ -720,6 +765,8 @@ def _estimated_solid_cells(shape: str, spec: dict[str, Any]) -> float:
         return (size("length") + 1) * (size("beam") + 1) * (size("height") + 1)
     if shape == "cylinder":
         return (size("height") + 1) * (2 * size("radius", 0) + 1) ** 2
+    if shape == "ring":
+        return size("height") * (2 * size("outer") + 2) ** 2
     if shape == "ellipsoid":
         radii = spec.get("radii")
         if isinstance(radii, list) and all(_num(v) for v in radii):

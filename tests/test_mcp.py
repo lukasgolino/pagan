@@ -231,3 +231,41 @@ def test_preview_orbit_and_closeup(root: Path) -> None:
     closeup = call(root, "preview", {"asset": "post", "which": "closeup", "part": "tip"})
     assert data(closeup)["outputs"][0]["closeup"] == {"tip": "previews/post/closeup_tip.png"} and len(images(closeup)) == 1
     assert not data(call(root, "preview", {"asset": "post", "which": "closeup"}))["ok"]
+
+
+MODEL = """\
+name: crate
+directions: 4
+size: [4, 4]
+pivot: [2, 4]
+materials:
+  wood: { ramp: red }   # kept by the edit
+parts:
+  - box: { from: [-2, -2, 0], to: [2, 2, 3], material: wood }
+"""
+
+
+def test_fit_writes_only_when_asked(root: Path) -> None:
+    async def body(client: Client) -> Any:
+        return next(t for t in (await client.list_tools()).tools if t.name == "fit")
+
+    tool = run(root, body)
+    assert tool.annotations.read_only_hint is False and "write" in tool.input_schema["properties"]
+    (root / "models").mkdir(exist_ok=True)
+    path = root / "models" / "crate.model.yaml"
+    path.write_text(MODEL)
+    result = data(call(root, "fit", {"model": "crate"}))
+    assert result["ok"] is not False and result["written"] is False and path.read_text() == MODEL
+    result = data(call(root, "fit", {"model": "crate", "write": True}))
+    assert result["written"] is True
+    text = path.read_text()
+    assert f"size: [{result['size'][0]}, {result['size'][1]}]" in text and "# kept by the edit" in text
+
+
+def test_fit_write_refuses_a_model_linked_from_outside(root: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
+    outside = tmp_path_factory.mktemp("outside") / "crate.model.yaml"
+    outside.write_text(MODEL)
+    (root / "models").mkdir(exist_ok=True)
+    (root / "models" / "crate.model.yaml").symlink_to(outside)
+    result = data(call(root, "fit", {"model": "crate", "write": True}))
+    assert not result["ok"] and "outside" in result["findings"][0]["message"] and outside.read_text() == MODEL
