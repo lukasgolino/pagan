@@ -71,6 +71,7 @@ animations:
   idle: { frames: [idle_0, idle_1], fps: 4, loop: true }
   blink: [idle_0, idle_1]                         # short form: fps 8, loop true
   hit: { frames: [a, b, c], fps: 10, durations: [1, 1, 3] }   # holds: c shows 3/10 s (Godot frame duration)
+  rise: { frames: [r0, r1, r2, r3], loop_from: 2 }   # intro r0 r1 once, then r2 r3 loop (see below)
   walk_right: { from: walk_left, flip: horizontal }   # mirrored animation: frames generated as walk_right_0..
 variants:                     # recolors with identical geometry, built as <name>.<variant>; swaps apply
                               # to the final pixels, so every key is remapped wherever it's used
@@ -114,6 +115,13 @@ after the written ones). Derived frames apply flip, then scale/rotate (nearest n
 unless `about` says otherwise), then shift; E010 if opaque pixels would leave the canvas. Leave a 1px transparent border with `outline: auto`. Findings give `row`/`col`
 1-based, counted in the grid as written (for `mirror: horizontal`, in the authored left half).
 
+**Intro, then a loop** (`loop_from: N`): frames before index N play once, then frames N.. loop. Engines such as
+Godot loop a whole animation only, so the build exports two: `<name>` = the intro (frames 0..N-1, loop false) and
+`<name>_loop` = the rest (loop true), each with its share of `durations`. The manifest's `<name>` entry carries
+`loop_from: N` and `next: "<name>_loop"`; game code plays `next` when the intro finishes (Godot:
+`animation_finished`). Preview GIFs play the intro once, then the loop three times. N runs from 1 to frames - 1,
+the animation must loop, and no other animation may be called `<name>_loop` (E001). Mirrored animations copy it.
+
 **Outlines and shadows** (sprites; PAGAN adds them to every frame, so frames stay plain shapes):
 
 ```yaml
@@ -145,6 +153,7 @@ tiles:
     ...
 animations:                   # animated tiles: the animation's name is the tile's name
   water: { frames: [water_0, water_1, water_2, water_3], fps: 4 }   # always loops
+  lava: { frames: [lava_0, lava_1], fps: 4, durations: [3, 1] }    # per-frame holds, as for sprites
   surf: { frames: [surf_0, surf_1, surf_2, surf_3], new_row: true }  # from column 0 of a fresh row
 variants: ...                 # as for sprites
 lint: { for: { shore_0000: [W004] } }   # e.g. a corner set's fully transparent tile
@@ -521,7 +530,7 @@ W001 isn't checked on 3D models (a rendered orphan can't be fixed pixel by pixel
 ## Build output (any engine)
 
 `manifest.json` in `output_dir` describes everything: per asset its kind, sheet, frame rects, animations
-(frames, fps, loop, and `durations` when set), pivot, `godot_offset`, headings (models), tiles (`name -> [column, row]` for
+(frames, fps, loop, and `durations` when set; `loop_from` animations are split as below), pivot, `godot_offset`, headings (models), tiles (`name -> [column, row]` for
 tilesets; an animated tile is listed by its animation name at its first frame's cell, and the tileset
 gets `animations`), variants (each with its sheet/.tres unless `variant_sheets = false`, plus `swap`:
 base colour -> variant colour as "#rrggbb" (or "#rrggbbaa" when translucent) for every colour it changes, and `swap_exact`: false when two

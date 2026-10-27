@@ -38,6 +38,12 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 - Isometric tilesets are previewed where Godot places the tiles (positions measured on Godot 4.7.2): the 3x3 tiling
   and `pagan preview --scene` show the seams between diamonds. `api.compose(..., square=True)` keeps a plain grid;
   `export_textures` still uses one (#30).
+- `loop_from: N` on sprite animations: an intro (frames before N, played once), then a loop. Exported as two
+  animations, `<name>` (the intro, loop false) and `<name>_loop` (frames N.., looping), in the Godot SpriteFrames and
+  the manifest, whose `<name>` entry records `loop_from` and `next: "<name>_loop"` for game code to chain on
+  `animation_finished`. Preview GIFs play the intro once, then the loop; W007 checks the seam last -> frame N (#8).
+- Per-frame `durations` on tile animations (as on sprite animations), in the manifest and the Godot TileSet's
+  `animation_frame_N/duration` (#8).
 
 ### Changed
 

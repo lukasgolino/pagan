@@ -252,8 +252,9 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
     limit_change = project.config.lint.max_frame_change
     for anim in asset.animations.values():
         pairs = list(zip(anim.frames, anim.frames[1:]))
-        if anim.loop and len(anim.frames) > 2:
-            pairs.append((anim.frames[-1], anim.frames[0]))
+        start = anim.loop_from or 0  # the loop seam: last frame -> first looping frame
+        if anim.loop and len(anim.frames) - start > 2:
+            pairs.append((anim.frames[-1], anim.frames[start]))
         for a, b in pairs:
             if a == b:
                 continue

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -54,8 +54,30 @@ class BuildResult:
 def _animations_for(asset: Asset) -> list[Animation]:
     """Animations to export; a sprite without any gets one single-frame animation per frame."""
     if asset.animations:
-        return list(asset.animations.values())
+        return [part for a in asset.animations.values() for part in _split_loop(a)]
     return [Animation(name, (name,), 1.0, True) for name in asset.frames]
+
+
+def _split_loop(anim: Animation) -> list[Animation]:
+    """`loop_from: N` -> the intro `<name>` (frames before N, played once; it keeps `loop_from`) and `<name>_loop`
+    (frames N.., looping): engines such as Godot loop a whole animation only. Other animations pass through."""
+    n = anim.loop_from
+    if n is None:
+        return [anim]
+    d = anim.durations
+    intro = replace(anim, frames=anim.frames[:n], loop=False, durations=d[:n] if d else None)
+    body = replace(anim, name=f"{anim.name}_loop", frames=anim.frames[n:], durations=d[n:] if d else None, loop_from=None)
+    return [intro, body]
+
+
+def _animation_entry(a: Animation) -> dict[str, Any]:
+    entry: dict[str, Any] = {"frames": list(a.frames), "fps": a.fps, "loop": a.loop}
+    if a.durations:
+        entry["durations"] = list(a.durations)
+    if a.loop_from is not None:
+        entry["loop_from"] = a.loop_from
+        entry["next"] = f"{a.name}_loop"
+    return entry
 
 
 def _write(path: Path, data: bytes, result: BuildResult) -> None:
@@ -196,16 +218,14 @@ def build(project: Project) -> BuildResult:
             entry["tiles"] = {name: list(cell) for name, cell in _tile_names(asset).items()}
             if asset.animations:
                 entry["animations"] = {
-                    a.name: {"frames": list(a.frames), "fps": a.fps, "loop": True} for a in asset.animations.values()
+                    a.name: {"frames": list(a.frames), "fps": a.fps, "loop": True, **({"durations": list(a.durations)} if a.durations else {})}
+                    for a in asset.animations.values()
                 }
         else:
             pivot = (_shrink(asset.pivot[0], factor), _shrink(asset.pivot[1], factor))
             entry["pivot"] = list(pivot)
             entry["godot_offset"] = list(centered_offset(size, pivot))
-            entry["animations"] = {
-                a.name: {"frames": list(a.frames), "fps": a.fps, "loop": a.loop, **({"durations": list(a.durations)} if a.durations else {})}
-                for a in animations
-            }
+            entry["animations"] = {a.name: _animation_entry(a) for a in animations}
         if "animations" in entry:  # JSON objects are unordered (and the manifest sorts keys): the file's order
             entry["animation_order"] = [a.name for a in (animations if asset.kind != "tileset" else asset.animations.values())]
         if asset.kind == "model":
@@ -471,7 +491,7 @@ def _atlas_tiles(asset: Asset) -> list[AtlasTile]:
             tiles.append(AtlasTile(column, row))
         else:
             wraps = len(anim.frames) > asset.columns
-            tiles.append(AtlasTile(column, row, len(anim.frames), asset.columns if wraps else 0, anim.fps))
+            tiles.append(AtlasTile(column, row, len(anim.frames), asset.columns if wraps else 0, anim.fps, anim.durations))
     return tiles
 
 
