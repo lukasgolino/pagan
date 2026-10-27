@@ -214,6 +214,7 @@ parts:                        # applied in order; later parts overwrite earlier 
   - box: { from: [0, -7, 8], to: [14, 7, 11], material: hull, top: deck, rim: rail }
   - hull: { from: [0, 0, 0], length: 70, beam: 21, height: 8, bow: 0.38, stern: 0.08, material: hull, top: deck, rim: rail }
   - cylinder: { base: [36, 0, 8], height: 39, radius: 0, axis: z, material: mast }
+  - ring: { center: [10, 0, 20], outer: 4, inner: 3, height: 1, axis: x, material: steel }   # open annulus: gauges, wheels, ducts
   - ellipsoid: { center: [0, 0, 4], radii: [3, 3, 4], material: body }
   - line: { from: [66, 0, 9], to: [79, 0, 15], radius: 0, material: mast }
   - sail: { at: [36, 0, 13], width: 22, height: 14, bulge: 2.4, brace: 30, material: sail, yard: mast }
@@ -285,6 +286,10 @@ and meshes are as for the orthographic camera; `camera.scale` and `elevation` ar
 `top:` gives a shape's top layer another material; `rim:` adds a 1-voxel wall around its top edge.
 `shell: true` on a `box`, `cylinder` or `ellipsoid` keeps only its outer wall, 1 voxel thick (`shell: 2`: 2 thick):
 a helmet that covers a head without swallowing it, or a big tower that stays under the 2M-voxel cap.
+`ring` is a flat open annulus (no caps, unlike a `cylinder` shell): the cells whose centres lie `inner` to `outer`
+voxels from the axis through `center`, `height` layers (default 1) from the center's layer towards +axis.
+`center` (or `centre`) is a whole voxel along the axis; across it a half voxel (`[0.5, 0.5, 2]` with axis z)
+gives even widths. `outer: 4, inner: 3` is a ring about 9 voxels across, 1 thick; `inner: 0` fills the disc.
 `box` is inclusive of both corners. `hull` and `cylinder` are symmetric about their centre voxel, so their
 widths are odd: `beam: 10` gives 9 voxels (use 11 for 11). `sail` `at` is where the sail's bottom edge
 meets the mast: `rig: square` (default) hangs across the hull just forward of the mast (`brace` turns it
@@ -552,7 +557,7 @@ checkouts of the same art (e.g. agents' git worktrees), so a fresh checkout does
 **MCP tools** (same JSON as the commands above): `status`, `read_docs`, `write_doc`, `log_feedback`,
 `config_show`/`config_set`/`config_unset`, `palette_list`, `palette_show` (image), `palette_write`,
 `palette_adjust` (dry run by default; image), `scaffold`, `read_asset`, `write_asset` (writes + lints +
-preview image), `lint`, `preview` (image: sheet, montage, variants, built, orbit, closeup with `part`, or engine; `page: <animation>` = that page of a split sheet), `gallery` (image), `fit`,
+preview image), `lint`, `preview` (image: sheet, montage, variants, built, orbit, closeup with `part`, or engine; `page: <animation>` = that page of a split sheet), `gallery` (image), `fit` (`write: true` edits the model's size and pivot),
 `mark`, `style_bump`, `import_png` (path or base64), `build` (`verify_godot` needs `--allow-godot`),
 `manifest`. Resources: `pagan://workflow`, `pagan://reference`, `pagan://brief`, `pagan://style`,
 `pagan://manifest`, `pagan://palette/{name}`, `pagan://asset/{name}`. Prompts: `setup_new_game`,

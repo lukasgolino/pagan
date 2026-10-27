@@ -1,6 +1,6 @@
 """3D voxel models: text-described shapes rendered by PAGAN into consistent, palette-shaded frames.
 
-A model is built from primitive parts (box, hull, cylinder, ellipsoid, line, sail) and/or literal layer
+A model is built from primitive parts (box, hull, cylinder, ring, ellipsoid, line, sail) and/or literal layer
 grids, each with a material (a ramp of palette keys, dark -> light). PAGAN renders it from N headings with
 the project's fixed camera and light, so every 3D asset in a project is projected and lit identically.
 

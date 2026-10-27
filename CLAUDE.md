@@ -213,3 +213,5 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   [x, y, w, h] fails loudly instead of drawing the wrong pixels); Godot AtlasTexture `margin` = (offset, full size - crop
   size), format verified against Godot 4.7.2's ResourceSaver. Fully transparent frame = 1x1 crop at [0, 0] (an empty
   AtlasTexture region would mean the whole atlas). Fonts / nine_slice can't be trimmed; tilesets and models never are.
+- 2026-10-27: 3D freeze lifted for the `ring` primitive only (#35): a flat open annulus (`center`/`centre`, `outer`,
+  `inner`, `height`, `axis`); no `torus`, no other new 3D features. MCP `fit` takes `write: true` (now a writing tool).
