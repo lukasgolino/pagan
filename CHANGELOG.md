@@ -64,6 +64,12 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 - `pagan.api.pixel_font("3x5" | "5x7")`: built-in monospaced pixel fonts (printable ASCII; 3x5 letters lowercase
   as uppercase) for generator lettering without a project or palette: `canvas.text(api.pixel_font("3x5"), "EXIT",
   x, y, key="k")` (`key` is required for them) (#46).
+- Preview contact sheets over 4096 px on a side are split into pages: `sheet.png` becomes an overview (headings or
+  frames outside animations, variants, as-built/tiling rows, an index of the pages) and each animation gets
+  `sheet.<animation>.png` (models: one per pose, every heading on it), wrapped to 4096 px wide and continued in
+  `sheet.<animation>.2.png`, `.3`, ... when taller (the overview in `sheet.2.png`). Sheets within 4096 px are
+  unchanged. `pagan preview --json` lists the pages in `sheet_pages`; the MCP `preview` tool takes `page`
+  (an animation) to return a page's image. Preview output only: build output doesn't change (#32).
 
 ### Changed
 

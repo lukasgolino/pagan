@@ -155,7 +155,9 @@ splash; model frames up to 1024). Small means less detail; that's the deal, so s
    would hide real problems everywhere. Models: `pagan fit <model>` gives a size and pivot that fit
    every heading and pose; `--write` puts them in the file (after adding animations, run it again).
 4. `pagan preview <name>` -> **open `previews/<name>/sheet.png` with the Read tool and look at it.**
-   (It also writes 1x frames to `previews/<name>/native/` for scripted montages.)
+   (It also writes 1x frames to `previews/<name>/native/` for scripted montages.) A sheet over 4096 px is
+   split into pages: `sheet.png` is then an overview and each animation (models: each pose, every heading)
+   gets `sheet.<animation>.png` (continued in `sheet.<animation>.2.png`, ...): open the pages too.
    Sprites meant to play together (a title, a hit and its sparks, a cutscene): put them in a
    `scenes/<name>.timeline.yaml` (reference: Timeline preview) and `pagan preview scenes/<name>.timeline.yaml
    --at 1.9,2.0` -> look at `previews/<name>.timeline/at.png` (and timeline.gif).

@@ -128,6 +128,21 @@ def test_scaffold_read_and_preview(root: Path) -> None:
     assert data(call(root, "preview", {"asset": "gem", "which": "variants"}))["image_note"].startswith("no variants")
 
 
+def test_preview_sheet_pages(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pagan import preview
+
+    monkeypatch.setattr(preview, "SHEET_CAP", 300)  # split even a small sheet
+    sprite = SPRITE + "  b: { from: a, flip: horizontal }\nanimations:\n  spin: [a, b]\n"
+    call(root, "write_asset", {"kind": "sprite", "name": "gem", "text": sprite})
+    shown = call(root, "preview", {"asset": "gem"})
+    assert data(shown)["outputs"][0]["sheet_pages"] == ["previews/gem/sheet.spin.png"] and len(images(shown)) == 1
+    page = call(root, "preview", {"asset": "gem", "page": "spin"})
+    [picture] = images(page)
+    assert picture.size == Image.open(root / "previews" / "gem" / "sheet.spin.png").size
+    missing = call(root, "preview", {"asset": "gem", "page": "nope"})
+    assert data(missing)["image_note"].startswith("no sheet page") and not images(missing)
+
+
 def test_errors_are_results(root: Path) -> None:
     missing = call(root, "read_asset", {"name": "nope"})
     assert not missing.is_error and data(missing)["findings"][0]["rule"] == "E000"

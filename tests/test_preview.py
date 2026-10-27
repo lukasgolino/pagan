@@ -4,11 +4,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from pagan.asset import Asset, load_asset_or_raise
 from pagan.lint import frame_change
-from pagan.preview import CHANGED, REMOVED, PreviewOptions, auto_scale, change_image, gallery, upscale, write_previews
+from pagan import preview
+from pagan.preview import (
+    CHANGED,
+    REMOVED,
+    PreviewOptions,
+    auto_scale,
+    change_image,
+    contact_pages,
+    contact_sheet,
+    gallery,
+    upscale,
+    write_previews,
+)
 from pagan.project import load_project
 from pagan.render import frame_image
 
@@ -78,3 +91,48 @@ def test_gallery_includes_every_kind() -> None:
     without = gallery([bug(), turf], PreviewOptions(scale=4), "test")
     assert with_model.height > without.height  # the model gets its own row
     assert gallery([bug()], PreviewOptions(), "test").width > 0
+
+
+def crate() -> Asset:
+    return load_asset_or_raise(GOLDEN / "models" / "crate.model.yaml", load_project(GOLDEN))
+
+
+def test_small_sheet_is_one_page() -> None:
+    pages = contact_pages(bug(), PreviewOptions(scale=4))
+    assert [name for name, _ in pages] == ["sheet.png"]
+    assert pages[0][1].tobytes() == contact_sheet(bug(), PreviewOptions(scale=4)).tobytes()
+
+
+def test_big_sheet_splits_into_one_page_per_animation() -> None:
+    options = PreviewOptions(scale=8)
+    whole = contact_sheet(bug(), options)
+    pages = dict(contact_pages(bug(), options, cap=whole.height - 1))
+    assert list(pages) == ["sheet.png", "sheet.walk.png", "sheet.flip.png"]  # overview first, then file order
+    assert all(image.height < whole.height for image in pages.values())
+
+
+def test_pages_wrap_and_continue_under_the_cap() -> None:
+    options = PreviewOptions(scale=32)  # 288 px frames: two fit in a 700 px row, not three
+    pages = contact_pages(bug(), options, cap=700)
+    names = [name for name, _ in pages]
+    assert names == ["sheet.png", "sheet.walk.png", "sheet.walk.2.png", "sheet.walk.3.png", "sheet.flip.png", "sheet.flip.2.png"]
+    assert all(image.width <= 700 and image.height <= 700 for _, image in pages)
+
+
+def test_model_pages_are_per_pose_with_every_heading() -> None:
+    options = PreviewOptions(scale=4)
+    pages = contact_pages(crate(), options, cap=1000)  # the whole sheet is ~1460 px tall
+    # bob_e, bob_n, bob_w and bob_s on one page (128 px frames: its four heading rows), the changes rows continued
+    assert [name for name, _ in pages] == ["sheet.png", "sheet.bob.png", "sheet.bob.2.png"]
+    assert pages[1][1].height > 4 * (32 * 4 + 2 * 18)
+
+
+def test_write_previews_lists_pages_and_removes_stale_ones(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    with monkeypatch.context() as patch:
+        patch.setattr(preview, "SHEET_CAP", 200)
+        result = write_previews(bug(), tmp_path, PreviewOptions(scale=8))
+    assert result.sheet == tmp_path / "bug" / "sheet.png" and result.sheet.exists()
+    assert [p.name for p in result.sheet_pages][:1] == ["sheet.walk.png"] and all(p.exists() for p in result.sheet_pages)
+    result = write_previews(bug(), tmp_path, PreviewOptions(scale=8))
+    assert result.sheet_pages == []
+    assert sorted(p.name for p in (tmp_path / "bug").glob("sheet*.png")) == ["sheet.png"]

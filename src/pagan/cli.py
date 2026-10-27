@@ -25,7 +25,7 @@ from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_st
 from pagan.palette import KEY_ORDER, NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.model import part_cells
-from pagan.preview import PreviewOptions, gallery, preview_variants, write_closeup, write_native, write_orbit, write_previews
+from pagan.preview import SHEET_CAP, PreviewOptions, gallery, preview_variants, write_closeup, write_native, write_orbit, write_previews
 from pagan.render import supersample_factor
 from pagan.settings import BY_KEY, Change, describe, set_in_toml, set_setting, unset_setting
 from pagan.swatch import render_swatch
@@ -566,6 +566,10 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
             asset, project.preview_dir, options, supersample_factor(asset, project), args.frame, project.config.camera
         )
         out.say(f"{asset.name}: {display_path(result.sheet)}  (x{result.scale})")
+        if result.sheet_pages:
+            out.say(f"  sheet split into pages (over {SHEET_CAP} px; sheet.png is the overview):")
+            for page in result.sheet_pages:
+                out.say(f"    {display_path(page)}")
         out.say(f"  montage (no labels, on the background): {display_path(result.montage)}")
         for gif in result.gifs:
             out.say(f"  animation: {display_path(gif)}")
@@ -590,6 +594,7 @@ def cmd_preview(args: argparse.Namespace, out: Output) -> int:
                 "asset": asset.name,
                 "scale": result.scale,
                 "sheet": display_path(result.sheet),
+                "sheet_pages": [display_path(p) for p in result.sheet_pages],
                 "montage": display_path(result.montage),
                 "gifs": [display_path(g) for g in result.gifs],
                 "frames": [display_path(f) for f in result.frames],

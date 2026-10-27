@@ -234,6 +234,7 @@ def test_preview_and_gallery(in_tmp: Path, capsys: pytest.CaptureFixture[str]) -
     code, result = run_json(["preview", "d", "--scale", "4", "--grid", "--bg", "#202020"], capsys)
     assert code == 0
     assert result["outputs"][0]["sheet"] == "previews/d/sheet.png"
+    assert result["outputs"][0]["sheet_pages"] == []  # small: the whole contact sheet is sheet.png
     assert result["outputs"][0]["gifs"] == ["previews/d/idle.gif"]
     code, result = run_json(["gallery"], capsys)
     assert code == 0 and result["assets"] == 1
