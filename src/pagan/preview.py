@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw
 from pagan.asset import Asset, Grid, axis_combinations
 from pagan.palette import TRANSPARENT
 from pagan.render import downsample, frame_image, layout_image, save_png, sheet_image
-from pagan.swatch import _font
+from pagan.swatch import Font, _font
 from pagan.views import View, closeup_views, orbit_views, thumbnail
 from pagan.voxel import Camera
 
@@ -92,23 +92,57 @@ def upscale(image: Image.Image, scale: int, options: PreviewOptions) -> Image.Im
     return out
 
 
-def _labelled_grid(title: str, subtitle: str, rows: list[tuple[str, list[tuple[str, Image.Image]]]]) -> Image.Image:
-    """Rows of labelled cells under section headings. All cells in a row share a size."""
-    font, title_font = _font(12), _font(16)
-    cell_rows: list[tuple[str, list[list[tuple[str, Image.Image]]]]] = []
-    for heading, cells in rows:
-        chunks = [cells[i : i + MAX_PER_ROW] for i in range(0, len(cells), MAX_PER_ROW)] or [[]]
-        cell_rows.append((heading, chunks))
+Cell = tuple[str, Image.Image]
+Row = tuple[str, list[Cell]]
+Unit = tuple[str, str, list[Cell]]  # a line of cells: (its row's heading, the heading drawn above it or "", cells)
 
+
+def _cell_width(measure: ImageDraw.ImageDraw, font: Font, label: str, img: Image.Image) -> int:
+    return max(img.width, int(measure.textlength(label, font=font))) + PAD
+
+
+def _units(rows: list[Row], measure: ImageDraw.ImageDraw, font: Font, max_width: int | None) -> list[Unit]:
+    """Rows wrapped into lines of at most MAX_PER_ROW cells (and `max_width` px, when given; a cell wider
+    than that gets a line of its own)."""
+    units: list[Unit] = []
+    for heading, cells in rows:
+        chunks: list[list[Cell]]
+        if max_width is None:
+            chunks = [cells[i : i + MAX_PER_ROW] for i in range(0, len(cells), MAX_PER_ROW)] or [[]]
+        else:
+            chunks, width = [], PAD * 2
+            current: list[Cell] = []
+            for label, img in cells:
+                w = _cell_width(measure, font, label, img)
+                if current and (len(current) == MAX_PER_ROW or width + w > max_width):
+                    chunks.append(current)
+                    current, width = [], PAD * 2
+                current.append((label, img))
+                width += w
+            chunks.append(current)
+        for i, chunk in enumerate(chunks):
+            units.append((heading, heading if i == 0 else "", chunk))
+    return units
+
+
+def _unit_height(unit: Unit) -> int:
+    _, shown, chunk = unit
+    return (LABEL_H if shown else 0) + max((img.height for _, img in chunk), default=0) + LABEL_H + PAD
+
+
+def _header_height(subtitle: str) -> int:
+    return PAD + 24 + (LABEL_H if subtitle else 0)
+
+
+def _draw_grid(title: str, subtitle: str, units: list[Unit]) -> Image.Image:
+    font, title_font = _font(12), _font(16)
     measure = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     width = max(PAD * 2 + int(measure.textlength(title, font=title_font)), PAD * 2 + int(measure.textlength(subtitle, font=font)))
-    height = PAD + 24 + (LABEL_H if subtitle else 0)
-    for heading, chunks in cell_rows:
-        height += LABEL_H if heading else 0
-        for chunk in chunks:
-            row_w = PAD + sum(max(img.width, int(measure.textlength(label, font=font))) + PAD for label, img in chunk)
-            width = max(width, row_w + PAD)
-            height += max((img.height for _, img in chunk), default=0) + LABEL_H + PAD
+    height = _header_height(subtitle)
+    for unit in units:
+        chunk = unit[2]
+        width = max(width, PAD * 2 + sum(_cell_width(measure, font, label, img) for label, img in chunk))
+        height += _unit_height(unit)
 
     sheet = Image.new("RGBA", (width, height), (*BG_DARK, 255))
     draw = ImageDraw.Draw(sheet)
@@ -117,46 +151,140 @@ def _labelled_grid(title: str, subtitle: str, rows: list[tuple[str, list[tuple[s
     if subtitle:
         draw.text((PAD, y - 4), subtitle, font=font, fill=MUTED)
         y += LABEL_H
-    for heading, chunks in cell_rows:
-        if heading:
-            draw.text((PAD, y), heading, font=font, fill=MUTED)
+    for _, shown, chunk in units:
+        if shown:
+            draw.text((PAD, y), shown, font=font, fill=MUTED)
             y += LABEL_H
-        for chunk in chunks:
-            x = PAD
-            row_h = max((img.height for _, img in chunk), default=0)
-            for label, img in chunk:
-                sheet.alpha_composite(img, (x, y))
-                draw.text((x, y + img.height + 2), label, font=font, fill=TEXT)
-                x += max(img.width, int(draw.textlength(label, font=font))) + PAD
-            y += row_h + LABEL_H + PAD
+        x = PAD
+        row_h = max((img.height for _, img in chunk), default=0)
+        for label, img in chunk:
+            sheet.alpha_composite(img, (x, y))
+            draw.text((x, y + img.height + 2), label, font=font, fill=TEXT)
+            x += max(img.width, int(draw.textlength(label, font=font))) + PAD
+        y += row_h + LABEL_H + PAD
     return sheet
 
 
-def contact_sheet(asset: Asset, options: PreviewOptions, supersample: int = 1) -> Image.Image:
+def _labelled_grid(title: str, subtitle: str, rows: list[Row]) -> Image.Image:
+    """Rows of labelled cells under section headings. All cells in a row share a size."""
+    measure = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    return _draw_grid(title, subtitle, _units(rows, measure, _font(12), None))
+
+
+def _grid_size(title: str, subtitle: str, rows: list[Row]) -> tuple[int, int]:
+    """The size _labelled_grid would draw, without drawing it."""
+    font, title_font = _font(12), _font(16)
+    measure = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    units = _units(rows, measure, font, None)
+    width = max(PAD * 2 + int(measure.textlength(title, font=title_font)), PAD * 2 + int(measure.textlength(subtitle, font=font)))
+    width = max([width, *(PAD * 2 + sum(_cell_width(measure, font, label, img) for label, img in u[2]) for u in units)])
+    return width, _header_height(subtitle) + sum(_unit_height(u) for u in units)
+
+
+def _paged_grid(title: str, subtitle: str, rows: list[Row], cap: int) -> list[Image.Image]:
+    """The labelled grid wrapped to at most `cap` px wide and split into pages at most `cap` px tall (a single
+    cell bigger than that still gets a page of its own). A row carried over to the next page repeats its heading."""
+    measure = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    units = _units(rows, measure, _font(12), cap)
+    page_subtitle = f"{subtitle} · page 1/9999" if subtitle else "page 1/9999"  # room for the page number
+    pages: list[list[Unit]] = [[]]
+    height = _header_height(page_subtitle)
+    for heading, shown, chunk in units:
+        unit = (heading, shown, chunk)
+        if pages[-1] and height + _unit_height(unit) > cap:
+            pages.append([])
+            height = _header_height(page_subtitle)
+            if not shown and heading:
+                unit = (heading, f"{heading} (continued)", chunk)
+        pages[-1].append(unit)
+        height += _unit_height(unit)
+    if len(pages) == 1:
+        return [_draw_grid(title, subtitle, pages[0])]
+    return [_draw_grid(title, f"{subtitle} · page {i}/{len(pages)}" if subtitle else f"page {i}/{len(pages)}", page) for i, page in enumerate(pages, 1)]
+
+
+SHEET_CAP = 4096  # px: a contact sheet bigger than this on either side is split into pages
+
+
+@dataclass
+class _SheetParts:
+    """A contact sheet's rows, whole and split into an overview and one page per animation."""
+
+    title: str
+    subtitle: str
+    whole: list[Row]
+    overview: list[Row]
+    pages: dict[str, list[Row]]  # animation (models: pose, across headings) -> its rows
+
+
+def _sheet_parts(asset: Asset, options: PreviewOptions, supersample: int) -> _SheetParts:
     scale = options.scale or auto_scale(asset.size)
-    rows: list[tuple[str, list[tuple[str, Image.Image]]]] = []
+    images: dict[tuple[str, str | None], Image.Image] = {}
+
+    def cell(name: str, variant: str | None = None) -> Cell:
+        if (name, variant) not in images:
+            images[(name, variant)] = upscale(frame_image(asset, name, variant), scale, options)
+        return name, images[(name, variant)]
+
+    changes: dict[str, Row] = {}
+    for anim in asset.animations.values():
+        if len(anim.frames) < 2:
+            continue
+        cells = []
+        for i, name in enumerate(anim.frames):
+            previous = anim.frames[i - 1]  # frame 0 compares with the last (the loop seam)
+            cells.append((f"{previous}->{name}", upscale(change_image(asset, previous, name), scale, options)))
+        changes[anim.name] = (f"{anim.name}: changes (magenta = changed/new pixel, cyan = pixel removed)", cells)
+
+    rows: list[Row] = []
+    overview: list[Row] = []
+    pages: dict[str, list[Row]] = {}
     if asset.kind == "model":
         # One row per heading: the static frame, then that heading's animation frames.
         headings = [a.name for a in asset.animations.values() if a.frames == (a.name,)]
         animated = len(asset.animations) > len(headings)
         if not animated:  # static model: all headings together, wrapping in rows
-            rows.append(("headings", [(h, upscale(frame_image(asset, h), scale, options)) for h in headings]))
+            rows.append(("headings", [cell(h) for h in headings]))
         for heading in headings if animated else []:
             names = [heading] + [f for a in asset.animations.values() if a.name.endswith(f"_{heading}") for f in a.frames]
-            rows.append((f"heading {heading}", [(n, upscale(frame_image(asset, n), scale, options)) for n in names]))
-        for variant_name in asset.variants:
-            rows.append((variant_name, [(h, upscale(frame_image(asset, h, variant_name), scale, options)) for h in headings]))
+            rows.append((f"heading {heading}", [cell(n) for n in names]))
+        variant_rows: list[Row] = [(v, [cell(h, v) for h in headings]) for v in asset.variants]
+        rows += variant_rows
+        overview += [("headings", [cell(h) for h in headings]), *variant_rows]
+        for anim in asset.animations.values():
+            if anim.name in headings:
+                continue
+            # "<pose>_<heading>" (one heading: just "<pose>"); a pose's page has its heading rows, then their changes
+            match = next((h for h in headings if len(headings) > 1 and anim.name.endswith(f"_{h}")), None)
+            facing, pose = (match, anim.name[: -len(match) - 1]) if match else (headings[0], anim.name)
+            page = pages.setdefault(pose, [])
+            at = sum(1 for heading, _ in page if heading.startswith("heading "))
+            page.insert(at, (f"heading {facing}", [cell(f) for f in anim.frames]))
+            if anim.name in changes:
+                page.append(changes[anim.name])
     else:
+        animated_frames = {f for a in asset.animations.values() for f in a.frames}
         for variant in (None, *asset.variants):
-            cells = [(name, upscale(frame_image(asset, name, variant), scale, options)) for name in asset.frames]
-            rows.append(("" if variant is None and not asset.variants else (variant or base_label(asset)), cells))
+            label = "" if variant is None and not asset.variants else (variant or base_label(asset))
+            rows.append((label, [cell(name, variant) for name in asset.frames]))
+            loose = [cell(name, variant) for name in asset.frames if name not in animated_frames]
+            if loose:
+                overview.append((label, loose))
+        for anim in asset.animations.values():
+            frames = list(dict.fromkeys(anim.frames))
+            for variant in (None, *asset.variants):
+                label = "" if variant is None and not asset.variants else (variant or base_label(asset))
+                pages.setdefault(anim.name, []).append((label, [cell(name, variant) for name in frames]))
+            if anim.name in changes:
+                pages[anim.name].append(changes[anim.name])
+    extra: list[Row] = []
     if supersample > 1:
         # What the game gets: each frame box-filtered down, shown at the same on-screen size as the source.
         names = [a.name for a in asset.animations.values() if a.frames == (a.name,)] if asset.kind == "model" else list(asset.frames)
         cells = [(n, upscale(downsample(frame_image(asset, n), supersample), scale * supersample, options)) for n in names]
-        rows.append((f"as built: 1/{supersample} size, box-filtered (shown x{scale * supersample}; 1x: built_1x.png)", cells))
+        extra.append((f"as built: 1/{supersample} size, box-filtered (shown x{scale * supersample}; 1x: built_1x.png)", cells))
     if asset.kind == "tileset":
-        rows.append(("tiled 3x3 (check seams)", [(name, upscale(tiled(asset, name, 3), max(1, scale // 2), options)) for name in asset.frames]))
+        extra.append(("tiled 3x3 (check seams)", [(name, upscale(tiled(asset, name, 3), max(1, scale // 2), options)) for name in asset.frames]))
     if asset.textures is not None and asset.textures.groups:
         from pagan.api import compose  # local import: api builds on most modules
 
@@ -165,28 +293,54 @@ def contact_sheet(asset: Asset, options: PreviewOptions, supersample: int = 1) -
             layout = [" ".join(row) for row in group] * 2
             image = compose(asset, [f"{row} {row}" for row in layout])
             cells.append((name, upscale(image, max(1, scale // 2), options)))
-        rows.append(("texture groups tiled 2x2 (check seams)", cells))
-    for anim in asset.animations.values():
-        if len(anim.frames) < 2:
-            continue
-        cells = []
-        for i, name in enumerate(anim.frames):
-            previous = anim.frames[i - 1]  # frame 0 compares with the last (the loop seam)
-            cells.append((f"{previous}->{name}", upscale(change_image(asset, previous, name), scale, options)))
-        rows.append((f"{anim.name}: changes (magenta = changed/new pixel, cyan = pixel removed)", cells))
+        extra.append(("texture groups tiled 2x2 (check seams)", cells))
+    summary: list[Row] = []
     if asset.animations and asset.kind != "model":
-        summary = ", ".join(
+        text = ", ".join(
             f"{a.name} ({len(a.frames)}f @ {a.fps:g}fps{'' if a.loop else ', once'}{'' if a.loop_from is None else f', loops from {a.loop_from}'})"
             for a in asset.animations.values()
         )
-        rows.append((f"animations: {summary}", []))
+        summary.append((f"animations: {text}", []))
+    rows += extra + list(changes.values()) + summary
     width, height = asset.size
     palette = asset.palette.name or "inline palette"
-    title = f"{asset.name}  {width}x{height}  x{scale}"
     subtitle = f"{asset.kind} · {palette} · {asset.status} · style v{asset.style_version}"
     if asset.description:
         subtitle += f" · {asset.description[:90]}{'…' if len(asset.description) > 90 else ''}"
-    return _labelled_grid(title, subtitle, rows)
+    return _SheetParts(f"{asset.name}  {width}x{height}  x{scale}", subtitle, rows, overview + extra, pages)
+
+
+def contact_sheet(asset: Asset, options: PreviewOptions, supersample: int = 1) -> Image.Image:
+    """Every frame, heading, variant and animation "changes" row on one labelled sheet (any size)."""
+    parts = _sheet_parts(asset, options, supersample)
+    return _labelled_grid(parts.title, parts.subtitle, parts.whole)
+
+
+def _page_names(stem: str, count: int) -> list[str]:
+    return [f"{stem}.png" if i == 1 else f"{stem}.{i}.png" for i in range(1, count + 1)]
+
+
+def contact_pages(asset: Asset, options: PreviewOptions, supersample: int = 1, cap: int | None = None) -> list[tuple[str, Image.Image]]:
+    """The contact sheet as (file name, image) pages. A sheet within `cap` px (default SHEET_CAP) on both sides is one page,
+    sheet.png (the whole contact sheet). A bigger one is split: sheet.png = an overview (headings or frames
+    outside animations, variants, as-built/tiling rows) with an index of the other pages, and one page per
+    animation, sheet.<animation>.png (models: one per pose, every heading on it). A page still bigger than
+    `cap` continues on sheet.<animation>.2.png, .3, ... (the overview on sheet.2.png, ...); rows wrap to fit
+    `cap` px wide."""
+    cap = cap or SHEET_CAP
+    parts = _sheet_parts(asset, options, supersample)
+    width, height = _grid_size(parts.title, parts.subtitle, parts.whole)
+    if width <= cap and height <= cap:
+        return [("sheet.png", _labelled_grid(parts.title, parts.subtitle, parts.whole))]
+    out: list[tuple[str, Image.Image]] = []
+    index: list[Row] = []
+    for anim, rows in parts.pages.items():
+        images = _paged_grid(f"{parts.title}  animation {anim}", parts.subtitle, rows, cap)
+        names = _page_names(f"sheet.{anim}", len(images))
+        out += zip(names, images, strict=True)
+        index.append((f"animation {anim}: {', '.join(names)}", []))
+    overview = _paged_grid(parts.title, parts.subtitle, [*parts.overview, *index], cap)
+    return [*zip(_page_names("sheet", len(overview)), overview, strict=True), *out]
 
 
 CHANGED = (255, 40, 200, 255)
@@ -255,6 +409,7 @@ class PreviewResult:
     variants_1x: Path | None = None
     built_1x: Path | None = None  # supersampled assets: the frames as built, 1x
     native: list[Path] = field(default_factory=list)  # 1x frames and sheets (native/), as `pagan render` writes
+    sheet_pages: list[Path] = field(default_factory=list)  # a sheet over SHEET_CAP px: the pages after sheet.png
 
 
 def base_label(asset: Asset) -> str:
@@ -398,11 +553,16 @@ def write_previews(
         path = folder / f"{name}.gif"
         animation_gif(asset, name, options, path)
         gifs.append(path)
-    sheet = folder / "sheet.png"
-    contact_sheet(asset, options, supersample).save(sheet)
+    for stale in folder.glob("sheet.*.png"):  # pages of an earlier, bigger sheet
+        stale.unlink()
+    sheet_pages: list[Path] = []
+    for name, image in contact_pages(asset, options, supersample):
+        image.save(folder / name)
+        sheet_pages.append(folder / name)
     montage_path = folder / "montage.png"
     montage(asset, options).save(montage_path)
-    result = PreviewResult(asset=asset.name, sheet=sheet, montage=montage_path, frames=frames, gifs=gifs, scale=scale)
+    result = PreviewResult(asset=asset.name, sheet=sheet_pages[0], montage=montage_path, frames=frames, gifs=gifs, scale=scale)
+    result.sheet_pages = sheet_pages[1:]
     result.native = write_native(asset, out_dir)
     if asset.variants:
         result.variants = folder / "variants.png"

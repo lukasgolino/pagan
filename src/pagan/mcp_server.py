@@ -21,7 +21,7 @@ from contextlib import redirect_stdout
 from datetime import date
 from functools import wraps
 from importlib.resources import files
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, Literal, ParamSpec, TypeVar
 
 from mcp.server.mcpserver import Image, MCPServer
@@ -416,6 +416,7 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
         inline: bool = True,
         frame: str | None = None,
         part: str | None = None,
+        page: str | None = None,
     ) -> list[Any]:
         """Render previews (labelled contact sheet with every frame, heading and animation "changes" row;
         montage; variants side by side; built = supersampled output at 1x) and return the chosen one as an
@@ -423,7 +424,9 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
         the result. background: checker, none or #rrggbb. frame: the frame "variants" compares (default:
         the first one with pixels). 3D models (for 3D games): orbit = every heading from below (-30 degrees)
         to straight down; closeup = one `part` (id) filling the view; engine = the built mesh rendered by
-        Godot (needs a display)."""
+        Godot (needs a display). A sheet over 4096 px is split: `sheet` is then an overview and `sheet_pages`
+        lists one page per animation (sheet.<animation>.png); `page` (an animation, models: a pose) returns
+        that page's image instead (its first page; a page over 4096 px continues in sheet.<animation>.2.png)."""
         _check_name(asset)
         argv = ["preview", asset, f"--bg={background}"]
         if scale is not None:
@@ -442,6 +445,12 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
         outputs = result.get("outputs") or [{}]
         key = {"sheet": "sheet", "montage": "montage", "variants": "variants", "built": "built_1x", "orbit": "orbit", "closeup": "closeup", "engine": "engine"}[which]
         chosen = outputs[0].get(key)
+        if page is not None and which == "sheet":
+            chosen = next((p for p in outputs[0].get("sheet_pages", []) if PurePath(p).name == f"sheet.{page}.png"), None)
+            if chosen is None:
+                if result.get("ok"):
+                    result["image_note"] = f"no sheet page {page!r} for {asset}: the sheet isn't split, or no such animation (see sheet_pages)"
+                return [result]
         if isinstance(chosen, dict):
             chosen = chosen.get(part or "")
         if result.get("ok") and chosen is None:
