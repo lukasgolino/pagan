@@ -191,3 +191,46 @@ def test_reference_api_calls_exist() -> None:
         missing += [f"api.{name}" for name in re.findall(r"api\.(\w+)", code) if name not in api.__all__]
     assert not missing
     assert "canvas.text(" in section and not re.search(r"(?<![\w.])text\(", section)  # a Canvas method, not api.text
+
+
+def test_pixel_font_has_every_printable_ascii_glyph_at_its_size() -> None:
+    printable = "".join(chr(c) for c in range(0x20, 0x7F))
+    for size, cell in (("3x5", (3, 5)), ("5x7", (5, 7))):
+        font = api.pixel_font(size)
+        assert font.font is not None and font.font.glyphs == printable and font.font.cell == cell
+        assert len(font.frames) == len(printable)
+        for grid in font.frames.values():
+            assert len(grid) == cell[1] and all(len(row) == cell[0] for row in grid)
+    upper = api.pixel_font("3x5")
+    assert all(upper.frames[f"u{ord(c):02x}"] == upper.frames[f"u{ord(c.upper()):02x}"] for c in "abcxyz")
+    lower = api.pixel_font("5x7")
+    assert lower.frames[f"u{ord('a'):02x}"] != lower.frames[f"u{ord('A'):02x}"]
+    with pytest.raises(ValueError, match="sizes: 3x5, 5x7"):
+        api.pixel_font("4x6")
+
+
+def test_pixel_font_glyphs_render_non_empty_except_space() -> None:
+    for size in ("3x5", "5x7"):
+        font = api.pixel_font(size)
+        assert font.font is not None
+        for char in font.font.glyphs:
+            canvas = api.Canvas(*font.font.cell).text(font, char, 0, 0, key="k")
+            inked = sum(row.count("k") for row in canvas.rows())
+            assert (inked == 0) == (char == " "), (size, char)
+
+
+def test_pixel_font_letters_exit() -> None:
+    canvas = api.Canvas(16, 5).text(api.pixel_font("3x5"), "Exit", 0, 0, key="k")
+    assert canvas.rows() == [
+        "kkk.k.k.kkk.kkk.",
+        "k...k.k..k...k..",
+        "kk...k...k...k..",
+        "k...k.k..k...k..",
+        "kkk.k.k.kkk..k..",
+    ]
+    again = api.Canvas(16, 5).text(api.pixel_font("3x5"), "EXIT", 0, 0, key="k")
+    assert again.rows() == canvas.rows()
+    big = api.Canvas(48, 14).text(api.pixel_font("5x7"), "EXIT", 0, 0, scale=2, key="k")
+    assert big.rows()[0] == "kkkkkkkkkk..kk......kk....kkkkkk....kkkkkkkkkk.."
+    with pytest.raises(ValueError, match="pass key="):
+        api.Canvas(16, 5).text(api.pixel_font("3x5"), "EXIT", 0, 0)

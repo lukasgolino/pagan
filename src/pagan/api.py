@@ -30,6 +30,7 @@ from pagan.asset import Asset, TileShape, font_glyphs, glyph_advance, load_asset
 from pagan.lint import _orphans
 from pagan.model import SailCell, _Builder, hull_reach, sail_cells
 from pagan.palette import TRANSPARENT, Palette
+from pagan.pixelfont import pixel_font
 from pagan.project import Project, discover_project
 from pagan.render import frame_image, layout_image
 from pagan.voxel import Cell, Material, VoxelModel, heading_angles
@@ -53,6 +54,7 @@ __all__ = [
     "open_project",
     "palette",
     "periodic_noise",
+    "pixel_font",
     "polygon_distance",
     "ramp_pick",
     "rotate_points",
@@ -141,11 +143,13 @@ class Canvas:
         return self.to_array() != TRANSPARENT
 
     def text(self, font: Asset, text: str, x: int, y: int, scale: int = 1, key: str | None = None) -> Canvas:
-        """Write `text` with a project font sprite (`font:`), its top-left at (x, y), each glyph pixel `scale` x
-        `scale`; advances and offsets as in the build's font metrics. `key` paints every glyph pixel one key (else
-        the font's)."""
+        """Write `text` with a font sprite (a project's `font:` sprite or `pixel_font("3x5")`), its top-left at
+        (x, y), each glyph pixel `scale` x `scale`; advances and offsets as in the build's font metrics. `key` paints
+        every glyph pixel one key (else the font's; required for the built-in pixel fonts, which have no colours)."""
         if font.font is None:
             raise ValueError(f"{font.name!r} isn't a font sprite (it has no font: section)")
+        if key is None and not font.palette.colors:
+            raise ValueError(f"font {font.name!r} has no colours of its own: pass key= (the palette key to letter with)")
         metrics = font.font
         glyphs = {char: grid for char, _, _, grid in font_glyphs(metrics, font.frames, font.size)}
         pen = x

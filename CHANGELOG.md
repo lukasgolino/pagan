@@ -61,6 +61,9 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
   Godot AtlasTextures get a `margin`, so frames keep their full size in SpriteFrames. A fully transparent frame
   becomes a 1x1 transparent crop at offset [0, 0]. Fonts and nine_slice sprites can't be trimmed (E001). Sprites
   without trim build exactly as before. The demo slime is trimmed (#1).
+- `pagan.api.pixel_font("3x5" | "5x7")`: built-in monospaced pixel fonts (printable ASCII; 3x5 letters lowercase
+  as uppercase) for generator lettering without a project or palette: `canvas.text(api.pixel_font("3x5"), "EXIT",
+  x, y, key="k")` (`key` is required for them) (#46).
 
 ### Changed
 
