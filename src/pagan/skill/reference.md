@@ -443,6 +443,9 @@ on `from pagan import api` instead of copying PAGAN's maths; it's versioned with
   Draw in numpy, hand PAGAN the keys.
 - Lettering with a project font sprite (`font:`): `canvas.text(api.load("sprites/font.sprite.yaml"), "THWACK!", x,
   y, scale=1, key=None)` (a `Canvas` method; top-left at (x, y), the build's advances, `key` = one key for every pixel).
+- Built-in pixel fonts, no project or palette needed: `canvas.text(api.pixel_font("3x5"), "EXIT", x, y, key="k")`
+  (`key` required). `"3x5"` and `"5x7"`, printable ASCII, monospaced (advance 4 / 6 px, line height 6 / 8); the
+  3x5 font letters lowercase with its uppercase glyphs. Generators only: for in-game text, draw a `font:` sprite.
 - Lettering from a real typeface: `text_mask("A", font="fonts/Serif.ttf", cap_height=104, variation={"wght": 900},
   anchor="baseline_centre", rotate=3, scale=(0.9, 1), supersample=4)` -> `.coverage` (0..1 floats), `.mask()`
   (bool), `.origin` (the anchor in the mask), `.advance` (kerning included), `.bbox`. Rotate/scale turn about the
