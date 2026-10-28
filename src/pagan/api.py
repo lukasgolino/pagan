@@ -15,6 +15,7 @@ version bump, and `API_VERSION` goes up when something here changes incompatibly
 
 from __future__ import annotations
 
+import io
 import math
 import re
 from collections.abc import Callable, Mapping, Sequence
@@ -35,7 +36,7 @@ from pagan.project import Project, discover_project
 from pagan.render import frame_image, layout_image
 from pagan.voxel import Cell, Material, VoxelModel, heading_angles
 
-API_VERSION = 2  # 2: ellipse/ring exclude pixel centres exactly on the edge
+API_VERSION = 3  # 2: ellipse/ring exclude pixel centres exactly on the edge; 3: frames_png
 
 __all__ = [
     "API_VERSION",
@@ -47,6 +48,7 @@ __all__ = [
     "directional_frames",
     "distance_field",
     "dither",
+    "frames_png",
     "hash01",
     "hull_reach",
     "light_2d",
@@ -789,7 +791,54 @@ def sprite_yaml(
     """A `.sprite.yaml` file's text. `fields` are any other sprite fields (palette, pivot, outline,
     description, tags, status, lint, ...); `animations` maps a name to {frames: [...], fps, loop}."""
     head = _fields({"name": name, **{k: v for k, v in fields.items() if k != "size"}, "size": list(size)})
-    return "\n".join([*head, *_grids("frames", frames, size), *_animations(animations)]) + "\n"
+    grids = _grids("frames", frames, size) if frames or "frames_png" not in fields else []
+    return "\n".join([*head, *grids, *_animations(animations)]) + "\n"
+
+
+def frames_png(
+    path: str | Path, frames: Mapping[str, Frame], size: tuple[int, int], palette: Palette | None = None, columns: int = 8
+) -> dict[str, Any]:
+    """Write frames as an indexed PNG (`columns` frames per row) for a sprite's `frames_png:` and return that field's
+    value: `sprite_yaml(name, size, {}, frames_png=api.frames_png(...), ...)`. Big generated art stays small on
+    disk this way. `file` is the PNG's name, so keep the sprite file in the same folder. With `palette`, the PNG
+    shows the real colours in image viewers (PAGAN reads only the indexes and `keys`). Written only if it changed."""
+    path = Path(path)
+    width, height = size
+    grids = {name: _rows(frame) for name, frame in frames.items()}
+    for name, rows in grids.items():
+        if len(rows) != height or any(len(r) != width for r in rows):
+            raise ValueError(f"frames_png: {name} is {max(map(len, rows), default=0)}x{len(rows)}, expected {width}x{height}")
+    if not grids:
+        raise ValueError("frames_png needs at least one frame")
+    used = sorted(set().union(*(set(row) for rows in grids.values() for row in rows)) - {TRANSPARENT})
+    if len(used) > 255:
+        raise ValueError(f"frames_png: {len(used)} keys don't fit an indexed PNG (at most 255 besides '.')")
+    keys = [TRANSPARENT, *used]
+    lookup = np.zeros(max(ord(k) for k in keys) + 1, dtype=np.uint8)
+    for index, key in enumerate(keys):
+        lookup[ord(key)] = index
+    columns = max(1, min(columns, len(grids)))
+    rows_of_cells = -(-len(grids) // columns)
+    pixels = np.zeros((rows_of_cells * height, columns * width), dtype=np.uint8)
+    for i, rows in enumerate(grids.values()):
+        codes = np.frombuffer("".join(rows).encode("utf-32-le"), dtype="<u4").reshape(height, width)
+        x, y = (i % columns) * width, (i // columns) * height
+        pixels[y : y + height, x : x + width] = lookup[codes]
+    image = Image.fromarray(pixels, "P")
+    colours: list[int] = [0, 0, 0]
+    for index, key in enumerate(keys[1:], start=1):
+        if palette is not None and key in palette.colors:
+            colours += list(palette.colors[key].rgba[:3])
+        else:
+            colours += [index, index, index]
+    image.putpalette(colours)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG", optimize=False, compress_level=9, transparency=0)
+    data = buffer.getvalue()
+    if not (path.is_file() and path.read_bytes() == data):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    return {"file": path.name, "keys": dict(enumerate(keys)), "frames": list(grids)}
 
 
 def tileset_yaml(

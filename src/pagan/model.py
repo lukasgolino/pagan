@@ -40,6 +40,7 @@ from pagan.asset import (
     check_base_variant,
     with_palette_variants,
 )
+from pagan import jobs as pagan_jobs
 from pagan.findings import Finding, has_errors
 from pagan.palette import TRANSPARENT, Palette
 from pagan.progress import note
@@ -1329,19 +1330,19 @@ def _render_jobs(
 ) -> dict[str, Any]:
     """Render every job: rows of keys per frame (or Rendered objects with normals when `full`).
 
-    Big models render in several processes (`render_workers`); every frame is computed exactly as it would be
+    Big models render in several processes (`PAGAN_JOBS`); every frame is computed exactly as it would be
     in one process, so the output is identical either way.
     """
     scene = _Scene(setup.model, setup.materials, size, setup.origin, pivot, setup.camera, setup.light, full)
     jobs = setup.jobs
-    workers = render_workers()
+    workers = pagan_jobs.workers()
     if workers <= 1 or len(jobs) < _MIN_PARALLEL_JOBS:
         return _render_scene_jobs(scene, jobs)
     # ~4 chunks per worker; each carries the scene (small next to the rendering) and poses its own copy.
     size_of_chunk = max(2, -(-len(jobs) // (workers * 4)))
     chunks = [(scene, jobs[i : i + size_of_chunk]) for i in range(0, len(jobs), size_of_chunk)]
     try:
-        parts = list(_pool(workers).map(_render_chunk, chunks))
+        parts = list(pagan_jobs.pool(workers).map(_render_chunk, chunks))
     except (OSError, RuntimeError):  # no process support here (e.g. a sandbox): render in this process
         return _render_scene_jobs(scene, jobs)
     out: dict[str, Any] = {}
@@ -1351,30 +1352,6 @@ def _render_jobs(
 
 
 _MIN_PARALLEL_JOBS = 24  # fewer frames render faster in this process than they'd travel to others
-_POOL: Any = None  # one process pool for the whole run, started on first use
-
-
-def _pool(workers: int) -> Any:
-    global _POOL
-    import multiprocessing
-    from concurrent.futures import ProcessPoolExecutor
-
-    if _POOL is None or _POOL._max_workers != workers:
-        if _POOL is not None:
-            _POOL.shutdown()
-        context = multiprocessing.get_context("forkserver" if sys.platform.startswith("linux") else "spawn")
-        _POOL = ProcessPoolExecutor(workers, mp_context=context)
-    return _POOL
-
-
-def render_workers() -> int:
-    """Processes for model rendering: PAGAN_JOBS if set (1 = no extra processes), else the CPU count, up to 8."""
-    raw = os.environ.get("PAGAN_JOBS", "")
-    if raw.strip().isdigit() and int(raw) >= 1:
-        return int(raw)
-    return max(1, min(8, os.cpu_count() or 1))
-
-
 @dataclass(frozen=True)
 class _Scene:
     """Everything a render worker needs (sent once per process)."""
@@ -1699,8 +1676,8 @@ def _cached_render(project: Project, setup: _Setup, key: str) -> dict[str, Grid]
     """Render, or reuse an earlier render. The cache is `<project>/.pagan-cache/`, or PAGAN_CACHE_DIR (one cache
     for several checkouts of the same art, e.g. agents' git worktrees)."""
     name, (width, height) = setup.name, setup.size
-    shared = os.environ.get("PAGAN_CACHE_DIR", "").strip()
-    cache_dir = Path(shared).expanduser() if shared else project.root / ".pagan-cache"
+    shared = pagan_jobs.shared_cache_dir()
+    cache_dir = pagan_jobs.cache_dir(project)
     cache_file = cache_dir / "models" / f"{name}-{key}.json"
     if cache_file.is_file():
         try:

@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from pagan import __version__
+from pagan import __version__, jobs, spritecache
 from pagan.asset import Animation, Asset, Variant, font_glyphs, glyph_advance
 from pagan.exporters.godot import (
     AtlasTile,
@@ -34,8 +34,9 @@ from pagan.exporters.godot import (
 from pagan.findings import Finding
 from pagan.lint import LintResult, lint_paths
 from pagan.palette import TRANSPARENT
+from pagan.progress import note
 from pagan.project import Project
-from pagan.render import downsample, frame_rects, save_png, sheet_image, supersample_factor, tile_cells, trim_layout, trimmed_sheet
+from pagan.render import downsample, frame_rects, png_bytes, save_png, sheet_image, supersample_factor, tile_cells, trim_layout, trimmed_sheet
 
 MANIFEST = "manifest.json"
 
@@ -132,7 +133,10 @@ def build(project: Project) -> BuildResult:
     filter_mode = texture_filter(godot.filter, godot.mipmaps)
 
     def write_png(path: Path, image: Image.Image) -> None:
-        _write(path, _png_bytes(image, scratch), result)
+        write_png_data(path, _png_bytes(image, scratch))
+
+    def write_png_data(path: Path, data: bytes) -> None:
+        _write(path, data, result)
         produced.add(path.resolve())
         if godot_root is not None:
             imported = import_mipmaps(path, godot.mipmaps)
@@ -144,7 +148,9 @@ def build(project: Project) -> BuildResult:
         produced.add(path.resolve())
 
     meshes = "mesh" in exporters
-    for asset in sorted((a for a in lint.assets if not a.template), key=lambda a: a.name):
+    built = sorted((a for a in lint.assets if not a.template), key=lambda a: a.name)
+    prebuilt = _sheets_in_parallel(project, built)
+    for asset in built:
         if asset.mesh_only:
             entries[asset.name] = {
                 "kind": asset.kind,
@@ -175,13 +181,17 @@ def build(project: Project) -> BuildResult:
             normal_sheet = folder / f"{asset.name}.normal.png"
             write_png(normal_sheet, downsample(_normal_sheet(asset, frame_rects(asset)), factor))
 
+        cached_sheets = prebuilt.get(asset.name) or (spritecache.load_sheets(asset, project) if asset.cache_key else {})
+        new_sheets: dict[str, bytes] = {}
+
         def emit(variant: str | None) -> dict[str, Any]:
             stem = asset.name if variant is None else f"{asset.name}.{variant}"
             sheet = folder / f"{stem}.png"
-            if trimmed is not None:
-                write_png(sheet, trimmed_sheet(asset, trimmed, variant, factor))
-            else:
-                write_png(sheet, downsample(sheet_image(asset, variant), factor))
+            data = cached_sheets.get(stem)
+            if data is None:
+                data = sheet_png(asset, project, variant)
+                new_sheets[stem] = data
+            write_png_data(sheet, data)
             info: dict[str, Any] = {"sheet": _ref(sheet, out, godot_root)}
             if font is not None:
                 # The font gets its own copy of the sheet: an engine's font importer may claim its page image
@@ -285,6 +295,8 @@ def build(project: Project) -> BuildResult:
             info = emit(v) if project.config.variant_sheets else {}
             variants[v] = {**info, "swap": swap, "swap_exact": exact}
         entry["variants"] = variants
+        if asset.cache_key is not None and new_sheets:
+            spritecache.store_sheets(asset, project, new_sheets)
         if asset.variant_axes:
             entry["variant_axes"] = {
                 axis: {name: dict(zip(("swap", "swap_exact"), variant_swap(asset, v), strict=True)) for name, v in options.items()}
@@ -311,6 +323,54 @@ def build(project: Project) -> BuildResult:
             imported = stale.with_name(stale.name + ".import")  # Godot's sidecar for the removed file
             imported.unlink(missing_ok=True)
     return result
+
+
+def sheet_png(asset: Asset, project: Project, variant: str | None) -> bytes:
+    """An asset's built sheet (or one variant's) as PNG bytes: trimmed and packed, or the plain frame grid,
+    box-filtered down when supersampled."""
+    factor = supersample_factor(asset, project)
+    if asset.trim:
+        image = trimmed_sheet(asset, trim_layout(asset, factor), variant, factor)
+    else:
+        image = downsample(sheet_image(asset, variant), factor)
+    return png_bytes(image)
+
+
+def _sheet_stems(asset: Asset, project: Project) -> dict[str, str | None]:
+    """Output stem -> variant for every sheet `pagan build` writes for a 2D asset."""
+    stems: dict[str, str | None] = {asset.name: None}
+    if project.config.variant_sheets:
+        stems.update({f"{asset.name}.{v}": v for v in asset.variants})
+    return stems
+
+
+def _build_sheets(job: tuple[Asset, Project]) -> dict[str, bytes]:
+    """Every sheet of one asset (in a worker process), cached on the way."""
+    asset, project = job
+    sheets = {stem: sheet_png(asset, project, variant) for stem, variant in _sheet_stems(asset, project).items()}
+    spritecache.store_sheets(asset, project, sheets)
+    return sheets
+
+
+def _sheets_in_parallel(project: Project, assets: list[Asset]) -> dict[str, dict[str, bytes]]:
+    """Sheets of big (cached) sprites and tilesets that aren't cached yet are rendered and encoded in the process
+    pool (PAGAN_JOBS), when there are at least two such assets. Asset name -> stem -> PNG bytes."""
+    count = jobs.workers()
+    if count <= 1:
+        return {}
+    todo = [
+        a
+        for a in assets
+        if a.kind != "model" and a.cache_key is not None and not set(_sheet_stems(a, project)) <= set(spritecache.load_sheets(a, project))
+    ]
+    if len(todo) < 2:
+        return {}
+    note(f"rendering the sheets of {len(todo)} big sprites in {min(count, len(todo))} processes...")
+    try:
+        results = list(jobs.pool(count).map(_build_sheets, [(a, project) for a in todo]))
+    except (OSError, RuntimeError):  # no process support here (e.g. a sandbox): render in this process
+        return {}
+    return {a.name: sheets for a, sheets in zip(todo, results, strict=True)}
 
 
 def _texture_outputs(

@@ -19,6 +19,26 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+### Added
+
+- `frames_png:` on sprites: frames read from the cells of an indexed (palette-mode) PNG next to the file, with an
+  explicit `keys:` map from PNG palette index to palette key (or `"."`) and the cells' frame names in reading order.
+  For big generated art (title logos, backdrops): an 8 MB grid becomes a PNG of a few kB. PNG frames are linted and
+  built exactly like grid frames, and `frames:` may add more (e.g. derived from them). Grid sources are unchanged (#7).
+- `api.frames_png(path, frames, size, palette=None, columns=8)` writes such a PNG and returns the `frames_png:` value;
+  `api.sprite_yaml(..., frames={}, frames_png=...)` leaves out `frames:` (API_VERSION 3) (#7).
+- Per-sprite cache for big sprites and tilesets (a megapixel or more of source pixels): the parsed asset, its lint
+  findings and its built sheets are kept in `.pagan-cache/sprites/` (or `PAGAN_CACHE_DIR`), keyed by the source,
+  its PNG, every palette file, the project config and a hash of PAGAN's own code (plus an explicit cache version),
+  so a hit is always what a fresh run gives. Small sprites aren't cached (#7).
+- Two or more uncached big sprites/tilesets are parsed, linted and rendered in the `PAGAN_JOBS` process pool, as
+  models already were. Output is byte-identical (#7).
+
+### Changed
+
+- Faster lint and build of big 2D frames (W007, W001, W004 and sheet rendering use numpy); same findings, same
+  pixels. A 2 x 8-frame 1024x1024 project: cold build 26 s -> 6 s, unchanged rebuild 0.9 s (#7).
+
 ## [0.18.0] - 2026-10-28
 
 ### Added

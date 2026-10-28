@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,11 +30,32 @@ def color_table(asset: Asset, variant: str | None = None) -> dict[str, RGBA]:
     return table
 
 
+def grid_codes(grid: Grid) -> np.ndarray:
+    """A grid as a (height, width) array of code points (`ord` of each key), built in one go: frames can be
+    megapixels. Rows must all be as wide as the first (every parsed frame is)."""
+    width = len(grid[0]) if grid else 0
+    if any(len(row) != width for row in grid):
+        raise ValueError("grid rows differ in width")
+    return np.frombuffer("".join(grid).encode("utf-32-le"), dtype="<u4").reshape(len(grid), width)
+
+
 def grid_image(grid: Grid, table: dict[str, RGBA]) -> Image.Image:
     height, width = len(grid), len(grid[0]) if grid else 0
-    image = Image.new("RGBA", (width, height), CLEAR)
-    image.putdata([CLEAR if c == TRANSPARENT else table[c] for row in grid for c in row])
-    return image
+    if not height or not width:
+        return Image.new("RGBA", (width, height), CLEAR)
+    codes = grid_codes(grid)
+    top = int(codes.max())
+    lookup = np.zeros((top + 1, 4), dtype=np.uint8)  # code point -> RGBA
+    known = np.zeros(top + 1, dtype=bool)
+    for key, rgba in table.items():
+        if ord(key) <= top:
+            lookup[ord(key)], known[ord(key)] = rgba, True
+    if ord(TRANSPARENT) <= top:
+        lookup[ord(TRANSPARENT)], known[ord(TRANSPARENT)] = CLEAR, True
+    unknown = ~known[codes]
+    if unknown.any():
+        raise KeyError(chr(int(codes[unknown][0])))
+    return Image.fromarray(lookup[codes], "RGBA")
 
 
 def frame_image(asset: Asset, frame: str, variant: str | None = None) -> Image.Image:
@@ -245,6 +267,13 @@ def downsample(image: Image.Image, factor: int) -> Image.Image:
     out[..., 3] = (alpha * 2 + n) // (n * 2)
     out[out[..., 3] == 0] = 0
     return Image.fromarray(out.astype(np.uint8), "RGBA")
+
+
+def png_bytes(image: Image.Image) -> bytes:
+    """The PNG `save_png` would write, as bytes."""
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG", optimize=False, compress_level=9)
+    return buffer.getvalue()
 
 
 def save_png(image: Image.Image, path: Path) -> None:

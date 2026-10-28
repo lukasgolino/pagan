@@ -41,8 +41,9 @@ _COMMON_FIELDS = (
 WARNING_ID_RE = re.compile(r"^W\d{3}$")
 _SPRITE_FIELDS = (
     *_COMMON_FIELDS, "size", "pivot", "mirror", "outline", "outline_color", "shadow", "frames", "animations", "nine_slice",
-    "font", "points", "sheet_columns", "trim",
+    "font", "points", "sheet_columns", "trim", "frames_png",
 )  # fmt: skip
+_FRAMES_PNG_FIELDS = ("file", "keys", "frames")
 MAX_OUTLINE_WIDTH = 8  # per ring
 _FONT_FIELDS = ("glyphs", "cell", "baseline", "line_height", "advance", "spacing", "space", "advances", "offsets", "skip_blank")
 Margins = tuple[int, int, int, int]  # left, top, right, bottom
@@ -161,6 +162,11 @@ class Asset:
     # 3D models only: what mesh export needs (pagan.model.MeshSource); mesh_only = `directions: 0` (no sprites)
     mesh: Any = field(default=None, compare=False, repr=False)
     mesh_only: bool = False
+    # sprites: `frames_png:` (frames read from an indexed PNG): the PNG, and the frames that came from it
+    frames_png: Path | None = None
+    png_frames: frozenset[str] = frozenset()
+    # the sprite cache's key for this parse (pagan.spritecache); None = not cached
+    cache_key: str | None = field(default=None, compare=False, repr=False)
 
 
 def asset_kind(path: Path) -> Kind | None:
@@ -557,15 +563,20 @@ def _parse_frames(
     line: int | None,
     error: ErrorFn,
     pivot: tuple[int, int] | None = None,
+    preset: dict[str, Grid] | None = None,
+    preset_lines: dict[str, int | None] | None = None,
 ) -> tuple[dict[str, Grid], dict[str, int | None], dict[str, str]]:
     """Parse grid frames and derived frames. Returns (frames in source order, lines, derived_from).
 
-    `pivot` is what `about: pivot` means for derived frames (sprites); without one it's the centre."""
-    frames: dict[str, Grid] = {}
-    lines: dict[str, int | None] = {}
+    `pivot` is what `about: pivot` means for derived frames (sprites); without one it's the centre.
+    `preset` frames (from `frames_png:`) come first; `section` None = no `frames:` (only allowed with a preset)."""
+    frames: dict[str, Grid] = dict(preset or {})
+    lines: dict[str, int | None] = dict(preset_lines or {})
     derived_specs: dict[str, tuple[dict[str, Any], int | None]] = {}
-    order: list[str] = []
+    order: list[str] = list(lines)
 
+    if section is None and preset_lines is not None:
+        return frames, lines, {}
     if not isinstance(section, dict) or not section:
         error("E001", f"'{section_name}' must be a non-empty mapping of name -> pixel rows", line, section_name)
         return frames, lines, {}
@@ -587,6 +598,9 @@ def _parse_frames(
             continue
         if not FRAME_NAME_RE.match(name):
             error("E001", f"frame name {name!r} must be letters, digits, '_' or '-'", frame_line, where)
+            continue
+        if preset_lines is not None and name in preset_lines:
+            error("E001", f"frame {name!r} is also in frames_png.frames; frame names must be unique", frame_line, where)
             continue
         order.append(name)
         lines[name] = frame_line
@@ -713,6 +727,116 @@ def _parse_frames(
 
     ordered = {name: frames[name] for name in order if name in frames}
     return ordered, lines, derived_from
+
+
+def _parse_frames_png(
+    raw: Any,
+    path: Path | None,
+    project: Project,
+    *,
+    width: int,
+    height: int,
+    palette: Palette | None,
+    line: int | None,
+    error: ErrorFn,
+) -> tuple[dict[str, Grid], dict[str, int | None], Path | None]:
+    """`frames_png: { file, keys, frames }`: frames read from an indexed (palette-mode) PNG, for big generated art.
+    The PNG is a grid of width x height cells (as many columns as fit its width), read left to right, top to
+    bottom: cell i is frame `frames[i]`. `keys` maps every PNG palette index used to a palette key or "." (the
+    PNG's own colours are ignored). Cells after the named ones must be empty ("."). Returns (frames, lines, png)."""
+    from PIL import Image  # local import: only frames_png sources need it here
+
+    import numpy as np
+
+    frames: dict[str, Grid] = {}
+    lines: dict[str, int | None] = {}
+    where = "frames_png"
+    if not isinstance(raw, dict):
+        error("E001", "frames_png must be a mapping: { file: <name>.png, keys: { <index>: <key> }, frames: [<names>] }", line, where)
+        return frames, lines, None
+    for key in raw:
+        if key not in _FRAMES_PNG_FIELDS:
+            error("E001", f"unknown frames_png field {key!r}; allowed: {', '.join(_FRAMES_PNG_FIELDS)}", _line(raw, key) or line, f"{where}.{key}")
+    names_line = _line(raw, "frames") or line
+    names = raw.get("frames")
+    if not (isinstance(names, list) and names and all(isinstance(n, str) for n in names)):
+        error("E001", "frames_png.frames must be a non-empty list of frame names, one per PNG cell in reading order", names_line, f"{where}.frames")
+        names = []
+    seen: set[str] = set()
+    for name in names:
+        if not FRAME_NAME_RE.match(name):
+            error("E001", f"frame name {name!r} must be letters, digits, '_' or '-'", names_line, f"{where}.frames")
+        elif name in seen:
+            error("E001", f"frame {name!r} is listed twice", names_line, f"{where}.frames")
+        seen.add(name)
+    keys_line = _line(raw, "keys") or line
+    raw_keys = raw.get("keys")
+    lookup: dict[int, str] = {}
+    if not isinstance(raw_keys, dict) or not raw_keys:
+        error("E001", 'frames_png.keys must map PNG palette indexes to palette keys or ".", e.g. { 0: ".", 1: "a" }', keys_line, f"{where}.keys")
+    else:
+        known = set(palette.colors) if palette is not None else set()
+        for index, key in raw_keys.items():
+            if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index <= 255:
+                error("E001", f"frames_png.keys: {index!r} isn't a PNG palette index (0-255)", keys_line, f"{where}.keys")
+            elif not isinstance(key, str) or (key != TRANSPARENT and palette is not None and key not in known):
+                error("E002", f"frames_png.keys.{index}: {key!r} isn't '.' or a palette key", keys_line, f"{where}.keys.{index}")
+            else:
+                lookup[index] = key
+    file = raw.get("file")
+    file_line = _line(raw, "file") or line
+    if not isinstance(file, str) or not file.lower().endswith(".png"):
+        error("E001", "frames_png.file must be a .png file name, relative to this file", file_line, f"{where}.file")
+        return frames, lines, None
+    base = path.parent if path is not None else project.root
+    png = (base / file).resolve()
+    if not (png.is_relative_to(project.root.resolve()) or png.is_relative_to(base.resolve())):
+        error("E001", f"frames_png.file {file!r} is outside the project", file_line, f"{where}.file")
+        return frames, lines, None
+    try:
+        with Image.open(png) as image:
+            mode, (png_w, png_h) = image.mode, image.size
+            indexes = np.asarray(image) if mode == "P" else None
+    except (OSError, ValueError, Image.DecompressionBombError) as exc:
+        error("E001", f"can't read frames_png.file {file!r}: {exc}", file_line, f"{where}.file")
+        return frames, lines, png
+    if indexes is None:
+        error("E001", f"frames_png.file {file!r} is a {mode} image; it must be an indexed (palette, mode P) PNG", file_line, f"{where}.file")
+        return frames, lines, png
+    if png_w % width or png_h % height:
+        error("E003", f"frames_png.file is {png_w}x{png_h}, not a whole number of {width}x{height} frames", file_line, f"{where}.file")
+        return frames, lines, png
+    columns, cells = png_w // width, (png_w // width) * (png_h // height)
+    if len(names) > cells:
+        error("E003", f"frames_png.frames names {len(names)} frames, but the PNG has {cells} cells of {width}x{height}", names_line, f"{where}.frames")
+        return frames, lines, png
+    if len(lookup) != len(raw_keys or {}):
+        return frames, lines, png  # a key problem was reported
+    reported = 0
+    for index in np.unique(indexes).tolist():
+        if index not in lookup:
+            y, x = (int(v) for v in np.argwhere(indexes == index)[0])
+            if reported < MAX_PIXEL_FINDINGS:
+                error("E002", f"PNG palette index {index} (first at x {x}, y {y}) isn't in frames_png.keys", keys_line, f"{where}.keys")
+            reported += 1
+    if reported:
+        return frames, lines, png
+    codes = np.zeros(256, dtype="<u4")
+    for index, key in lookup.items():
+        codes[index] = ord(key)
+    pixels = codes[indexes]
+    clear = ord(TRANSPARENT)
+    for i in range(len(names), cells):
+        x, y = (i % columns) * width, (i // columns) * height
+        if (pixels[y : y + height, x : x + width] != clear).any():
+            error("E003", f"PNG cell {i + 1} (at x {x}, y {y}) has pixels but no name in frames_png.frames", names_line, f"{where}.frames")
+            return frames, lines, png
+    for i, name in enumerate(names):
+        x, y = (i % columns) * width, (i // columns) * height
+        cell = np.ascontiguousarray(pixels[y : y + height, x : x + width])
+        frames[name] = tuple(cell.view(f"<U{width}").ravel().tolist())
+        lines[name] = names_line
+    return frames, lines, png
 
 
 def _parse_variants(
@@ -1259,11 +1383,21 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             shape_values.get("tile_shape", "square"), shape_values.get("tile_layout", "stacked"), shape_values.get("tile_offset_axis", "horizontal")
         )
 
-    if frames_field not in data:
+    png_frames: dict[str, Grid] = {}
+    png_lines: dict[str, int | None] | None = None
+    frames_png: Path | None = None
+    if kind == "sprite" and "frames_png" in data:
+        authored = -(-width // 2) if mirror else width
+        png_frames, png_lines, frames_png = _parse_frames_png(
+            data["frames_png"], path, project, width=authored, height=height, palette=palette, line=_line(data, "frames_png"), error=error
+        )
+        if mirror:
+            png_frames = {name: _mirror(grid, width) for name, grid in png_frames.items()}
+    if frames_field not in data and png_lines is None:
         error("E001", f"missing required field {frames_field!r}", _line(data), frames_field)
         return None, findings
     base_frames, frame_lines, derived_from = _parse_frames(
-        data[frames_field],
+        data.get(frames_field),
         frames_field,
         width=width,
         height=height,
@@ -1272,6 +1406,8 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
         line=_line(data, frames_field),
         error=error,
         pivot=pivot if kind == "sprite" else None,
+        preset=png_frames,
+        preset_lines=png_lines,
     )
 
     animations: dict[str, Animation] = {}
@@ -1383,6 +1519,8 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
             points=points,
             font=font,
             textures=textures,
+            frames_png=frames_png,
+            png_frames=frozenset(png_frames),
             **meta,
         ),
         findings,
@@ -1747,6 +1885,13 @@ def load_asset(path: Path, project: Project) -> tuple[Asset | None, list[Finding
     kind = asset_kind(path)
     if kind is None:
         return None, [Finding("E000", f"not a PAGAN asset (expected {' or '.join(ASSET_SUFFIXES)})", path)]
+    from pagan import spritecache  # local import: the cache builds on this module
+
+    key = spritecache.source_key(path, project) if kind != "model" else None
+    if key is not None:
+        hit = spritecache.load(path, project, key)
+        if hit is not None:
+            return hit
     try:
         data = load_yaml(path)
     except YamlError as exc:
@@ -1755,7 +1900,10 @@ def load_asset(path: Path, project: Project) -> tuple[Asset | None, list[Finding
         from pagan.model import parse_model  # local import: model builds on this module
 
         return parse_model(data, path, project, path.read_text(encoding="utf-8"))
-    return parse_asset(data, path, project, kind)
+    asset, findings = parse_asset(data, path, project, kind)
+    if key is not None and asset is not None:
+        asset = spritecache.store(path, project, key, asset, findings)
+    return asset, findings
 
 
 def load_asset_or_raise(path: Path, project: Project) -> Asset:

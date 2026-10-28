@@ -117,6 +117,23 @@ after the written ones). Derived frames apply flip, then scale/rotate (nearest n
 unless `about` says otherwise), then shift; E010 if opaque pixels would leave the canvas. Leave a 1px transparent border with `outline: auto`. Findings give `row`/`col`
 1-based, counted in the grid as written (for `mirror: horizontal`, in the authored left half).
 
+**Big generated art as an indexed PNG** (`frames_png:`, sprites): instead of (or before) `frames:`, frames come from
+the cells of an indexed (palette-mode) PNG next to the file, so a megapixel sprite isn't megabytes of YAML:
+
+```yaml
+frames_png:
+  file: logo.frames.png       # relative to this file; must be an indexed (mode P) PNG inside the project
+  keys: { 0: ".", 1: "a", 2: "b" }   # every PNG palette index used -> a palette key or "." (PNG colours are ignored)
+  frames: [logo_0, logo_1, logo_2]   # cell names in reading order; cells are `size` (left half with mirror)
+frames:                       # optional: more frames after the PNG's, e.g. derived from them
+  logo_3: { from: logo_2, shift: [0, 1] }
+```
+
+The PNG is a grid of frame-sized cells (as many columns as fit its width), read left to right, top to bottom;
+unnamed cells after the last name must be empty. PNG frames are linted, outlined and built exactly like grid
+frames (findings name the frame and its row/col in the cell, on the `frames_png` line). Write one from a
+generator with `api.frames_png(...)`. Text grids stay the default: use a PNG only for generated art too big to read.
+
 **Intro, then a loop** (`loop_from: N`): frames before index N play once, then frames N.. loop. Engines such as
 Godot loop a whole animation only, so the build exports two: `<name>` = the intro (frames 0..N-1, loop false) and
 `<name>_loop` = the rest (loop true), each with its share of `durations`. The manifest's `<name>` entry carries
@@ -470,6 +487,10 @@ on `from pagan import api` instead of copying PAGAN's maths; it's versioned with
   usually via `rotate_points(points, angle, about)` (a shape drawn facing east; counter-clockwise on screen).
 - Files (numpy numbers are fine in sizes and fields): `sprite_yaml(name, size, frames, animations, **fields)`, `tileset_yaml(...)`, `write(path, text)`
   (writes only on change), `load(path)` -> parsed asset, `open_project(path)`, `palette(name, project)`.
+- Big generated sprites: `spec = api.frames_png("sprites/logo.frames.png", frames, size, palette=None, columns=8)`
+  writes the frames as an indexed PNG (only on change) and returns the `frames_png:` value; then
+  `sprite_yaml("logo", size, {}, animations, frames_png=spec)` (keep the sprite file next to the PNG).
+  `palette` only makes the PNG show real colours in image viewers.
 
 ## `pagan.toml`
 
@@ -528,6 +549,10 @@ Slow steps (a model render that isn't cached yet, Godot) print `pagan: ...` prog
 several processes (`PAGAN_JOBS=N`, default: the CPU count up to 8; `1` = one process); output is identical.
 Renders are cached in `<project>/.pagan-cache/`; `PAGAN_CACHE_DIR=/path` shares one cache between several
 checkouts of the same art (e.g. agents' git worktrees), so a fresh checkout doesn't re-render every model.
+Big sprites and tilesets (a megapixel or more of source pixels) are cached there too: the parsed frames, their
+lint findings and built sheets, keyed by the file, its PNG, every palette, pagan.toml and PAGAN's own code, so a
+cache hit is always what a fresh run gives. Two or more uncached big ones are parsed, linted and rendered in
+parallel (`PAGAN_JOBS`); output is identical.
 
 | Command | Purpose |
 |---|---|
