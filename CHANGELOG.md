@@ -19,6 +19,8 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-28
+
 ### Added
 
 - `frames_png:` on sprites: frames read from the cells of an indexed (palette-mode) PNG next to the file, with an
@@ -540,7 +542,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/lukasgolino/pagan/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/lukasgolino/pagan/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/lukasgolino/pagan/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/lukasgolino/pagan/compare/v0.15.0...v0.16.0
