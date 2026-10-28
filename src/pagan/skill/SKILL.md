@@ -144,6 +144,8 @@ splash; model frames up to 1024). Small means less detail; that's the deal, so s
   polygon ships with rims):
   write a generator script on `pagan.api` (reference.md) - never copy PAGAN's geometry or lint rules into
   your own code; they'd drift. Keep the script next to the art and regenerate rather than hand-edit.
+  Generated art of a megapixel or more (title logos, backdrops): write the frames with `api.frames_png`
+  (an indexed PNG + `frames_png:`) instead of text grids, so the source stays small.
 
 **The loop** (cap at ~4 rounds, then show the owner what you have):
 1. Scaffold: `pagan new sprite|model|tiles <name> --size WxH --description "..."` (description = what it

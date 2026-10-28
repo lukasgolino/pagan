@@ -7,11 +7,13 @@ from pathlib import Path
 
 import numpy as np
 
-from pagan.asset import ASSET_SUFFIXES, MAX_SHEET_SIDE, Asset, Grid, load_asset
+from pagan import jobs, spritecache
+from pagan.asset import ASSET_SUFFIXES, MAX_SHEET_SIDE, Asset, Grid, asset_kind, load_asset
 from pagan.findings import Finding, PaganError
 from pagan.palette import PALETTE_SUFFIX, TRANSPARENT, load_palette_file
+from pagan.progress import note
 from pagan.project import Project
-from pagan.render import frame_rects, trim_layout
+from pagan.render import frame_rects, grid_codes, trim_layout
 from pagan.timeline import TIMELINE_SUFFIX, AssetCache, load_timeline
 
 WARNING_RULES = {
@@ -69,6 +71,7 @@ def lint_paths(project: Project, paths: list[Path] | None = None, scenes: bool =
     assets: list[Asset] = []
     parsed: dict[Path, Asset | None] = {}
     timelines: list[Path] = []
+    prepared = _prepare_in_parallel(project, files)
     for path in files:
         if path.name.endswith(TIMELINE_SUFFIX):
             timelines.append(path)
@@ -79,7 +82,11 @@ def lint_paths(project: Project, paths: list[Path] | None = None, scenes: bool =
             except PaganError as exc:
                 findings.extend(exc.findings)
             continue
-        asset, asset_findings = load_asset(path, project)
+        if path in prepared:
+            asset, asset_findings, own_findings = prepared[path]
+        else:
+            asset, asset_findings = load_asset(path, project)
+            own_findings = asset_lint(asset, project) if asset is not None else []
         # A broken palette file that is itself being linted is reported once, from the palette.
         kept = [f for f in asset_findings if f.path is None or f.path.resolve() not in linted or f.path == path]
         if asset is not None:  # warnings raised while parsing (W008, W009) obey the asset's `lint: disable` too
@@ -90,8 +97,7 @@ def lint_paths(project: Project, paths: list[Path] | None = None, scenes: bool =
         parsed[path.resolve()] = asset
         if asset is not None:
             assets.append(asset)
-            findings.extend(lint_asset(asset, project))
-            findings.extend(_check_supersample(asset, project))
+            findings.extend(own_findings)
     by_name: dict[str, list[Asset]] = {}
     for asset in assets:
         by_name.setdefault(asset.name, []).append(asset)
@@ -116,6 +122,55 @@ def lint_paths(project: Project, paths: list[Path] | None = None, scenes: bool =
     disabled = set(project.config.lint.disable)
     findings = [f for f in findings if f.rule not in disabled]
     return LintResult(files=files, findings=_dedupe(findings), assets=assets)
+
+
+def asset_lint(asset: Asset, project: Project) -> list[Finding]:
+    """An asset's own lint findings (style warnings + supersample checks); cached with big sprites."""
+    if asset.cache_key is not None:
+        cached = spritecache.load_lint(asset, project)
+        if cached is not None:
+            return cached
+    found = [*lint_asset(asset, project), *_check_supersample(asset, project)]
+    if asset.cache_key is not None:
+        spritecache.store_lint(asset, project, found)
+    return found
+
+
+Prepared = tuple[Asset | None, list[Finding], list[Finding]]  # asset, parse findings, its own lint findings
+
+
+def _prepare_one(job: tuple[Path, Project]) -> Prepared:
+    """Parse and lint one asset (in a worker process); big ones are cached on the way."""
+    path, project = job
+    asset, findings = load_asset(path, project)
+    return asset, findings, asset_lint(asset, project) if asset is not None else []
+
+
+def _prepare_in_parallel(project: Project, files: list[Path]) -> dict[Path, Prepared]:
+    """Big sprites and tilesets that aren't cached yet are parsed and linted in the process pool (PAGAN_JOBS),
+    when there are at least two. Each is done exactly as in this process, so the results are the same."""
+    count = jobs.workers()
+    if count <= 1:
+        return {}
+    candidates: list[Path] = []
+    for path in files:
+        if asset_kind(path) not in ("sprite", "tileset"):
+            continue
+        try:
+            big = path.stat().st_size >= spritecache.CACHE_MIN_PIXELS or b"frames_png" in path.read_bytes()
+        except OSError:
+            continue
+        key = spritecache.source_key(path, project) if big else None
+        if key is not None and not spritecache.has(path, project, key):
+            candidates.append(path)
+    if len(candidates) < 2:
+        return {}
+    note(f"parsing and linting {len(candidates)} big sprites in {min(count, len(candidates))} processes...")
+    try:
+        results = list(jobs.pool(count).map(_prepare_one, [(path, project) for path in candidates]))
+    except (OSError, RuntimeError):  # no process support here (e.g. a sandbox): do them in this process
+        return {}
+    return dict(zip(candidates, results, strict=True))
 
 
 def _check_supersample(asset: Asset, project: Project) -> list[Finding]:
@@ -155,7 +210,7 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
 
     def warn(rule: str, message: str, frame: str | None = None, where: str | None = None, row: int | None = None) -> None:
         line = asset.frame_lines.get(frame) if frame is not None else None
-        if line is not None and row is not None:
+        if line is not None and row is not None and frame not in asset.png_frames:
             line += 1 + row  # grids are block scalars starting on the line after the frame name
         finding = Finding(rule, message, asset.path, line, where or (f"{section}.{frame}" if frame else None))
         found.append((finding, (frame,) if frame else ()))
@@ -169,7 +224,7 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
     for name, grid in asset.base_frames.items():
         if name in asset.derived_from:
             continue  # derived frames repeat their source's pixels; report problems once
-        if all(c == TRANSPARENT for row in grid for c in row):
+        if not any(row.strip(TRANSPARENT) for row in grid):
             warn("W004", "frame is fully transparent", name)
             continue
         if asset.kind == "model":
@@ -316,8 +371,8 @@ def frame_change(a: Grid, b: Grid, max_shift: int = 2) -> tuple[float, tuple[int
 
     Counted over pixels opaque in either frame; a pure 1px bob therefore scores ~0.
     """
-    ga = np.array([[ord(c) for c in row] for row in a], dtype=np.int32)
-    gb = np.array([[ord(c) for c in row] for row in b], dtype=np.int32)
+    ga = grid_codes(a).astype(np.int32)
+    gb = grid_codes(b).astype(np.int32)
     clear = ord(TRANSPARENT)
     if not ((ga != clear).any() or (gb != clear).any()):
         return 0.0, (0, 0)
@@ -348,7 +403,7 @@ def _orphans(grid: Grid) -> list[tuple[int, int]]:
     are megapixels)."""
     if not grid:
         return []
-    solid = np.array([[c != TRANSPARENT for c in row] for row in grid], dtype=bool)
+    solid = grid_codes(grid) != ord(TRANSPARENT)
     padded = np.pad(solid, 1)
     height, width = solid.shape
     neighbours = np.zeros_like(solid)
@@ -360,18 +415,20 @@ def _orphans(grid: Grid) -> list[tuple[int, int]]:
 
 
 def _bbox(grid: Grid) -> tuple[int, int, int, int] | None:
-    points = [(x, y) for y, row in enumerate(grid) for x, c in enumerate(row) if c != TRANSPARENT]
-    if not points:
+    if not grid or not grid[0]:
         return None
-    xs, ys = [p[0] for p in points], [p[1] for p in points]
-    return (min(xs), min(ys), max(xs), max(ys))
+    solid = grid_codes(grid) != ord(TRANSPARENT)
+    if not solid.any():
+        return None
+    ys, xs = np.nonzero(solid)
+    return (int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()))
 
 
 def _ramps_used(asset: Asset) -> list[str]:
     """Smallest set of ramps (greedy) covering the asset's colors; colors in no ramp are ignored. A model's
     flat one-key materials (LEDs, screens: `{ keys: ["a"] }`) aren't shading ramps, so their keys don't count
     unless a shaded material uses them too."""
-    used = {c for grid in asset.base_frames.values() for row in grid for c in row if c != TRANSPARENT}
+    used = set().union(*(set(row) for grid in asset.base_frames.values() for row in grid)) - {TRANSPARENT}
     if asset.mesh is not None:
         materials = asset.mesh.materials.values()
         shaded = {k for m in materials if len(set(m.keys)) > 1 for k in m.keys}

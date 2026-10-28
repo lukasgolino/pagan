@@ -86,7 +86,7 @@ def test_ellipse_has_no_nubs() -> None:
     rows = c.rows()
     assert rows[0] == "." * 32 and rows[11] == "." * 32  # the 1px nubs at the extremes are gone
     assert all(r[0] == "." and r[31] == "." for r in rows)
-    assert not c.orphans() and api.API_VERSION == 2
+    assert not c.orphans() and api.API_VERSION >= 2
 
 
 # --- S3 / S10: supersampled output -------------------------------------------------------------

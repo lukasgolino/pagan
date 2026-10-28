@@ -46,7 +46,8 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `settings.py` registry of every pagan.toml setting (default, meaning, what it refreshes) + safe `pagan config set` edits;
   - `api.py` stable Python API for generator scripts (drawing, shading, corner sets, exact hull/sail geometry, YAML writers);
   - `mcp_server.py` `pagan mcp`: MCP tools/resources/prompts over the CLI handlers (stdout captured, cwd pinned, under a lock);
-  - `progress.py` stderr progress lines for slow steps (CLI only);
+  - `progress.py` stderr progress lines for slow steps (CLI only); `jobs.py` the shared process pool (`PAGAN_JOBS`) and cache folder;
+  - `spritecache.py` on-disk cache of big 2D sprites/tilesets (parsed asset, lint findings, built sheets);
   - `swatch.py` palette swatch images; `templates/` files copied by `pagan init` (STYLE.md for pixel art, STYLE_flat.md for flat art).
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
@@ -215,3 +216,11 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   AtlasTexture region would mean the whole atlas). Fonts / nine_slice can't be trimmed; tilesets and models never are.
 - 2026-10-27: 3D freeze lifted for the `ring` primitive only (#35): a flat open annulus (`center`/`centre`, `outer`,
   `inner`, `height`, `axis`); no `torus`, no other new 3D features. MCP `fit` takes `write: true` (now a writing tool).
+- 2026-10-28: #7 (R36): big sprites. Indexed-PNG frame sources (`frames_png: { file, keys, frames }`, sprites only):
+  mode P only, an explicit index -> key map (PNG colours ignored), frame-sized cells in reading order, unnamed
+  trailing cells must be empty; no RLE. A per-sprite cache for assets of >= 1 MP source pixels (smaller ones parse
+  faster than a cache file loads) keyed by the source bytes + path, every palette file, `repr(config)`, and a sha256
+  of every PAGAN module + CACHE_VERSION + Python/Pillow/numpy/PyYAML/zlib versions, never the package version alone;
+  extra files a source reads (the PNG) are hashed into the entry and checked on every hit. Two or more uncached big
+  assets go to the `PAGAN_JOBS` pool (now in `jobs.py`, shared with models), which computes exactly what this process
+  would. Pickle is used for entries (local cache only; a key mismatch or unreadable entry just recomputes).
