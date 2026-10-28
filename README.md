@@ -16,6 +16,11 @@ frames:
 > models rendered from 8 headings or exported as real meshes (glTF) for 3D games, previews, lint, import, and
 > builds into Godot 4. See [CHANGELOG.md](CHANGELOG.md) and the [issues](https://github.com/lukasgolino/pagan/issues).
 
+**Docs:** [install](docs/install.md), a [tutorial](docs/tutorial.md), and references generated from the code:
+[every notation field](docs/reference/notation.md), [`pagan.toml` settings](docs/reference/settings.md) and
+[lint rules](docs/reference/lint-rules.md). The full notation with examples is the skill's
+[reference](src/pagan/skill/reference.md).
+
 ## Install (development)
 
 Requires Python 3.11+.

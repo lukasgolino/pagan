@@ -33,6 +33,9 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
   so a hit is always what a fresh run gives. Small sprites aren't cached (#7).
 - Two or more uncached big sprites/tilesets are parsed, linted and rendered in the `PAGAN_JOBS` process pool, as
   models already were. Output is byte-identical (#7).
+- `docs/`: install and tutorial pages, and reference pages generated from the code's registries (every notation
+  field, `pagan.toml` setting and lint rule). `python -m pagan.docs` regenerates them; a test and a CI step fail when
+  they drift from the code. Error rules now have a registry, `pagan.findings.ERROR_RULES` (#13).
 
 ### Changed
 
