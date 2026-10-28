@@ -5,7 +5,7 @@ every machine building the art gets the same pixels:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install "git+https://github.com/lukasgolino/pagan@v0.18.0"
+pip install "git+https://github.com/lukasgolino/pagan@v0.19.0"
 pagan --version
 ```
 
@@ -14,7 +14,7 @@ Tags and what changed in each: [CHANGELOG.md](../CHANGELOG.md). A game project s
 
 Optional extras:
 
-- MCP server for any agent: `pip install "pagan[mcp] @ git+https://github.com/lukasgolino/pagan@v0.18.0"`, then
+- MCP server for any agent: `pip install "pagan[mcp] @ git+https://github.com/lukasgolino/pagan@v0.19.0"`, then
   `pagan mcp --project <art folder>` (see the [README](../README.md#using-pagan-from-any-agent-mcp)).
 - Claude skill: `pagan skill install` in the game repo copies it to `.claude/skills/pagan/`.
 - Godot checks (`pagan build --verify-godot`, `pagan preview --engine`): a Godot 4 binary, found via `GODOT=/path/to/godot`.
