@@ -256,7 +256,7 @@ meshes (`.glb`). Same model files, no edits; sprites still build too unless a mo
   keep the default step for pixel-art timing. Show/hide parts per pose for props that appear.
 - **Review in 3D, not just the headings:** `pagan preview <model> --orbit` (undersides! a flying camera sees
   them) and `--closeup <part>` for anything seen up close (faces, hit zones); `--engine` shows the real
-  shader in Godot when there's a display. Look at all of them before reporting.
+  shader in Godot (offscreen; needs Xvfb). Look at all of them before reporting.
 - **Triangle budget:** read `triangles` in `pagan build --json`'s manifest. Big flat areas of one material
   merge into few triangles; noise (scattered single voxels, dithering, many materials) multiplies them.
   Rough budgets unless the owner says otherwise: a prop < 2k, a character < 5k, a big structure < 30k.

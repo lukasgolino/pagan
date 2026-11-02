@@ -380,7 +380,7 @@ For a free 3D camera (flying, below models, close up), models also build as real
   `part.reparent(world)` (keeps its global transform). Swap a variant: on every MeshInstance3D, replace each
   surface override material that is `godot_materials[i]` with the variant's `godot_materials[i]`.
 - **Review:** `pagan preview <model> --orbit` (every heading from -30 to 90 degrees elevation),
-  `--closeup <part>`, `--engine` (the built .tscn rendered by Godot; needs a display).
+  `--closeup <part>`, `--engine` (the built .tscn rendered by Godot; renders offscreen, needs Xvfb).
 
 ## Timeline preview - `scenes/<name>.timeline.yaml`
 
@@ -563,7 +563,7 @@ parallel (`PAGAN_JOBS`); output is identical.
 | `pagan new tiles <name> [--size] [--frames N]` | blank tileset |
 | `pagan new model <name> [--size 64x64] [--directions 8]` | starter model (`--directions 0`: a mesh-only model for 3D games) |
 | `pagan lint [paths] [--warnings-as-errors]` | errors + style warnings |
-| `pagan preview <model> --orbit \| --closeup PART \| --engine [--all-previews]` | 3D review: orbit.png (8 headings x elevations -30, 0, 30, 60, 90: undersides too), closeup_<PART>.png (one part filling the view, in place and alone), engine.png (the built .tscn through Godot: needs a display); only these unless `--all-previews` |
+| `pagan preview <model> --orbit \| --closeup PART \| --engine [--all-previews]` | 3D review: orbit.png (8 headings x elevations -30, 0, 30, 60, 90: undersides too), closeup_<PART>.png (one part filling the view, in place and alone), engine.png (the built .tscn through Godot: renders offscreen, needs Xvfb); only these unless `--all-previews` |
 | `pagan preview <asset...> [--scale N] [--grid] [--bg checker\|none\|#rrggbb] [--scene FILE] [--frame NAME] [--variants options\|all]` | sheet.png (labelled; over 4096 px on a side it's split into pages: sheet.png = overview (headings or frames outside animations, variants, as-built/tiling rows, an index of pages) + one page per animation, `sheet.<animation>.png` (models: per pose, every heading), each wrapped to 4096 px wide and continued in `sheet.<animation>.2.png`, `.3`, ... (the overview in `sheet.2.png`) when taller; the `--json` result lists them in `sheet_pages`), montage.png (frames/headings packed on the background, e.g. `--bg "#1d3b53"` sea), frames/ and GIFs, all at the printed scale, plus native/ (1x frames and sheet, as `pagan render`); variants.png + variants_1x.png (base and every variant side by side: the first frame with pixels, or `--frame`) when the asset has variants (with `variant_axes`: each axis option on its own, named `<axis>.<option>`; `--variants all` = every combination); `--scene` (tilesets): scene.png from a layout file (rows of tile names, `.` = empty) and scene_variants.png; supersampled assets also get an "as built" row and built_1x.png (what the game gets) |
 | `pagan preview scenes/<name>.timeline.yaml [--at 0.5,2.0] [--scale N] [--grid] [--bg ...]` | timeline: `previews/<name>.timeline/` frames/f0000.png..., timeline.gif, and with `--at` at.png (a contact sheet of those times) |
 | `pagan gallery` | every asset in one image |

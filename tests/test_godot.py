@@ -5,7 +5,6 @@ CI downloads Godot, so these run there on every push.
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,6 +14,7 @@ import pytest
 from PIL import Image
 
 from pagan.build import build
+from pagan import offscreen
 from pagan.exporters.godot import find_godot_binary, render_views, verify_with_godot
 from pagan.project import load_project
 
@@ -133,7 +133,7 @@ def test_mesh_scene_shows_every_mesh(copies: tuple[Path, Path]) -> None:
     assert run.returncode == 0 and "CHECK_OK 2 meshes" in output, output
 
 
-@pytest.mark.skipif(not os.environ.get("DISPLAY"), reason="rendering needs a display")
+@pytest.mark.skipif(not offscreen.available(), reason="rendering needs Xvfb (an offscreen display)")
 @pytest.mark.parametrize(("method", "tolerance"), [("forward_plus", 0), ("gl_compatibility", 0), ("mobile", 4)])
 def test_ramp_shader_keeps_palette_colours(copies: tuple[Path, Path], method: str, tolerance: int) -> None:
     """Every lit pixel is a colour of the model's ramp in every renderer (D5: Compatibility works in sRGB space).

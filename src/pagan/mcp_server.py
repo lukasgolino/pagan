@@ -424,7 +424,7 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
         the result. background: checker, none or #rrggbb. frame: the frame "variants" compares (default:
         the first one with pixels). 3D models (for 3D games): orbit = every heading from below (-30 degrees)
         to straight down; closeup = one `part` (id) filling the view; engine = the built mesh rendered by
-        Godot (needs a display). A sheet over 4096 px is split: `sheet` is then an overview and `sheet_pages`
+        Godot offscreen (needs Xvfb). A sheet over 4096 px is split: `sheet` is then an overview and `sheet_pages`
         lists one page per animation (sheet.<animation>.png); `page` (an animation, models: a pose) returns
         that page's image instead (its first page; a page over 4096 px continues in sheet.<animation>.2.png)."""
         _check_name(asset)

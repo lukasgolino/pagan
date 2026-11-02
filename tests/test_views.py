@@ -18,6 +18,7 @@ from PIL import Image
 from conftest import make_project
 from pagan.asset import Asset, load_asset
 from pagan.cli import main
+from pagan import offscreen
 from pagan.exporters.godot import find_godot_binary
 from pagan.project import Project
 from pagan.views import closeup_views, orbit_views
@@ -128,7 +129,7 @@ def test_mesh_only_models_preview_as_orbit_and_join_the_gallery(tmp_path: Path) 
     assert gallery["ok"] and gallery["assets"] == 2
 
 
-@pytest.mark.skipif(find_godot_binary() is None or not os.environ.get("DISPLAY"), reason="needs Godot and a display")
+@pytest.mark.skipif(find_godot_binary() is None or not offscreen.available(), reason="needs Godot and Xvfb (an offscreen display)")
 def test_engine_preview_renders_through_godot(tmp_path: Path) -> None:
     shutil.copytree(ROOT / "examples" / "demo", tmp_path / "demo", ignore=shutil.ignore_patterns("previews", ".pagan-cache"))
     shutil.copytree(ROOT / "examples" / "godot", tmp_path / "godot", ignore=shutil.ignore_patterns(".godot", "*.import"))

@@ -69,4 +69,4 @@ jobs:
       - name: "Virtual display and software GPU (rendering tests: Forward+, Mobile, Compatibility)"
         run: sudo apt-get update && sudo apt-get install -y xvfb mesa-vulkan-drivers libgl1-mesa-dri
       - name: Godot end-to-end tests
-        run: xvfb-run -a pytest tests/test_godot.py tests/test_views.py -v
+        run: env -u DISPLAY pytest tests/test_godot.py tests/test_views.py tests/test_offscreen.py -v  # PAGAN starts its own offscreen display
