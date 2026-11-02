@@ -19,6 +19,12 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+### Fixed
+
+- Parsing models and outlined sprites is several times faster when renders are cached (warm `pagan lint` on 40
+  16-heading models: 14.4 s -> 3.7 s): outlines, the frame-edge check and the used-keys scan no longer loop over
+  every pixel in Python. Output is unchanged (#72).
+
 ### Changed
 
 - `pagan preview --engine` (and the MCP `preview` tool's engine view) renders Godot on a private offscreen display

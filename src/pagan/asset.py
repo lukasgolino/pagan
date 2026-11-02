@@ -323,8 +323,48 @@ def opaque(grid: Grid, x: int, y: int) -> bool:
     return 0 <= y < len(grid) and 0 <= x < len(grid[y]) and grid[y][x] != TRANSPARENT
 
 
+def _chars(grid: Grid) -> Any:
+    """A rectangular grid as a (height, width) numpy array of one-character strings, or None if it's ragged or
+    empty (callers then take the plain Python path)."""
+    import numpy as np  # local import, like the wide outlines
+
+    width = len(grid[0]) if grid else 0
+    if not width or any(len(row) != width for row in grid):
+        return None
+    return np.array(grid, dtype=f"<U{width}").view("<U1").reshape(len(grid), width)
+
+
+def _rows(chars: Any) -> Grid:
+    """Back from `_chars`."""
+    height, width = chars.shape
+    return tuple(chars.reshape(-1).view(f"<U{width}").tolist()) if height else ()
+
+
+def _counted(chars: Any, ignore: frozenset[str]) -> Any:
+    """Opaque pixels that aren't keyed `ignore`."""
+    import numpy as np  # local import, like the wide outlines
+
+    counted = chars != TRANSPARENT
+    return counted & ~np.isin(chars, list(ignore)) if ignore else counted
+
+
 def _outline(grid: Grid, color: str, ignore: frozenset[str] = frozenset()) -> Grid:
     """Paint `color` on transparent pixels 4-adjacent to opaque ones (pixels keyed `ignore` don't count)."""
+    chars = _chars(grid)
+    if chars is None:
+        return _outline_slow(grid, color, ignore)
+    counted = _counted(chars, ignore)
+    near = counted.copy()
+    near[1:, :] |= counted[:-1, :]
+    near[:-1, :] |= counted[1:, :]
+    near[:, 1:] |= counted[:, :-1]
+    near[:, :-1] |= counted[:, 1:]
+    out = chars.copy()
+    out[near & (chars == TRANSPARENT)] = color
+    return _rows(out)
+
+
+def _outline_slow(grid: Grid, color: str, ignore: frozenset[str] = frozenset()) -> Grid:
     height = len(grid)
     width = len(grid[0]) if grid else 0
     rows = [list(row) for row in grid]
@@ -374,6 +414,20 @@ def _drop_shadow(grid: Grid, dx: int, dy: int, color: str) -> Grid:
 def _edge_pixel(grid: Grid, margin: int = 1, ignore: frozenset[str] = frozenset()) -> tuple[int, int] | None:
     """First opaque pixel closer than `margin` to the canvas edge (an outline that wide there would be clipped);
     pixels keyed `ignore` get no outline, so they don't count."""
+    import numpy as np  # local import, like the wide outlines
+
+    chars = _chars(grid)
+    if chars is None:
+        return _edge_pixel_slow(grid, margin, ignore)
+    height, width = chars.shape
+    border = np.zeros((height, width), dtype=bool)
+    if margin > 0:
+        border[:margin, :] = border[-margin:, :] = border[:, :margin] = border[:, -margin:] = True
+    hits = np.flatnonzero(border & _counted(chars, ignore))  # row-major: the first in reading order
+    return None if not len(hits) else (int(hits[0] % width), int(hits[0] // width))
+
+
+def _edge_pixel_slow(grid: Grid, margin: int = 1, ignore: frozenset[str] = frozenset()) -> tuple[int, int] | None:
     height = len(grid)
     for y, row in enumerate(grid):
         for x, char in enumerate(row):
@@ -1460,7 +1514,7 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
     variants: dict[str, Variant] = {}
     variant_axes: dict[str, dict[str, Variant]] = {}
     if palette is not None:
-        used = {c for grid in frames.values() for row in grid for c in row if c != TRANSPARENT}
+        used = set().union(*(set(row) for grid in frames.values() for row in grid)) - {TRANSPARENT}
         translucent = sorted(k for k in used if palette.colors[k].alpha < 255)
         if translucent and project.config.lint.require_opaque:
             error("E015", f"pagan.toml requires opaque colours (require_opaque), but this {kind} uses translucent key(s) {', '.join(translucent)}", _line(data, "palette") or _line(data), "palette")
