@@ -7,7 +7,7 @@ PAGAN generated before but no longer produces (recorded in the previous manifest
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -150,7 +150,7 @@ def build(project: Project) -> BuildResult:
     meshes = "mesh" in exporters
     built = sorted((a for a in lint.assets if not a.template), key=lambda a: a.name)
     prebuilt = _sheets_in_parallel(project, built)
-    for asset in built:
+    for asset in _one_at_a_time(built):
         if asset.mesh_only:
             entries[asset.name] = {
                 "kind": asset.kind,
@@ -323,6 +323,15 @@ def build(project: Project) -> BuildResult:
             imported = stale.with_name(stale.name + ".import")  # Godot's sidecar for the removed file
             imported.unlink(missing_ok=True)
     return result
+
+
+def _one_at_a_time(assets: list[Asset]) -> Iterator[Asset]:
+    """The assets in order; a big model's voxels are dropped once its outputs are written, so a project of big
+    models never holds them all at once."""
+    for asset in assets:
+        yield asset
+        if asset.mesh is not None:
+            asset.mesh.release()
 
 
 def sheet_png(asset: Asset, project: Project, variant: str | None) -> bytes:
