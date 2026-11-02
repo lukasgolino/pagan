@@ -19,6 +19,8 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-11-02
+
 ### Fixed
 
 - `pagan build` and `pagan lint` no longer hold every parsed asset (frames, voxel models of any size) until the end:
@@ -571,7 +573,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.19.1...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.19.2...HEAD
+[0.19.2]: https://github.com/lukasgolino/pagan/compare/v0.19.1...v0.19.2
 [0.19.1]: https://github.com/lukasgolino/pagan/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/lukasgolino/pagan/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/lukasgolino/pagan/compare/v0.17.0...v0.18.0
