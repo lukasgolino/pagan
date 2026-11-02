@@ -1559,7 +1559,7 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
     for frame_name, grid in base_frames.items():
         frames[frame_name] = _outline(grid, setup.outline_color) if setup.outline else grid
 
-    used = {c for grid in frames.values() for row in grid for c in row if c != TRANSPARENT}
+    used = set().union(*(set(row) for grid in frames.values() for row in grid)) - {TRANSPARENT}
     if "mesh" in project.config.export or setup.directions == 0:  # a mesh shows every step of its materials
         used |= {k for name in set(setup.model.voxels.values()) for k in setup.materials[name].keys}
     raw_variants, inherited = with_palette_variants(data.get("variants"), setup.palette, setup.meta["tags"], _line(data, "variants"), error)

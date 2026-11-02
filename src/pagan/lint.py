@@ -335,7 +335,7 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
 
     max_steps = project.config.lint.max_ramp_steps
     if max_steps and asset.kind != "model":  # models are checked per material when they're parsed
-        used = {c for grid in asset.base_frames.values() for row in grid for c in row if c != TRANSPARENT}
+        used = set().union(*(set(row) for grid in asset.base_frames.values() for row in grid)) - {TRANSPARENT}
         for ramp in ramps:
             steps = [k for k in asset.palette.ramps[ramp] if k in used]
             if len(steps) > max_steps:
