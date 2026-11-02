@@ -19,6 +19,16 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+### Fixed
+
+- `pagan build` no longer holds every voxel model in memory for the whole build: models of 250k voxels or more are
+  dropped after parsing and rebuilt from their source only when an exporter needs them (mesh, uncached normal maps),
+  then dropped again, so peak memory is about that of the largest model, not the sum. Output is unchanged (#64).
+- Normal maps (`export` "normals") are cached next to the model renders (`.pagan-cache/models/<name>-<key>.normals.npz`)
+  and come from the same render as the frames, instead of being rendered again on every build (#64).
+- Render workers (`PAGAN_JOBS`) exit when the build process dies (e.g. OOM-killed) instead of living on as orphans
+  that keep their memory, and are stopped after each big model, so their memory doesn't grow model after model (#64).
+
 ## [0.19.0] - 2026-10-28
 
 ### Added

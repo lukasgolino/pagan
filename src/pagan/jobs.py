@@ -14,6 +14,7 @@ from typing import Any
 from pagan.project import Project
 
 _POOL: Any = None  # one process pool for the whole run, started on first use
+_ATEXIT: list[bool] = []
 
 
 def workers() -> int:
@@ -31,12 +32,38 @@ def pool(count: int) -> Any:
     from concurrent.futures import ProcessPoolExecutor
 
     if _POOL is None or _POOL._max_workers != count:
-        if _POOL is not None:
-            _POOL.shutdown()
+        shutdown()
         context = multiprocessing.get_context("forkserver" if sys.platform.startswith("linux") else "spawn")
-        _POOL = ProcessPoolExecutor(count, mp_context=context)
-        atexit.register(_POOL.shutdown)  # before interpreter teardown, so the pool's threads exit cleanly
+        _POOL = ProcessPoolExecutor(count, mp_context=context, initializer=_watch_parent)
+        if not _ATEXIT:
+            atexit.register(shutdown)  # before interpreter teardown, so the pool's threads exit cleanly
+            _ATEXIT.append(True)
     return _POOL
+
+
+def shutdown() -> None:
+    """Stop the pool's workers (the next `pool()` starts fresh ones): gives back the memory they hold."""
+    global _POOL
+    if _POOL is not None:
+        _POOL.shutdown()
+        _POOL = None
+
+
+def _watch_parent() -> None:
+    """In each worker: exit as soon as the process that started it dies (e.g. OOM-killed), instead of
+    living on as an orphan that keeps its memory."""
+    import multiprocessing
+    import threading
+
+    parent = multiprocessing.parent_process()
+    if parent is None:
+        return
+
+    def wait() -> None:
+        parent.join()
+        os._exit(1)
+
+    threading.Thread(target=wait, daemon=True).start()
 
 
 def shared_cache_dir() -> Path | None:

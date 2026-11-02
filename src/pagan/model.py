@@ -13,7 +13,7 @@ import os
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import product
 from pathlib import Path
 from typing import Any
@@ -1246,7 +1246,6 @@ class MeshSource:
     """What mesh export needs from a parsed model (attached to its Asset as `mesh`)."""
 
     name: str
-    model: VoxelModel
     materials: dict[str, Material]
     origin: tuple[float, float, float]
     light: Light
@@ -1254,6 +1253,22 @@ class MeshSource:
     animations: dict[str, PoseAnimation]
     voxel_size: float | None
     hidden: frozenset[str]
+    _model: VoxelModel | None = field(default=None, repr=False, compare=False)
+    # Big models (BIG_MODEL_VOXELS) aren't kept: `model` rebuilds one from its source on first use and `release()`
+    # drops it again, so a project of big models never holds them all at once.
+    _load: Callable[[], VoxelModel] | None = field(default=None, repr=False, compare=False)
+
+    @property
+    def model(self) -> VoxelModel:
+        if self._model is None:
+            assert self._load is not None
+            self._model = self._load()
+        return self._model
+
+    def release(self) -> None:
+        """Drop a big model (rebuilt if needed again); small models are kept."""
+        if self._load is not None:
+            self._model = None
 
 
 def _mesh_findings(setup: _Setup, project: Project, path: Path | None) -> list[Finding]:
@@ -1328,13 +1343,15 @@ def _connected_pieces(cells: set[Cell]) -> int:
 def _render_jobs(
     setup: _Setup, size: tuple[int, int], pivot: tuple[int, int], full: bool = False
 ) -> dict[str, Any]:
-    """Render every job: rows of keys per frame (or Rendered objects with normals when `full`).
-
-    Big models render in several processes (`PAGAN_JOBS`); every frame is computed exactly as it would be
-    in one process, so the output is identical either way.
-    """
+    """Render every job: rows of keys per frame (or Rendered objects with normals when `full`)."""
     scene = _Scene(setup.model, setup.materials, size, setup.origin, pivot, setup.camera, setup.light, full)
-    jobs = setup.jobs
+    return _render_scene(scene, setup.jobs)
+
+
+def _render_scene(scene: _Scene, jobs: list[tuple[str, float, Pose]]) -> dict[str, Any]:
+    """Big models render in several processes (`PAGAN_JOBS`); every frame is computed exactly as it would be
+    in one process, so the output is identical either way. After a big model the workers are stopped, so the
+    memory they used for it goes back to the system instead of piling up model after model."""
     workers = pagan_jobs.workers()
     if workers <= 1 or len(jobs) < _MIN_PARALLEL_JOBS:
         return _render_scene_jobs(scene, jobs)
@@ -1345,6 +1362,9 @@ def _render_jobs(
         parts = list(pagan_jobs.pool(workers).map(_render_chunk, chunks))
     except (OSError, RuntimeError):  # no process support here (e.g. a sandbox): render in this process
         return _render_scene_jobs(scene, jobs)
+    finally:
+        if len(scene.model.voxels) >= BIG_MODEL_VOXELS:
+            pagan_jobs.shutdown()
     out: dict[str, Any] = {}
     for part in parts:
         out.update(part)
@@ -1352,6 +1372,7 @@ def _render_jobs(
 
 
 _MIN_PARALLEL_JOBS = 24  # fewer frames render faster in this process than they'd travel to others
+BIG_MODEL_VOXELS = 250_000  # models this big aren't kept in memory between uses; their render workers are stopped after
 @dataclass(frozen=True)
 class _Scene:
     """Everything a render worker needs (sent once per process)."""
@@ -1556,11 +1577,31 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
     if has_errors(findings):
         return None, findings
 
+    # Nothing below may hold `setup`: it holds the voxel model, and assets live for the whole build.
+    big = len(setup.model.voxels) >= BIG_MODEL_VOXELS
+    merged = data
+
+    def load_model() -> VoxelModel:
+        again = _setup(merged, path, project, lambda *_: None, [])
+        assert again is not None  # parsed without errors the first time
+        return again.model
+
+    mesh = MeshSource(
+        setup.name, setup.materials, setup.origin, light, setup.rig, setup.poses, setup.voxel_size, setup.hidden,
+        _model=None if big else setup.model, _load=load_model if big else None,
+    )  # fmt: skip
+    model_name, materials, origin, jobs = setup.name, setup.materials, setup.origin, setup.jobs
+
     def normal_maps() -> dict[str, Any]:
-        """Screen-space normals per frame (rendered on demand, e.g. for the "normals" exporter)."""
+        """Screen-space normals per frame (rendered on demand, e.g. for the "normals" exporter; cached)."""
+        rendered = _cached_normals(project, model_name, cache_key, size, jobs)
+        if rendered is None:
+            scene = _Scene(mesh.model, materials, size, origin, pivot, camera, light, True)
+            rendered = {f: r.normals for f, r in _render_scene(scene, jobs).items()}
+            _save_normals(project, model_name, cache_key, rendered)
         out: dict[str, Any] = {}
-        for frame_name, rendered in _render_jobs(setup, size, pivot, full=True).items():
-            normals = rendered.normals.copy()
+        for frame_name, raw in rendered.items():
+            normals = raw.copy()
             outlined = (normals == 0).all(axis=2) & np.array([[c != "." for c in row] for row in frames[frame_name]])
             normals[outlined] = (0.0, 0.0, 1.0)  # outline pixels face the viewer
             out[frame_name] = normals
@@ -1588,9 +1629,7 @@ def parse_model(data: Any, path: Path | None, project: Project, source_text: str
             lint_max_ramps=lint.max_ramps,
             template=template is True,
             variant_axes=variant_axes,
-            mesh=MeshSource(
-                setup.name, setup.model, setup.materials, setup.origin, light, setup.rig, setup.poses, setup.voxel_size, setup.hidden
-            ),
+            mesh=mesh,
             mesh_only=setup.directions == 0,
             **setup.meta,
         ),
@@ -1693,7 +1732,13 @@ def _cached_render(project: Project, setup: _Setup, key: str) -> dict[str, Grid]
             pass  # unreadable or malformed cache: render again
     started = time.monotonic()
     note(f"rendering {name}: {len(setup.jobs)} frames at {width}x{height} (cached afterwards)...")
-    frames: dict[str, Grid] = _render_jobs(setup, setup.size, setup.pivot)
+    if "normals" in project.config.export:  # the same render gives the normal maps: cache them too
+        rendered = _render_jobs(setup, setup.size, setup.pivot, full=True)
+        frames: dict[str, Grid] = {f: r.rows for f, r in rendered.items()}
+        _save_normals(project, name, key, {f: r.normals for f, r in rendered.items()})
+        del rendered
+    else:
+        frames = _render_jobs(setup, setup.size, setup.pivot)
     note(f"rendered {name} in {time.monotonic() - started:.1f}s")
     try:
         cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1709,3 +1754,40 @@ def _cached_render(project: Project, setup: _Setup, key: str) -> dict[str, Grid]
     except OSError:
         pass  # caching is an optimisation only
     return frames
+
+
+def _normals_file(project: Project, name: str, key: str) -> Path:
+    return pagan_jobs.cache_dir(project) / "models" / f"{name}-{key}.normals.npz"
+
+
+def _cached_normals(
+    project: Project, name: str, key: str, size: tuple[int, int], jobs: list[tuple[str, float, Pose]]
+) -> dict[str, np.ndarray] | None:
+    """Normal maps saved by an earlier build (same key as the render cache), or None."""
+    path = _normals_file(project, name, key)
+    if not path.is_file():
+        return None
+    try:
+        with np.load(path, allow_pickle=False) as saved:
+            names, normals = [str(n) for n in saved["names"]], saved["normals"]
+    except (OSError, ValueError, KeyError):
+        return None  # unreadable or malformed cache: render again
+    width, height = size
+    if names != [job[0] for job in jobs] or normals.shape != (len(jobs), height, width, 3):
+        return None
+    return {frame: normals[i] for i, frame in enumerate(names)}
+
+
+def _save_normals(project: Project, name: str, key: str, maps: dict[str, np.ndarray]) -> None:
+    path = _normals_file(project, name, key)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        others = [p for p in path.parent.glob(f"{name}-*.normals.npz") if p.name.rsplit("-", 1)[0] == name and p != path]
+        others.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for stale in others[_SHARED_CACHE_KEEP - 1 :] if pagan_jobs.shared_cache_dir() else others:
+            stale.unlink(missing_ok=True)
+        scratch = path.with_name(f".{path.name}.{os.getpid()}.tmp.npz")
+        np.savez_compressed(scratch, names=np.array(list(maps)), normals=np.stack(list(maps.values())))
+        os.replace(scratch, path)  # atomic: another process never reads half a file
+    except (OSError, ValueError):
+        pass  # caching is an optimisation only
