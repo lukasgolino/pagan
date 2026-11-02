@@ -7,7 +7,7 @@ PAGAN generated before but no longer produces (recorded in the previous manifest
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from pagan import __version__, jobs, spritecache
+from pagan import __version__, spritecache
 from pagan.asset import Animation, Asset, Variant, font_glyphs, glyph_advance
 from pagan.exporters.godot import (
     AtlasTile,
@@ -32,9 +32,8 @@ from pagan.exporters.godot import (
     tileset_tres,
 )
 from pagan.findings import Finding
-from pagan.lint import LintResult, lint_paths
+from pagan.lint import Linter, LintResult, lint_paths
 from pagan.palette import TRANSPARENT
-from pagan.progress import note
 from pagan.project import Project
 from pagan.render import downsample, frame_rects, png_bytes, save_png, sheet_image, supersample_factor, tile_cells, trim_layout, trimmed_sheet
 
@@ -49,6 +48,7 @@ class BuildResult:
     removed: list[Path] = field(default_factory=list)
     errors: list[Finding] = field(default_factory=list)
     manifest: Path | None = None
+    assets: int = 0  # assets parsed (templates included)
     godot_root: Path | None = None
 
 
@@ -99,19 +99,23 @@ def _png_bytes(image: Any, scratch: Path) -> bytes:
 
 
 def build(project: Project) -> BuildResult:
-    """Build the whole project (a partial build would leave an incomplete manifest)."""
-    lint = lint_paths(project, scenes=False)
-    result = BuildResult(lint=lint)
-    if lint.errors:
-        result.errors = lint.errors
-        return result
+    """Build the whole project (a partial build would leave an incomplete manifest).
 
+    Assets stream through: each is parsed, linted, written and let go before the next, so memory stays that of
+    the biggest asset, not the project. Once any asset has an error, the rest are only linted; the manifest is
+    written (and stale files removed) only when every asset built.
+    """
+    result = BuildResult(lint=LintResult(files=[], findings=[], assets=[]))
     out = project.output_dir
     exporters = set(project.config.export)
     godot_root: Path | None = None
     if "godot" in exporters:
         godot_root = find_godot_project(out)
         if godot_root is None:
+            result.lint = lint_paths(project, scenes=False, keep=False)
+            if result.lint.errors:  # the sources' errors first
+                result.errors = result.lint.errors
+                return result
             result.errors.append(
                 Finding(
                     "E000",
@@ -148,9 +152,8 @@ def build(project: Project) -> BuildResult:
         produced.add(path.resolve())
 
     meshes = "mesh" in exporters
-    built = sorted((a for a in lint.assets if not a.template), key=lambda a: a.name)
-    prebuilt = _sheets_in_parallel(project, built)
-    for asset in _one_at_a_time(built):
+
+    def build_asset(asset: Asset) -> None:
         if asset.mesh_only:
             entries[asset.name] = {
                 "kind": asset.kind,
@@ -163,7 +166,7 @@ def build(project: Project) -> BuildResult:
             }
             if meshes:
                 entries[asset.name]["mesh"] = _mesh_outputs(asset, project, out, godot_root, write_png, write_file)
-            continue
+            return
         folder = out / ("tiles" if asset.kind == "tileset" else "sprites")
         factor = supersample_factor(asset, project)
         size = (asset.size[0] // factor, asset.size[1] // factor)
@@ -181,7 +184,7 @@ def build(project: Project) -> BuildResult:
             normal_sheet = folder / f"{asset.name}.normal.png"
             write_png(normal_sheet, downsample(_normal_sheet(asset, frame_rects(asset)), factor))
 
-        cached_sheets = prebuilt.get(asset.name) or (spritecache.load_sheets(asset, project) if asset.cache_key else {})
+        cached_sheets = spritecache.load_sheets(asset, project) if asset.cache_key else {}
         new_sheets: dict[str, bytes] = {}
 
         def emit(variant: str | None) -> dict[str, Any]:
@@ -304,6 +307,16 @@ def build(project: Project) -> BuildResult:
             }
         entries[asset.name] = entry
 
+    linter = Linter(project, scenes=False, sheets=True)
+    for asset in linter.assets():
+        result.assets += 1
+        if not linter.failed and not asset.template:
+            build_asset(asset)
+        del asset  # not held while the next one is parsed
+    result.lint = linter.finish()
+    if result.lint.errors:
+        result.errors = result.lint.errors
+        return result
     if result.errors:
         return result
     manifest = {
@@ -325,15 +338,6 @@ def build(project: Project) -> BuildResult:
     return result
 
 
-def _one_at_a_time(assets: list[Asset]) -> Iterator[Asset]:
-    """The assets in order; a big model's voxels are dropped once its outputs are written, so a project of big
-    models never holds them all at once."""
-    for asset in assets:
-        yield asset
-        if asset.mesh is not None:
-            asset.mesh.release()
-
-
 def sheet_png(asset: Asset, project: Project, variant: str | None) -> bytes:
     """An asset's built sheet (or one variant's) as PNG bytes: trimmed and packed, or the plain frame grid,
     box-filtered down when supersampled."""
@@ -353,33 +357,12 @@ def _sheet_stems(asset: Asset, project: Project) -> dict[str, str | None]:
     return stems
 
 
-def _build_sheets(job: tuple[Asset, Project]) -> dict[str, bytes]:
-    """Every sheet of one asset (in a worker process), cached on the way."""
-    asset, project = job
-    sheets = {stem: sheet_png(asset, project, variant) for stem, variant in _sheet_stems(asset, project).items()}
+def cache_sheets(asset: Asset, project: Project) -> None:
+    """Render a big (cached) sprite's or tileset's sheets that aren't cached yet into its cache entry (in a worker
+    process, ahead of the build, which then reads them)."""
+    cached = spritecache.load_sheets(asset, project)
+    sheets = {stem: sheet_png(asset, project, v) for stem, v in _sheet_stems(asset, project).items() if stem not in cached}
     spritecache.store_sheets(asset, project, sheets)
-    return sheets
-
-
-def _sheets_in_parallel(project: Project, assets: list[Asset]) -> dict[str, dict[str, bytes]]:
-    """Sheets of big (cached) sprites and tilesets that aren't cached yet are rendered and encoded in the process
-    pool (PAGAN_JOBS), when there are at least two such assets. Asset name -> stem -> PNG bytes."""
-    count = jobs.workers()
-    if count <= 1:
-        return {}
-    todo = [
-        a
-        for a in assets
-        if a.kind != "model" and a.cache_key is not None and not set(_sheet_stems(a, project)) <= set(spritecache.load_sheets(a, project))
-    ]
-    if len(todo) < 2:
-        return {}
-    note(f"rendering the sheets of {len(todo)} big sprites in {min(count, len(todo))} processes...")
-    try:
-        results = list(jobs.pool(count).map(_build_sheets, [(a, project) for a in todo]))
-    except (OSError, RuntimeError):  # no process support here (e.g. a sandbox): render in this process
-        return {}
-    return {a.name: sheets for a, sheets in zip(todo, results, strict=True)}
 
 
 def _texture_outputs(

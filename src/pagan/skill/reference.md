@@ -546,7 +546,8 @@ require_opaque = false             # E015: no translucent "#rrggbbaa" colours in
 
 Slow steps (a model render that isn't cached yet, Godot) print `pagan: ...` progress lines on stderr
 (`--quiet` or `PAGAN_QUIET=1` turns them off; stdout and `--json` are unaffected). Models render in
-several processes (`PAGAN_JOBS=N`, default: the CPU count up to 8; `1` = one process); output is identical.
+several processes (`PAGAN_JOBS=N`, default: the CPU count up to 8, and at most one per GiB of available memory; `1` = one process);
+output is identical.
 Renders are cached in `<project>/.pagan-cache/`; `PAGAN_CACHE_DIR=/path` shares one cache between several
 checkouts of the same art (e.g. agents' git worktrees), so a fresh checkout doesn't re-render every model.
 Big sprites and tilesets (a megapixel or more of source pixels) are cached there too: the parsed frames, their

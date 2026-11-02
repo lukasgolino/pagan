@@ -19,6 +19,23 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+### Fixed
+
+- `pagan build` and `pagan lint` no longer hold every parsed asset (frames, voxel models of any size) until the end:
+  assets stream through, each parsed, linted, written and let go before the next, so memory stays about that of the
+  biggest asset however many the project has (#67). Big sprites parsed or rendered in parallel go through the sprite
+  cache instead of piling up in the main process. Output is unchanged.
+- `pagan fit` no longer suggests or writes a `size` over the 1024 px model frame limit (which the next `build` then
+  rejected): it fails with E001 and writes nothing (#67).
+- The default worker count (no `PAGAN_JOBS`) is also capped at one per GiB of available memory, so a few commands at
+  once (e.g. two `pagan fit`s) don't run a small machine out of memory (#67).
+
+### Changed
+
+- A `pagan build` that fails may already have written the outputs of assets before the first error (in file order:
+  models/, sprites/, tiles/); assets after it are only linted, and the manifest is still only written, and stale
+  files only removed, by a build without errors (#67).
+
 ## [0.19.1] - 2026-11-02
 
 ### Fixed

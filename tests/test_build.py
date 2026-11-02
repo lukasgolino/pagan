@@ -87,7 +87,25 @@ def test_build_fails_on_lint_errors(proj: Project) -> None:
     (proj.root / "sprites" / "bad.sprite.yaml").write_text("name: bad\nsize: [1, 1]\nframes:\n  a: |\n    z\n")
     result = build(proj)
     assert [f.rule for f in result.errors] == ["E002"]
-    assert not proj.output_dir.exists()
+    assert not (proj.output_dir / "manifest.json").exists()
+    assert not (proj.output_dir / "sprites" / "bad.png").exists()
+
+
+def test_build_stops_writing_at_the_first_error_but_lints_everything(proj: Project) -> None:
+    """Assets stream through the build: those before an error are written, none after it, and every file's
+    errors are reported; the manifest only comes with a clean build."""
+    bad = "name: {}\nsize: [1, 1]\nframes:\n  a: |\n    z\n"
+    (proj.root / "sprites" / "aaa.sprite.yaml").write_text(bad.format("aaa"))  # after models/crate, before sprites/bug
+    (proj.root / "tiles" / "zzz.tiles.yaml").write_text(bad.format("zzz"))
+    sheets = proj.output_dir / "sprites"
+    result = build(proj)
+    assert {f.path.name for f in result.errors if f.path} == {"aaa.sprite.yaml", "zzz.tiles.yaml"}
+    assert (sheets / "crate.png").exists() and not (sheets / "bug.png").exists()
+    assert not (proj.output_dir / "manifest.json").exists()
+    (proj.root / "sprites" / "aaa.sprite.yaml").unlink()
+    result = build(proj)
+    assert {f.path.name for f in result.errors if f.path} == {"zzz.tiles.yaml"}
+    assert (sheets / "bug.png").exists() and not (proj.output_dir / "manifest.json").exists()
 
 
 def test_godot_export_needs_a_godot_project(proj: Project) -> None:

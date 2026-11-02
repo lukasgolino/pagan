@@ -17,12 +17,32 @@ _POOL: Any = None  # one process pool for the whole run, started on first use
 _ATEXIT: list[bool] = []
 
 
+WORKER_MEMORY = 1 << 30  # bytes of available memory per default worker: a render worker can take several hundred MB
+
+
 def workers() -> int:
-    """Processes for slow work: PAGAN_JOBS if set (1 = no extra processes), else the CPU count, up to 8."""
+    """Processes for slow work: PAGAN_JOBS if set (1 = no extra processes), else the CPU count, up to 8 and up to
+    one per GiB of available memory (so a few PAGAN commands at once don't run a small machine out of memory)."""
     raw = os.environ.get("PAGAN_JOBS", "")
     if raw.strip().isdigit() and int(raw) >= 1:
         return int(raw)
-    return max(1, min(8, os.cpu_count() or 1))
+    count = min(8, os.cpu_count() or 1)
+    available = available_memory()
+    if available is not None:
+        count = min(count, available // WORKER_MEMORY)
+    return max(1, count)
+
+
+def available_memory() -> int | None:
+    """Memory available for new work in bytes (Linux: MemAvailable; None where unknown)."""
+    try:
+        with open("/proc/meminfo", encoding="ascii") as meminfo:
+            for line in meminfo:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
 
 
 def pool(count: int) -> Any:
