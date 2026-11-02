@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 
+from pagan import offscreen
 from pagan.asset import TILE_LAYOUTS, TILE_OFFSET_AXES, TILE_SHAPES, Animation, TileShape
 from pagan.voxel import Light
 from pagan.progress import note
@@ -356,8 +357,9 @@ def render_views(
 ) -> tuple[list[Path], str]:
     """Render a mesh scene through Godot's real renderer (ramp shader, shadows) from each (yaw, elevation) in
     degrees, with an orthographic camera fitted to `radius` metres, by the project's renderer or `rendering_method`
-    (forward_plus, mobile, gl_compatibility). Needs a display. Returns (PNGs, output); the PNGs live in a temp
-    folder until the next call, so copy or load them before calling again."""
+    (forward_plus, mobile, gl_compatibility). Godot renders on a private offscreen display (Xvfb + Mesa's CPU
+    renderers, see `pagan.offscreen`), never in a window. Returns (PNGs, output); the PNGs live in a temp folder
+    until the next call, so copy or load them before calling again."""
     global _VIEWS_DIR
     script = files("pagan").joinpath("templates", "godot_views.gd").read_text(encoding="utf-8")
     if _VIEWS_DIR is not None:
@@ -370,10 +372,14 @@ def render_views(
     try:
         subprocess.run([godot, "--headless", "--path", str(godot_root), "--import"], capture_output=True, text=True, timeout=timeout)
         method = ["--rendering-method", rendering_method] if rendering_method else []
-        run = subprocess.run(
-            [godot, *method, "--path", str(godot_root), "-s", str(script_path), "--", scene_res, str(scratch), str(size), f"{radius:g}", f"{centre_y:g}", *pairs],
-            capture_output=True, text=True, timeout=timeout,
-        )  # fmt: skip
+        with offscreen.display() as env:
+            if env is None:
+                return [], offscreen.MISSING
+            run = subprocess.run(
+                [godot, "--display-driver", "x11", *method, "--path", str(godot_root), "-s", str(script_path), "--",
+                 scene_res, str(scratch), str(size), f"{radius:g}", f"{centre_y:g}", *pairs],
+                capture_output=True, text=True, timeout=timeout, env=env,
+            )  # fmt: skip
     except (OSError, subprocess.TimeoutExpired) as exc:
         return [], f"couldn't run Godot: {exc}"
     output = (run.stdout + run.stderr).strip()

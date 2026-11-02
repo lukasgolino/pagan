@@ -19,6 +19,12 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+### Changed
+
+- `pagan preview --engine` (and the MCP `preview` tool's engine view) renders Godot on a private offscreen display
+  (Xvfb with Mesa's CPU renderers, threads capped, one run at a time), never in a window on the desktop; without
+  Xvfb it fails with a message saying what to install (#68).
+
 ## [0.19.2] - 2026-11-02
 
 ### Fixed

@@ -46,6 +46,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   - `settings.py` registry of every pagan.toml setting (default, meaning, what it refreshes) + safe `pagan config set` edits;
   - `api.py` stable Python API for generator scripts (drawing, shading, corner sets, exact hull/sail geometry, YAML writers);
   - `mcp_server.py` `pagan mcp`: MCP tools/resources/prompts over the CLI handlers (stdout captured, cwd pinned, under a lock);
+  - `offscreen.py` private Xvfb display (Mesa CPU renderers, one at a time) for Godot renders: never a desktop window;
   - `progress.py` stderr progress lines for slow steps (CLI only); `jobs.py` the shared process pool (`PAGAN_JOBS`) and cache folder;
   - `spritecache.py` on-disk cache of big 2D sprites/tilesets (parsed asset, lint findings, built sheets);
   - `docs.py` generates `docs/reference/*.md` from the registries (`--check` fails on drift);

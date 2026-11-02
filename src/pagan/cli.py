@@ -658,7 +658,7 @@ def _timeline_previews(
 
 def _engine_preview(asset: Asset, project: Project, options: PreviewOptions) -> tuple[Path | None, str]:
     """engine.png: the built .tscn rendered by Godot from 8 sides, above and below. Needs a build with "godot" and
-    "mesh" exported, a Godot binary and a display."""
+    "mesh" exported, a Godot binary and Xvfb (Godot renders offscreen, never in a window)."""
     from PIL import Image
 
     from pagan.exporters.godot import render_views
@@ -685,7 +685,7 @@ def _engine_preview(asset: Asset, project: Project, options: PreviewOptions) -> 
     views = [(270.0 - angle, elevation) for elevation, _ in rows_spec for _, angle in headings]  # camera yaw for each heading
     images, output = render_views(godot, godot_root, scene_res, radius, centre_y, views)
     if not images:
-        return None, "Godot couldn't render (it needs a display; headless servers can't): " + output[-500:]
+        return None, "Godot couldn't render: " + output[-500:]
     loaded = [Image.open(p).convert("RGBA") for p in images]
     rows = [
         (f"Godot, {label}", [View(name, loaded[r * len(headings) + i]) for i, (name, _) in enumerate(headings)])
@@ -1425,7 +1425,7 @@ def build_parser() -> argparse.ArgumentParser:
     preview.add_argument("--frame", metavar="NAME", help="the frame variants.png compares (default: the first with pixels)")
     preview.add_argument("--orbit", action="store_true", help="3D models: orbit.png, every heading from below (-30) to straight down (90)")
     preview.add_argument("--closeup", metavar="PART", action="append", help="3D models: closeup_<PART>.png, one part filling the view (repeatable)")
-    preview.add_argument("--engine", action="store_true", help="3D models: engine.png, the built mesh rendered by Godot (needs a display)")
+    preview.add_argument("--engine", action="store_true", help="3D models: engine.png, the built mesh rendered by Godot offscreen (needs Xvfb)")
     preview.add_argument("--all-previews", action="store_true", help="with --orbit/--closeup/--engine: also write the usual sprite previews")
     preview.add_argument(
         "--variants", choices=["options", "all"], default="options",
