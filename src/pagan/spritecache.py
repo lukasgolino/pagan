@@ -110,6 +110,11 @@ def has(path: Path, project: Project, key: str) -> bool:
     return (_entry_dir(project, path, key) / "asset.pickle").is_file()
 
 
+def has_sheets(path: Path, project: Project, key: str) -> bool:
+    """Whether built sheets are cached for this key (some of them, at least)."""
+    return (_entry_dir(project, path, key) / "sheets.pickle").is_file()
+
+
 def load(path: Path, project: Project, key: str) -> tuple[Asset, list[Finding]] | None:
     """A cached parse of `path`, if there is one and the files it read are unchanged."""
     entry = _read(_entry_dir(project, path, key) / "asset.pickle")

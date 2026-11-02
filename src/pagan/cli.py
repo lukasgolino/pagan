@@ -746,7 +746,7 @@ def cmd_lint(args: argparse.Namespace, out: Output) -> int:
     missing = [p for p in paths or [] if not p.exists()]
     if missing:
         raise _usage_error(f"no such file or directory: {', '.join(map(str, missing))}")
-    result = lint_paths(project, paths)
+    result = lint_paths(project, paths, keep=False)
     failed = bool(result.errors) or (args.warnings_as_errors and bool(result.warnings))
     summary = f"{len(result.files)} files: {len(result.errors)} errors, {len(result.warnings)} warnings"
     if result.warnings:
@@ -795,7 +795,7 @@ def cmd_build(args: argparse.Namespace, out: Output) -> int:
             print("build failed: fix the errors above (`pagan lint` shows warnings too)")
         return 1
     warnings = result.lint.warnings
-    out.say(f"built {len(result.lint.assets)} assets into {display_path(project.output_dir)}")
+    out.say(f"built {result.assets} assets into {display_path(project.output_dir)}")
     out.say(f"  {len(result.written)} files written, {len(result.unchanged)} unchanged, {len(result.removed)} stale removed")
     if warnings:
         out.say(f"  {len(warnings)} lint warnings: {_rule_counts(warnings)} (run `pagan lint` to see them)")
@@ -827,7 +827,7 @@ def cmd_build(args: argparse.Namespace, out: Output) -> int:
     out.result(
         {
             "output_dir": display_path(project.output_dir),
-            "assets": len(result.lint.assets),
+            "assets": result.assets,
             "written": [display_path(p) for p in result.written],
             "unchanged": len(result.unchanged),
             "removed": [display_path(p) for p in result.removed],
@@ -856,6 +856,20 @@ def cmd_fit(args: argparse.Namespace, out: Output) -> int:
         out.failure(findings)
         return 1
     (w, h), (px, py) = fit.size, fit.pivot
+    if max(w, h) > MAX_MODEL_SIZE:  # `size` would fail to parse (E001): don't suggest it, never write it
+        out.failure(
+            [
+                Finding(
+                    "E001",
+                    f"every heading and pose needs a {w}x{h} frame, over the {MAX_MODEL_SIZE} px limit of a model frame "
+                    f"(nothing written). Lower [camera] scale, use bigger voxels, or split the model into parts",
+                    path,
+                    None,
+                    "size",
+                )
+            ]
+        )
+        return 1
     out.say(f"{fit.name}: every heading and pose fits in")
     out.say(f"  size: [{w}, {h}]")
     out.say(f"  pivot: [{px}, {py}]")

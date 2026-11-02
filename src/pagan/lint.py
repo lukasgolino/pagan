@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -63,65 +64,90 @@ def source_files(project: Project, paths: list[Path] | None = None, scenes: bool
     return sorted(found)
 
 
-def lint_paths(project: Project, paths: list[Path] | None = None, scenes: bool = True) -> LintResult:
-    """Lint sources. `scenes=False` skips timeline files (`pagan build` and the gallery: they're previews only)."""
-    files = source_files(project, paths, scenes)
-    linted = {f.resolve() for f in files}
-    findings: list[Finding] = []
-    assets: list[Asset] = []
-    parsed: dict[Path, Asset | None] = {}
-    timelines: list[Path] = []
-    prepared = _prepare_in_parallel(project, files)
-    for path in files:
-        if path.name.endswith(TIMELINE_SUFFIX):
-            timelines.append(path)
-            continue
-        if path.name.endswith(PALETTE_SUFFIX):
-            try:
-                load_palette_file(path)
-            except PaganError as exc:
-                findings.extend(exc.findings)
-            continue
-        if path in prepared:
-            asset, asset_findings, own_findings = prepared[path]
-        else:
+def lint_paths(project: Project, paths: list[Path] | None = None, scenes: bool = True, keep: bool = True) -> LintResult:
+    """Lint sources. `scenes=False` skips timeline files (`pagan build` and the gallery: they're previews only).
+    `keep=False` lets each asset go once it's linted (`pagan lint`: memory stays that of one asset)."""
+    linter = Linter(project, paths, scenes)
+    assets = [asset for asset in linter.assets() if keep]
+    result = linter.finish()
+    result.assets = assets
+    return result
+
+
+class Linter:
+    """Lints sources one asset at a time. `assets()` yields each parsed asset once its own findings are in, so a
+    caller (`pagan build`) can use it and let it go before the next one is parsed: a project's assets are never
+    all in memory at once. `finish()` adds the checks across files (E012, timelines)."""
+
+    def __init__(self, project: Project, paths: list[Path] | None = None, scenes: bool = True, sheets: bool = False) -> None:
+        self.project = project
+        self.files = source_files(project, paths, scenes)
+        self.findings: list[Finding] = []
+        self.failed = False  # an error so far (including a second asset under a name already seen)
+        self._sheets = sheets  # warm the sheet cache of big sprites too (for `pagan build`)
+        self._names: dict[str, list[Path | None]] = {}
+        self._timelines = [f for f in self.files if f.name.endswith(TIMELINE_SUFFIX)]
+        self._parsed: dict[Path, Asset | None] = {}  # only kept for timelines, which show assets
+
+    def assets(self) -> Iterator[Asset]:
+        project, linted = self.project, {f.resolve() for f in self.files}
+        _prepare_in_parallel(project, self.files, self._sheets)
+        for path in self.files:
+            if path.name.endswith(TIMELINE_SUFFIX):
+                continue
+            if path.name.endswith(PALETTE_SUFFIX):
+                try:
+                    load_palette_file(path)
+                except PaganError as exc:
+                    self._add(exc.findings)
+                continue
             asset, asset_findings = load_asset(path, project)
-            own_findings = asset_lint(asset, project) if asset is not None else []
-        # A broken palette file that is itself being linted is reported once, from the palette.
-        kept = [f for f in asset_findings if f.path is None or f.path.resolve() not in linted or f.path == path]
-        if asset is not None:  # warnings raised while parsing (W008, W009) obey the asset's `lint: disable` too
-            kept = [f for f in kept if not (f.severity == "warning" and f.rule in asset.lint_disable)]
-        findings.extend(kept)
-        if asset is None and not any(f.severity == "error" for f in kept):
-            findings.append(Finding("E005", "this file's palette is invalid; run `pagan lint` on palettes/", path))
-        parsed[path.resolve()] = asset
-        if asset is not None:
-            assets.append(asset)
-            findings.extend(own_findings)
-    by_name: dict[str, list[Asset]] = {}
-    for asset in assets:
-        by_name.setdefault(asset.name, []).append(asset)
-    for name, group in by_name.items():
-        if len(group) < 2:
-            continue
-        for asset in group:
-            others = ", ".join(o.path.name if o.path else "another asset" for o in group if o is not asset)
-            findings.append(
-                Finding(
-                    "E012",
-                    f"asset name {name!r} is also used by {others}; names must be unique across sprites, "
-                    "tilesets and models (outputs would overwrite each other)",
-                    asset.path,
-                    None,
-                    "name",
+            # A broken palette file that is itself being linted is reported once, from the palette.
+            kept = [f for f in asset_findings if f.path is None or f.path.resolve() not in linted or f.path == path]
+            if asset is not None:  # warnings raised while parsing (W008, W009) obey the asset's `lint: disable` too
+                kept = [f for f in kept if not (f.severity == "warning" and f.rule in asset.lint_disable)]
+            self._add(kept)
+            if asset is None and not any(f.severity == "error" for f in kept):
+                self._add([Finding("E005", "this file's palette is invalid; run `pagan lint` on palettes/", path)])
+            if self._timelines:
+                self._parsed[path.resolve()] = asset
+            if asset is None:
+                continue
+            self._add(asset_lint(asset, project))
+            same_name = self._names.setdefault(asset.name, [])
+            same_name.append(asset.path)
+            self.failed |= len(same_name) > 1
+            yield asset
+            del asset  # not held while the next one is parsed
+
+    def finish(self) -> LintResult:
+        """Every finding, once `assets()` has run to the end."""
+        findings = list(self.findings)
+        for name, group in self._names.items():
+            if len(group) < 2:
+                continue
+            for i, path in enumerate(group):
+                others = ", ".join(o.name if o else "another asset" for j, o in enumerate(group) if j != i)
+                findings.append(
+                    Finding(
+                        "E012",
+                        f"asset name {name!r} is also used by {others}; names must be unique across sprites, "
+                        "tilesets and models (outputs would overwrite each other)",
+                        path,
+                        None,
+                        "name",
+                    )
                 )
-            )
-    cache = AssetCache(project, parsed)
-    for path in timelines:  # after the assets, so the sprites they show are parsed once
-        findings.extend(load_timeline(path, project, cache)[1])
-    disabled = set(project.config.lint.disable)
-    findings = [f for f in findings if f.rule not in disabled]
-    return LintResult(files=files, findings=_dedupe(findings), assets=assets)
+        cache = AssetCache(self.project, self._parsed)
+        for path in self._timelines:  # after the assets, so the sprites they show are parsed once
+            findings.extend(load_timeline(path, self.project, cache)[1])
+        disabled = set(self.project.config.lint.disable)
+        findings = [f for f in findings if f.rule not in disabled]
+        return LintResult(files=self.files, findings=_dedupe(findings), assets=[])
+
+    def _add(self, findings: list[Finding]) -> None:
+        self.findings.extend(findings)
+        self.failed |= any(f.severity == "error" for f in findings)
 
 
 def asset_lint(asset: Asset, project: Project) -> list[Finding]:
@@ -136,22 +162,27 @@ def asset_lint(asset: Asset, project: Project) -> list[Finding]:
     return found
 
 
-Prepared = tuple[Asset | None, list[Finding], list[Finding]]  # asset, parse findings, its own lint findings
-
-
-def _prepare_one(job: tuple[Path, Project]) -> Prepared:
-    """Parse and lint one asset (in a worker process); big ones are cached on the way."""
-    path, project = job
+def _prepare_one(job: tuple[Path, Project, bool]) -> None:
+    """Parse and lint one big asset (in a worker process), and with `sheets` render its sheets, into the sprite
+    cache; the linter then reads them back one asset at a time."""
+    path, project, sheets = job
     asset, findings = load_asset(path, project)
-    return asset, findings, asset_lint(asset, project) if asset is not None else []
+    if asset is None:
+        return
+    own = asset_lint(asset, project)
+    if sheets and asset.cache_key is not None and not any(f.severity == "error" for f in [*findings, *own]):
+        from pagan.build import cache_sheets  # local import: build builds on this module
+
+        cache_sheets(asset, project)
 
 
-def _prepare_in_parallel(project: Project, files: list[Path]) -> dict[Path, Prepared]:
-    """Big sprites and tilesets that aren't cached yet are parsed and linted in the process pool (PAGAN_JOBS),
-    when there are at least two. Each is done exactly as in this process, so the results are the same."""
+def _prepare_in_parallel(project: Project, files: list[Path], sheets: bool) -> None:
+    """Big sprites and tilesets whose parse (with `sheets`, or built sheets) isn't cached yet are done in the
+    process pool (PAGAN_JOBS), when there are at least two. Each is done exactly as in this process, and the
+    results go to the sprite cache (so they never pile up in this one)."""
     count = jobs.workers()
     if count <= 1:
-        return {}
+        return
     candidates: list[Path] = []
     for path in files:
         if asset_kind(path) not in ("sprite", "tileset"):
@@ -161,16 +192,15 @@ def _prepare_in_parallel(project: Project, files: list[Path]) -> dict[Path, Prep
         except OSError:
             continue
         key = spritecache.source_key(path, project) if big else None
-        if key is not None and not spritecache.has(path, project, key):
+        if key is not None and not (spritecache.has(path, project, key) and (not sheets or spritecache.has_sheets(path, project, key))):
             candidates.append(path)
     if len(candidates) < 2:
-        return {}
+        return
     note(f"parsing and linting {len(candidates)} big sprites in {min(count, len(candidates))} processes...")
     try:
-        results = list(jobs.pool(count).map(_prepare_one, [(path, project) for path in candidates]))
+        list(jobs.pool(count).map(_prepare_one, [(path, project, sheets) for path in candidates]))
     except (OSError, RuntimeError):  # no process support here (e.g. a sandbox): do them in this process
-        return {}
-    return dict(zip(candidates, results, strict=True))
+        return
 
 
 def _check_supersample(asset: Asset, project: Project) -> list[Finding]:
