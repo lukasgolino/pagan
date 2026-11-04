@@ -197,12 +197,21 @@ def test_project_camera_and_light(tmp_path: Path) -> None:
     assert {c for row in asset.base_frames["main"] for c in row if c != "."} == {"2"}
 
 
+def test_side_on_camera_override(tmp_path: Path) -> None:
+    project = make_project(tmp_path, 'default_palette = "test"\n[camera]\nelevation = 60\nscale = 2\n')
+    asset = ok(load_model(project, CUBE.format(directions=1) + "camera: { elevation: 0 }\n"))
+    # Level with the box: only its 7x7 side shows, 14x14 px, and no top face.
+    pixels = silhouette(asset.base_frames["main"])
+    assert len(pixels) == 14 * 14
+    assert len({y for _, y in pixels}) == 14
+
+
 def test_bad_camera_config(tmp_path: Path) -> None:
     from pagan.findings import PaganError
 
     (tmp_path / "bad").mkdir()
     with pytest.raises(PaganError):
-        make_project(tmp_path / "bad", "[camera]\nelevation = 5\n")
+        make_project(tmp_path / "bad", "[camera]\nelevation = -5\n")
 
 
 def test_golden_model_sheet() -> None:

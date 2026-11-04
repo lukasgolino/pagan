@@ -45,7 +45,7 @@ def test_set_in_toml_keeps_comments_and_layout() -> None:
 def test_set_setting_validates_and_never_writes_bad_config(tmp_path: Path) -> None:
     project = make_project(tmp_path)
     before = project.config_path.read_text() if project.config_path else ""
-    for key, value in [("camera.elevation", "5"), ("light.direction", "[0, 0]"), ("nope", "1"), ("default_palette", "missing")]:
+    for key, value in [("camera.elevation", "-5"), ("light.direction", "[0, 0]"), ("nope", "1"), ("default_palette", "missing")]:
         with pytest.raises(PaganError):
             set_setting(project, key, value)
         assert project.config_path is not None and project.config_path.read_text() == before

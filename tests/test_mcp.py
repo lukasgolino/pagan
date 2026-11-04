@@ -146,7 +146,7 @@ def test_preview_sheet_pages(root: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 def test_errors_are_results(root: Path) -> None:
     missing = call(root, "read_asset", {"name": "nope"})
     assert not missing.is_error and data(missing)["findings"][0]["rule"] == "E000"
-    bad = data(call(root, "config_set", {"key": "camera.elevation", "value": "5"}))
+    bad = data(call(root, "config_set", {"key": "camera.elevation", "value": "-5"}))
     assert not bad["ok"] and bad["findings"][0]["rule"] == "E001"
     assert data(call(root, "config_set", {"key": "camera.elevation", "value": "60"}))["new"] == 60
 

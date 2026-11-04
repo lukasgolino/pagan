@@ -104,7 +104,7 @@ Then:
   skin, wood, foliage, stone, metal, cloth...). Write them to `palettes/`, run `pagan palette show`,
   **look at the swatches**, show the owner the paths, let them pick or tweak. Set `default_palette`.
 - `pagan.toml`: `output_dir` (e.g. `../game/assets/generated`), `export = ["png", "godot"]`,
-  `[camera] elevation` (top-down 3/4 ~ 40-45, straight down 90, side-on 10-15), `[light]`.
+  `[camera] elevation` (top-down 3/4 ~ 40-45, straight down 90, side-on 10-15, level 0), `[light]`.
 - Fill in BRIEF.md (game, perspective, mood, key assets) and STYLE.md (ramp intent, scale, outline,
   light, shading, animation rules). Log the owner's answers in BRIEF.md's feedback log.
 

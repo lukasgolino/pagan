@@ -400,8 +400,8 @@ def parse_render(
         tile = camera_raw.get("tile", list(camera.tile))
         cell = camera_raw.get("cell", camera.cell)
         z_step = camera_raw.get("z_step", camera.z_step)
-        if not (_number(elevation) and 10 <= elevation <= 90):
-            error("camera.elevation must be 10-90 degrees above the horizon (90 = straight down)", "camera.elevation")
+        if not (_number(elevation) and 0 <= elevation <= 90):
+            error("camera.elevation must be 0-90 degrees above the horizon (0 = side-on, 90 = straight down)", "camera.elevation")
         elif not (_number(scale) and 0.25 <= scale <= 16):
             error("camera.scale must be 0.25-16 pixels per voxel", "camera.scale")
         elif projection not in PROJECTIONS:

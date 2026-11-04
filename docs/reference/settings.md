@@ -22,7 +22,7 @@ Every setting, its default and what changes when it changes. `pagan config show`
 
 | Setting | Default | Refreshes | Meaning |
 |---|---|---|---|
-| `camera.elevation` | `42.0` | 3D models re-render | 3D camera angle above the horizon in degrees: 90 = straight down, ~40 = top-down 3/4, ~15 = side-on |
+| `camera.elevation` | `42.0` | 3D models re-render | 3D camera angle above the horizon in degrees: 90 = straight down, ~40 = top-down 3/4, ~15 = low side-on, 0 = level (no tops) |
 | `camera.scale` | `1.0` | 3D models re-render | pixels per voxel for 3D models |
 | `camera.projection` | `"orthographic"` | 3D models re-render | "orthographic": any elevation, camera.scale px per voxel; "dimetric": exact pixel 2:1 dimetric (tile, cell, z_step; elevation/scale unused), models use heading 45 + directions 4 |
 | `camera.tile` | `[64, 32]` | 3D models re-render | dimetric: pixels per grid cell, [width, height] with width = 2 x height (the floor diamond, e.g. a 64x32 TileMap cell) |
