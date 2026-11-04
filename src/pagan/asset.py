@@ -44,7 +44,7 @@ _SPRITE_FIELDS = (
     "font", "points", "sheet_columns", "trim", "frames_png",
 )  # fmt: skip
 _FRAMES_PNG_FIELDS = ("file", "keys", "frames")
-MAX_OUTLINE_WIDTH = 8  # per ring
+MAX_OUTLINE_WIDTH = 8  # per ring, in output pixels (x supersample in source pixels)
 _FONT_FIELDS = ("glyphs", "cell", "baseline", "line_height", "advance", "spacing", "space", "advances", "offsets", "skip_blank")
 Margins = tuple[int, int, int, int]  # left, top, right, bottom
 _TILESET_FIELDS = (
@@ -1389,7 +1389,8 @@ def parse_asset(data: Any, path: Path | None, project: Project, kind: Kind) -> t
                     error("E005", f"outline_color {raw_color!r} isn't a palette key", _line(data, "outline_color"), "outline_color")
                 else:
                     outline_color = raw_color
-        outlines = _parse_outlines(data.get("outline", "none"), palette, outline_color, _line(data, "outline"), error)
+        factor = meta["supersample"] if meta["supersample"] is not None else project.config.supersample
+        outlines = _parse_outlines(data.get("outline", "none"), palette, outline_color, _line(data, "outline"), error, factor)
         outline = bool(outlines)
         if outlines:
             outline_color = outlines[0][1]
@@ -1602,12 +1603,13 @@ def _parse_trim(data: dict[str, Any], default: bool, nine_slice: bool, font: boo
 
 
 def _parse_outlines(
-    raw: Any, palette: Palette | None, default_color: str | None, line: int | None, error: ErrorFn
+    raw: Any, palette: Palette | None, default_color: str | None, line: int | None, error: ErrorFn, supersample: int = 1
 ) -> tuple[tuple[int, str, bool], ...]:
     """`outline: none | auto | { width: 3, color: "0" } | [ { width: 2, color: "0" }, { width: 1, color: "7" } ]`.
 
     A list stacks rings outwards (the first hugs the sprite). `auto` = `{ width: 1 }`; a ring without `color`
     uses `outline_color`; `skip_translucent: true` rings only the opaque pixels (glows and halos stay unringed).
+    `width` is in source pixels, up to 8 output pixels (8 x `supersample`).
     """
     usage = 'outline must be none, auto, { width: N, color: "<key>", skip_translucent: true } or a list of those (innermost first)'
     if raw == "none":
@@ -1626,8 +1628,10 @@ def _parse_outlines(
             error("E001", usage, line, where)
             return ()
         ring_width = ring.get("width", 1)
-        if isinstance(ring_width, bool) or not isinstance(ring_width, int) or not 1 <= ring_width <= MAX_OUTLINE_WIDTH:
-            error("E001", f"outline width must be a whole number of pixels, 1-{MAX_OUTLINE_WIDTH}", line, f"{where}.width")
+        cap = MAX_OUTLINE_WIDTH * supersample
+        if isinstance(ring_width, bool) or not isinstance(ring_width, int) or not 1 <= ring_width <= cap:
+            scaled = f" (source pixels: {MAX_OUTLINE_WIDTH} output pixels at supersample {supersample})" if supersample > 1 else ""
+            error("E001", f"outline width must be a whole number of pixels, 1-{cap}{scaled}", line, f"{where}.width")
             return ()
         skip = ring.get("skip_translucent", False)
         if not isinstance(skip, bool):

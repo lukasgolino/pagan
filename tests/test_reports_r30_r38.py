@@ -604,3 +604,14 @@ def test_tile_animation_durations(tmp_path: Path, load: LoadFn) -> None:
     assert "1:0/animation_speed = 4.0\n1:0/animation_frame_0/duration = 3.0\n1:0/animation_frame_1/duration = 0.5\n" in tres
     water = json.loads(result.manifest.read_text())["assets"]["sea"]["animations"]["water"]
     assert water == {"frames": ["w0", "w1"], "fps": 4.0, "loop": True, "durations": [3.0, 0.5]}
+
+
+def test_outline_cap_scales_with_supersample(load: LoadFn) -> None:
+    rows = ["." * 21] * 10 + ["." * 10 + "1" + "." * 10] + ["." * 21] * 10
+    big = "name: big\nsize: [21, 21]\n{extra}frames:\n  a: |\n" + "".join(f"    {row}\n" for row in rows)
+    asset, findings = load(big.format(extra="supersample: 3\noutline: { width: 9 }\n"), name="big")
+    assert asset is not None, [f.format() for f in findings]  # 9 source px = 3 output px
+    _, findings = load(big.format(extra="supersample: 3\noutline: { width: 25 }\n"), name="big")
+    assert any(f.rule == "E001" and "1-24" in f.message for f in findings)
+    _, findings = load(big.format(extra="outline: { width: 9 }\n"), name="big")
+    assert any(f.rule == "E001" and "1-8" in f.message for f in findings)

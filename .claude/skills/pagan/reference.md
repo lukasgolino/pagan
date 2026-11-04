@@ -151,7 +151,7 @@ shadow: { offset: [3, 4], color: "s" }                       # drop shadow of th
 ```
 
 Width 1 is exactly `outline: auto`; wider rings take every transparent pixel within `width` pixels (centre to
-centre) of the shape, up to 8 per ring. The shadow goes under the sprite (only on transparent pixels); a
+centre) of the shape, up to 8 output pixels per ring (8 x `supersample` source pixels). The shadow goes under the sprite (only on transparent pixels); a
 translucent colour (`"#00000080"`) suits it. Leave a transparent border as wide as all rings together, and room
 for the shadow on its side (E007; with `skip_translucent` on every ring, translucent pixels may touch the edge). With `supersample`, widths and offsets are in source pixels.
 

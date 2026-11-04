@@ -21,6 +21,8 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ### Changed
 
+- The outline width cap (8 per ring) is in output pixels: with `supersample: N` a ring may be up to 8N source pixels
+  wide, so supersampled art can get outlines up to 8 output pixels thick (#62).
 - `camera.elevation` (project `[camera]` or a model's `camera:` override) accepts 0-90 degrees instead of 10-90, so
   the same model can be rendered level for side-on shots (0 = a true side elevation, no top faces) (#61).
 
