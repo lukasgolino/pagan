@@ -19,6 +19,11 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+### Changed
+
+- `camera.elevation` (project `[camera]` or a model's `camera:` override) accepts 0-90 degrees instead of 10-90, so
+  the same model can be rendered level for side-on shots (0 = a true side elevation, no top faces) (#61).
+
 ## [0.19.3] - 2026-11-02
 
 ### Fixed

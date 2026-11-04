@@ -43,7 +43,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("variant_sheets", True, "build a sheet (+ .tres) per variant; false: variants are only colour swap tables in manifest.json, for games that recolour in a shader", "build"),
     Setting("supersample", 1, "sources are drawn at N x the size the game gets; build box-filters them down to smooth, anti-aliased PNGs (for freely rotated, non-pixel-art sprites; 1 = off, pixel-exact)", "build"),
     Setting("style_version", 1, "current style version; assets made under older ones get W006 (use `pagan style bump`)", "lint"),
-    Setting("camera.elevation", 42.0, "3D camera angle above the horizon in degrees: 90 = straight down, ~40 = top-down 3/4, ~15 = side-on", "models"),
+    Setting("camera.elevation", 42.0, "3D camera angle above the horizon in degrees: 90 = straight down, ~40 = top-down 3/4, ~15 = low side-on, 0 = level (no tops)", "models"),
     Setting("camera.scale", 1.0, "pixels per voxel for 3D models", "models"),
     Setting("camera.projection", "orthographic", '"orthographic": any elevation, camera.scale px per voxel; "dimetric": exact pixel 2:1 dimetric (tile, cell, z_step; elevation/scale unused), models use heading 45 + directions 4', "models"),
     Setting("camera.tile", [64, 32], "dimetric: pixels per grid cell, [width, height] with width = 2 x height (the floor diamond, e.g. a 64x32 TileMap cell)", "models"),
