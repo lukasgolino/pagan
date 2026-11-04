@@ -7,5 +7,5 @@
   - [`pagan.toml` settings](reference/settings.md)
   - [Lint rules](reference/lint-rules.md)
 - The full notation with examples, recipes and the workflow: the Claude skill's
-  [reference](../src/pagan/skill/reference.md) and [SKILL.md](../src/pagan/skill/SKILL.md)
+  [docs topics](../src/pagan/skill/topics/) and [SKILL.md](../src/pagan/skill/SKILL.md)
   (also good reading without an agent).

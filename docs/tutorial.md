@@ -71,7 +71,7 @@ reads. To build straight into a Godot project, set `output_dir` to a folder insi
 ## Next
 
 - More of the notation (derived frames, outlines, variants, tilesets, 3D models): the skill's
-  [reference](../src/pagan/skill/reference.md), and [every field](reference/notation.md) in one list.
+  [docs topics](../src/pagan/skill/topics/) (`pagan docs`), and [every field](reference/notation.md) in one list.
 - Every `pagan.toml` setting: [settings](reference/settings.md).
 - Let an agent do it: `pagan skill install` (Claude) or `pagan mcp` (any MCP client); see the [README](../README.md).
 - A bigger example: `examples/demo/` (palettes, sprites, tiles, a 3D ship) and the Godot project it builds into.

@@ -28,7 +28,7 @@ pagan = "pagan.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-pagan = ["templates/*", "skill/*"]
+pagan = ["templates/*", "skill/*", "skill/topics/*"]
 
 [tool.mypy]
 strict = true

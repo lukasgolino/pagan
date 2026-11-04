@@ -96,7 +96,7 @@ def test_lists_tools_resources_prompts(root: Path) -> None:
 
     tools, resources, prompts = run(root, body)
     assert {"status", "write_asset", "preview", "build", "palette_adjust", "manifest", "lint"} <= tools
-    assert {"pagan://workflow", "pagan://reference", "pagan://brief"} <= resources
+    assert {"pagan://workflow", "pagan://brief"} <= resources
     assert prompts == {"setup_new_game", "make_asset", "change_the_look", "review_asset"}
 
 

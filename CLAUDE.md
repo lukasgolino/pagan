@@ -58,7 +58,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - `tests/fixtures/golden/` — golden-image project; `expected/*.png` are hand-checked. After an intended
   rendering change, inspect, then regenerate with `PAGAN_UPDATE_GOLDEN=1 pytest tests/test_render.py`.
 - `tests/` — pytest suite
-- `src/pagan/skill/` — the Claude skill (SKILL.md workflow + reference.md notation); `pagan skill install` copies it.
+- `src/pagan/skill/` — the Claude skill (SKILL.md core + `topics/*.md`, served by `pagan docs`); `pagan skill install` copies it.
   `.claude/skills/pagan/` is this repo's installed copy: after editing the skill run `pagan skill install` (a test checks they match).
 - `examples/demo/` — an example PAGAN project (palettes: ember, tide, arcade); tests keep it valid
 - `examples/godot/` — Godot 4.7 project receiving the demo's build output; `scenes/art_test.tscn` shows everything 2D,
@@ -232,5 +232,5 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   would. Pickle is used for entries (local cache only; a key mismatch or unreadable entry just recomputes).
 - 2026-10-28: #13: user docs are generated from the code's registries (settings, `findings.ERROR_RULES` +
   `lint.WARNING_RULES`, `docs.NOTATION` checked against the parsers' field tuples), plus hand-written install and
-  tutorial pages in `docs/`. The skill's reference.md stays hand-written (examples, prose) but a test checks it names
+  tutorial pages in `docs/`. The skill's topics stay hand-written (examples, prose) but a test checks it names
   every rule, every setting (its pagan.toml example parses and has every key) and every accepted field.
