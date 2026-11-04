@@ -19,6 +19,24 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+### Changed
+
+- **The skill is split for agents that pay per token** (#59). `SKILL.md` is a 6 KB core (was 26 KB) that is loaded
+  whenever the skill triggers; the rest of the old SKILL.md and all of `reference.md` (52 KB) moved, unchanged, into
+  18 topic files (`skill/topics/*.md`). `pagan skill install` writes them and removes an installed `reference.md`.
+  The MCP resource `pagan://reference` became `pagan://docs/{topic}`.
+- **`--json` prints compact JSON** (one line, no indentation): about 30-60% fewer characters. Pipe through
+  `python -m json.tool` to read it by eye.
+- `pagan status` lists assets grouped by what they need (one line per group) instead of two lines per asset;
+  `-v` / `--verbose` (MCP: `verbose`) gives the old per-asset listing with descriptions. `--json` leaves out
+  descriptions unless `--verbose`. The demo: 1.4k -> 0.3k characters (text), 4.3k -> 1.7k (JSON).
+
+### Added
+
+- `pagan docs [topic...] [--search words]` (MCP tool `docs`): lists the topics with their size, prints one, or
+  prints the few paragraphs that match. Budget tests keep `SKILL.md`, its description and each topic under a size.
+- `ruff check` in CI (#78).
+
 ## [0.20.0] - 2026-11-04
 
 ### Changed

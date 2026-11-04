@@ -251,28 +251,38 @@ def test_skill_install(tmp_path: Path) -> None:
     assert main(["skill", "install", str(tmp_path)]) == 0
     skill = (tmp_path / ".claude" / "skills" / "pagan" / "SKILL.md").read_text()
     assert skill.startswith("---\nname: pagan\n")
-    assert (tmp_path / ".claude" / "skills" / "pagan" / "reference.md").exists()
+    assert (tmp_path / ".claude" / "skills" / "pagan" / "topics" / "sprites.md").exists()
+    stale = tmp_path / ".claude" / "skills" / "pagan" / "reference.md"
+    stale.write_text("the pre-0.21 reference")
+    assert main(["skill", "install", str(tmp_path)]) == 0 and not stale.exists()
 
 
 def test_repo_skill_copy_is_current() -> None:
     # The repo's own .claude/skills/pagan must match the packaged skill: run `pagan skill install` after editing.
-    for name in ("SKILL.md", "reference.md"):
+    from pagan.cli import _skill_files
+
+    assert not (REPO / ".claude" / "skills" / "pagan" / "reference.md").exists()
+    for name in _skill_files():
         packaged = (REPO / "src" / "pagan" / "skill" / name).read_text()
         assert (REPO / ".claude" / "skills" / "pagan" / name).read_text() == packaged, name
 
 
+def _topics_text() -> str:
+    return "\n\n".join(p.read_text() for p in sorted((REPO / "src" / "pagan" / "skill" / "topics").glob("*.md")))
+
+
 def test_reference_lists_every_command() -> None:
-    reference = (REPO / "src" / "pagan" / "skill" / "reference.md").read_text()
+    reference = _topics_text()
     from pagan.cli import build_parser
 
     parser = build_parser()
     subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
     for command in subparsers.choices:
-        assert f"`pagan {command}" in reference, f"reference.md doesn't document `pagan {command}`"
+        assert f"`pagan {command}" in reference, f"the docs topics don't document `pagan {command}`"
 
 
 def test_reference_lists_every_rule() -> None:
-    reference = (REPO / "src" / "pagan" / "skill" / "reference.md").read_text()
+    reference = _topics_text()
     from pagan.lint import WARNING_RULES
 
     for rule in WARNING_RULES:

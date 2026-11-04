@@ -12,7 +12,7 @@ from pagan.lint import WARNING_RULES
 from pagan.settings import SETTINGS
 
 ROOT = Path(__file__).resolve().parent.parent
-REFERENCE = (ROOT / "src" / "pagan" / "skill" / "reference.md").read_text(encoding="utf-8")
+REFERENCE = "\n\n".join(p.read_text(encoding="utf-8") for p in sorted((ROOT / "src" / "pagan" / "skill" / "topics").glob("*.md")))
 
 
 def test_generated_docs_are_up_to_date() -> None:

@@ -234,7 +234,7 @@ def notation_md() -> str:
         HEADER + "# Notation: every field",
         "",
         "The fields each file accepts (anything else is an error, E001). Examples and details: the skill's",
-        "[reference](../../src/pagan/skill/reference.md). Fields shared by sprites, tilesets and models mean the same",
+        "[docs topics](../../src/pagan/skill/topics/) (`pagan docs`). Fields shared by sprites, tilesets and models mean the same",
         "in each.",
     ]
     for kind, fields in NOTATION.items():

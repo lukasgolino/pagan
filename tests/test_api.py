@@ -173,7 +173,7 @@ def test_reference_api_calls_exist() -> None:
     # Canvas bullet lists without a prefix). Callbacks the reader writes are not API.
     import re
 
-    reference = (Path(api.__file__).parent / "skill" / "reference.md").read_text(encoding="utf-8")
+    reference = (Path(api.__file__).parent / "skill" / "topics" / "api.md").read_text(encoding="utf-8")
     section = reference.split("## Generator scripts: `pagan.api`")[1].split("\n## ")[0]
     callbacks = {"draw", "field", "paint"}
     missing = []

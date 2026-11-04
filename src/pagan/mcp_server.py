@@ -184,10 +184,10 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
     # --- project ---------------------------------------------------------------------------
 
     @server.tool(annotations=READ)
-    def status() -> dict[str, Any]:
+    def status(verbose: bool = False) -> dict[str, Any]:
         """Every asset (kind, size, status, style version, errors/warnings, what needs attention), the
-        style version and default palette. Call this first."""
-        return pagan.cli("status")
+        style version and default palette. Call this first. `verbose` adds each asset's description."""
+        return pagan.cli("status", *(["--verbose"] if verbose else []))
 
     @server.tool(annotations=READ)
     def read_docs() -> dict[str, Any]:
@@ -197,6 +197,15 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
             "ok": True,
             **{name: (pagan.root / name).read_text(encoding="utf-8") if (pagan.root / name).is_file() else None for name in ("BRIEF.md", "STYLE.md")},
         }
+
+    @server.tool(annotations=READ)
+    def docs(topic: str = "", search: str = "") -> dict[str, Any]:
+        """PAGAN's documentation, one topic at a time: no arguments = the topic list (name, summary, size);
+        `topic` = that topic's text (e.g. "sprites", "models", "lint"); `search` = the few paragraphs matching
+        those words across all topics. Read only what the task needs."""
+        if search:
+            return pagan.cli("docs", "--search", *search.split())
+        return pagan.cli("docs", *topic.split())
 
     @server.tool(annotations=OVERWRITE)
     @_results
@@ -580,7 +589,7 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
     # --- resources and prompts ---------------------------------------------------------------
 
     def skill_text(name: str) -> str:
-        text = files("pagan").joinpath("skill", name).read_text(encoding="utf-8")
+        text = files("pagan").joinpath("skill", *name.split("/")).read_text(encoding="utf-8")
         if text.startswith("---"):
             text = text.split("---", 2)[2].lstrip("\n")  # drop the skill frontmatter
         return text
@@ -589,9 +598,9 @@ def create_server(root: Path, allow_godot: bool = False) -> MCPServer:
     def workflow() -> str:
         return skill_text("SKILL.md")
 
-    @server.resource("pagan://reference", mime_type="text/markdown", description="The PAGAN notation, settings and lint rules")
-    def reference() -> str:
-        return skill_text("reference.md")
+    @server.resource("pagan://docs/{topic}", mime_type="text/markdown", description="One documentation topic (the `docs` tool lists them)")
+    def docs_topic(topic: str) -> str:
+        return skill_text(f"topics/{topic}.md")
 
     @server.resource("pagan://brief", mime_type="text/markdown", description="BRIEF.md: what the game needs, decisions log")
     def brief() -> str:

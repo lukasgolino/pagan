@@ -43,11 +43,11 @@ class Output:
 
     def result(self, data: dict[str, Any]) -> None:
         if self.as_json:
-            print(json.dumps({"ok": True, **data}, indent=2))
+            print(json.dumps({"ok": True, **data}, separators=(",", ":")))
 
     def failure(self, findings: list[Finding], data: dict[str, Any] | None = None) -> None:
         if self.as_json:
-            print(json.dumps({"ok": False, **(data or {}), "findings": [f.to_dict() for f in findings]}, indent=2))
+            print(json.dumps({"ok": False, **(data or {}), "findings": [f.to_dict() for f in findings]}, separators=(",", ":")))
         else:
             for finding in findings:
                 print(finding.format())
@@ -761,7 +761,7 @@ def cmd_lint(args: argparse.Namespace, out: Output) -> int:
                     "warnings": len(result.warnings),
                     "findings": [f.to_dict() for f in result.findings],
                 },
-                indent=2,
+                separators=(",", ":"),
             )
         )
     else:
@@ -1000,7 +1000,7 @@ def cmd_status(args: argparse.Namespace, out: Output) -> int:
                     "pagan": version_string(),
                     "assets": [
                         {
-                            "name": e.name, "kind": e.kind, "path": display_path(e.path), "description": e.description,
+                            "name": e.name, "kind": e.kind, "path": display_path(e.path), **({"description": e.description} if args.verbose else {}),
                             "status": e.status, "style_version": e.style_version,
                             "size": list(e.size) if e.size else None, "frames": e.frames, "animations": e.animations,
                             "errors": e.errors, "warnings": e.warnings, "tags": list(e.tags), "needs": e.needs(current),
@@ -1008,7 +1008,7 @@ def cmd_status(args: argparse.Namespace, out: Output) -> int:
                         for e in entries
                     ],
                 },
-                indent=2,
+                separators=(",", ":"),
             )
         )
         return 0
@@ -1016,13 +1016,22 @@ def cmd_status(args: argparse.Namespace, out: Output) -> int:
     print(f"{display_path(project.root)}: {len(entries)} assets, palette {palette}, style v{current}  [{version_string()}]")
     if is_editable():
         print("  note: PAGAN is an editable dev checkout; if this project pins a release, install that instead")
-    for e in entries:
-        size = "mesh" if e.size == (0, 0) and e.kind == "model" else (f"{e.size[0]}x{e.size[1]}" if e.size else "?")
-        flags = ", ".join(e.needs(current)) or "ok"
-        description = (e.description or "").replace("\n", " ")
-        print(f"  {e.name:<20} {e.kind:<8} {size:>7}  {e.status:<8} v{e.style_version}  [{flags}]")
-        if description:
-            print(f"      {description[:100]}{'…' if len(description) > 100 else ''}")
+    if args.verbose:
+        for e in entries:
+            size = "mesh" if e.size == (0, 0) and e.kind == "model" else (f"{e.size[0]}x{e.size[1]}" if e.size else "?")
+            flags = ", ".join(e.needs(current)) or "ok"
+            description = (e.description or "").replace("\n", " ")
+            print(f"  {e.name:<20} {e.kind:<8} {size:>7}  {e.status:<8} v{e.style_version}  [{flags}]")
+            if description:
+                print(f"      {description[:100]}{'…' if len(description) > 100 else ''}")
+    else:  # one line per state: what needs doing, and to which assets
+        groups: dict[str, list[str]] = {}
+        for e in entries:
+            groups.setdefault(", ".join(e.needs(current)) or "ok", []).append(e.name)
+        for flags, names in sorted(groups.items(), key=lambda g: (g[0] == "ok", -len(g[1]))):
+            print(f"  [{flags}] ({len(names)}): {', '.join(names)}")
+        if entries:
+            print("  (`pagan status -v`: one line per asset with kind, size, status and description)")
     stale = [e for e in entries if e.style_version < current]
     if stale:
         print(f"{len(stale)} assets predate style v{current}: see the STYLE.md changelog, update them, then `pagan mark --current <asset>`")
@@ -1131,7 +1140,7 @@ def cmd_config_show(args: argparse.Namespace, out: Output) -> int:
         for row in describe(project.config)
     ]
     if out.as_json:
-        print(json.dumps({"ok": True, "config": display_path(project.config_path or project.root), "settings": rows}, indent=2))
+        print(json.dumps({"ok": True, "config": display_path(project.config_path or project.root), "settings": rows}, separators=(",", ":")))
         return 0
     print(f"{display_path(project.config_path or project.root)}  (change with `pagan config set <key> <value>`)")
     for row in rows:
@@ -1233,7 +1242,13 @@ def cmd_mcp(args: argparse.Namespace, out: Output) -> int:
 
 # --- pagan skill install ----------------------------------------------------------------------
 
-SKILL_FILES = ("SKILL.md", "reference.md")
+def _skill_files() -> list[str]:
+    """The skill's files, relative to the skill folder: SKILL.md and every topic."""
+    folder = files("pagan").joinpath("skill", "topics")
+    return ["SKILL.md", *sorted(f"topics/{e.name}" for e in folder.iterdir() if e.name.endswith(".md"))]
+
+
+STALE_SKILL_FILES = ("reference.md",)  # written by PAGAN < 0.21, replaced by topics/
 
 
 def _git_root(start: Path) -> Path | None:
@@ -1248,15 +1263,55 @@ def cmd_skill_install(args: argparse.Namespace, out: Output) -> int:
     target = base / ".claude" / "skills" / "pagan"
     target.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
-    for name in SKILL_FILES:
-        text = files("pagan").joinpath("skill", name).read_text(encoding="utf-8")
+    for name in _skill_files():
+        text = files("pagan").joinpath("skill", *name.split("/")).read_text(encoding="utf-8")
         path = target / name
         if path.exists() and path.read_text(encoding="utf-8") == text:
             continue
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         written.append(display_path(path))
+    for name in STALE_SKILL_FILES:
+        if (target / name).is_file():
+            (target / name).unlink()
+            written.append(f"{display_path(target / name)} (removed)")
     out.say(f"PAGAN skill {'installed' if written else 'already up to date'} in {display_path(target)}")
     out.result({"skill_dir": display_path(target), "written": written})
+    return 0
+
+
+# --- pagan docs -------------------------------------------------------------------------------
+
+
+def cmd_docs(args: argparse.Namespace, out: Output) -> int:
+    from pagan import topics as docs
+
+    if args.search:
+        hits = docs.search(" ".join([*(args.topic or []), *args.search]), limit=args.limit)
+        for hit in hits:
+            out.say(f"--- {hit.topic} > {hit.heading}\n{hit.text}")
+        if not hits:
+            out.say("no matches; `pagan docs` lists the topics")
+        out.result({"hits": [{"topic": h.topic, "heading": h.heading, "text": h.text} for h in hits]})
+        return 0
+    if not args.topic:
+        listed = docs.topics()
+        width = max(len(t.name) for t in listed)
+        for t in listed:
+            out.say(f"{t.name:<{width}}  ~{t.tokens / 1000:.1f}k tokens  {t.summary}")
+        out.say("`pagan docs <topic>` prints one; `pagan docs --search <words>` finds paragraphs.")
+        out.result({"topics": [{"name": t.name, "summary": t.summary, "tokens": t.tokens} for t in listed]})
+        return 0
+    texts = []
+    for name in args.topic:
+        topic = docs.find(name)
+        if topic is None:
+            near = docs.close_matches(name)
+            hint = f" (did you mean {', '.join(near)}?)" if near else ""
+            raise _usage_error(f"no docs topic {name!r}{hint}; `pagan docs` lists them, `pagan docs --search {name}` searches")
+        texts.append(topic.text)
+        out.say(topic.text)
+    out.result({"topics": [{"name": n.lower(), "text": t} for n, t in zip(args.topic, texts, strict=True)]})
     return 0
 
 
@@ -1445,6 +1500,7 @@ def build_parser() -> argparse.ArgumentParser:
     lint.set_defaults(handler=cmd_lint)
 
     status = commands.add_parser("status", parents=[common], help="catalogue of every asset and what needs attention")
+    status.add_argument("-v", "--verbose", action="store_true", help="one line per asset (kind, size, status) with its description")
     status.add_argument("project", nargs="?", help="project directory (default: the one containing the cwd)")
     status.set_defaults(handler=cmd_status)
 
@@ -1480,6 +1536,12 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_cmd.add_argument("--project", help="PAGAN project directory (default: the one containing the cwd)")
     mcp_cmd.add_argument("--allow-godot", action="store_true", help="let the build tool run a Godot binary (verify_godot)")
     mcp_cmd.set_defaults(handler=cmd_mcp)
+
+    docs_cmd = commands.add_parser("docs", parents=[common], help="the documentation, one topic at a time (list, print, search)")
+    docs_cmd.add_argument("topic", nargs="*", help="topic name(s); none = list the topics")
+    docs_cmd.add_argument("--search", "-s", nargs="+", metavar="WORD", help="print the paragraphs that match these words")
+    docs_cmd.add_argument("--limit", type=int, default=5, help="most paragraphs --search prints (default 5)")
+    docs_cmd.set_defaults(handler=cmd_docs)
 
     skill = commands.add_parser("skill", help="the Claude skill that teaches agents to use PAGAN")
     skill_cmds = skill.add_subparsers(title="skill commands", metavar="<subcommand>", required=True)

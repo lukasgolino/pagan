@@ -19,7 +19,7 @@ frames:
 **Docs:** [install](docs/install.md), a [tutorial](docs/tutorial.md), and references generated from the code:
 [every notation field](docs/reference/notation.md), [`pagan.toml` settings](docs/reference/settings.md) and
 [lint rules](docs/reference/lint-rules.md). The full notation with examples is the skill's
-[reference](src/pagan/skill/reference.md).
+[docs topics](src/pagan/skill/topics/) (`pagan docs`).
 
 ## Install (development)
 
