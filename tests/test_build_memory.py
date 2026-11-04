@@ -10,8 +10,8 @@ import tracemalloc
 from pathlib import Path
 
 import pytest
-
 from conftest import make_project
+
 from pagan import jobs
 from pagan.build import build
 from pagan.cli import main

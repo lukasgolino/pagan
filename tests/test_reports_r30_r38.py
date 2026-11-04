@@ -12,9 +12,9 @@ from typing import Any
 
 import numpy as np
 import pytest
+from conftest import LoadFn, make_project
 from PIL import Image
 
-from conftest import LoadFn, make_project
 from pagan import api
 from pagan.asset import load_asset
 from pagan.build import build
@@ -40,7 +40,7 @@ ramps:
 
 def _alpha_project(root: Path, config: str = "") -> Project:
     root.mkdir(parents=True, exist_ok=True)
-    project = make_project(root, f'default_palette = "glow"\n{config}')
+    make_project(root, f'default_palette = "glow"\n{config}')
     (root / "palettes" / "glow.pal.yaml").write_text(ALPHA_PALETTE)
     return load_project(root)
 

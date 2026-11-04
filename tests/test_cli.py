@@ -1,10 +1,10 @@
 import argparse
 import json
 import os
-from typing import Any
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 from PIL import Image

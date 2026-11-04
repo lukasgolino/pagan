@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 
 import pytest
-
 from conftest import make_project
+
 from pagan.asset import load_asset_or_raise
 from pagan.cli import main
 from pagan.color import rgb_to_oklab

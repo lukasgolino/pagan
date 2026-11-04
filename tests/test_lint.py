@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from conftest import make_project
+
 from pagan.lint import lint_paths
 from pagan.project import Project
 

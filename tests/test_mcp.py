@@ -15,11 +15,11 @@ import pytest
 
 pytest.importorskip("mcp")
 
+from conftest import make_project  # noqa: E402
 from mcp import Client  # noqa: E402
 from mcp.types import CallToolResult, ImageContent, TextContent  # noqa: E402
 from PIL import Image  # noqa: E402
 
-from conftest import make_project  # noqa: E402
 from pagan.cli import main  # noqa: E402
 from pagan.mcp_server import create_server  # noqa: E402
 

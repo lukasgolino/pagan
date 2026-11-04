@@ -6,8 +6,9 @@ import json
 from pathlib import Path
 
 import pytest
-
 from conftest import LoadFn
+from test_reports_r15_r17 import _godot_project
+
 from pagan import api
 from pagan.asset import TileShape
 from pagan.build import build
@@ -15,7 +16,6 @@ from pagan.cli import main
 from pagan.exporters.godot import find_godot_binary, tileset_tres, verify_with_godot
 from pagan.project import load_project
 from pagan.render import tile_origin
-from test_reports_r15_r17 import _godot_project
 
 GODOT = find_godot_binary()
 

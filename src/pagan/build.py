@@ -35,7 +35,17 @@ from pagan.findings import Finding
 from pagan.lint import Linter, LintResult, lint_paths
 from pagan.palette import TRANSPARENT
 from pagan.project import Project
-from pagan.render import downsample, frame_rects, png_bytes, save_png, sheet_image, supersample_factor, tile_cells, trim_layout, trimmed_sheet
+from pagan.render import (
+    downsample,
+    frame_rects,
+    png_bytes,
+    save_png,
+    sheet_image,
+    supersample_factor,
+    tile_cells,
+    trim_layout,
+    trimmed_sheet,
+)
 
 MANIFEST = "manifest.json"
 

@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 import pytest
-
 from conftest import LoadFn, make_project
+
 from pagan.asset import load_asset
 from pagan.build import build
 from pagan.lint import lint_paths

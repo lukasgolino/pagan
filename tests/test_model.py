@@ -7,9 +7,9 @@ import shutil
 from pathlib import Path
 
 import pytest
+from conftest import LoadFn, make_project
 from PIL import Image
 
-from conftest import LoadFn, make_project
 from pagan.asset import Asset, load_asset_or_raise
 from pagan.cli import main
 from pagan.findings import Finding
@@ -101,7 +101,7 @@ def test_poses_move_only_their_part(project: Project) -> None:
     assert list(asset.animations["bob_e"].frames) == ["bob_e_0", "bob_e_1"]
     a, b = asset.frames["bob_e_0"], asset.frames["bob_e_1"]
     assert a == asset.frames["e"]  # the empty pose is the static frame
-    changed = {(x, y) for y, (ra, rb) in enumerate(zip(a, b)) for x, (pa, pb) in enumerate(zip(ra, rb)) if pa != pb}
+    changed = {(x, y) for y, (ra, rb) in enumerate(zip(a, b, strict=True)) for x, (pa, pb) in enumerate(zip(ra, rb, strict=True)) if pa != pb}
     # Only the knob and the shadow it casts on the lid change; the crate's body stays pixel-identical.
     assert changed
     knob = silhouette(a) ^ silhouette(b) | {p for p in changed if a[p[1]][p[0]] != "." and b[p[1]][p[0]] != "."}

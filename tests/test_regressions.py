@@ -6,18 +6,16 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import make_project
 from PIL import Image
 
-from conftest import make_project
-from pagan.asset import Asset, load_asset
+from pagan.asset import Animation, Asset, load_asset
 from pagan.build import build
 from pagan.cli import main
 from pagan.exporters.godot import sprite_frames_tres, verify_with_godot
-from pagan.asset import Animation
 from pagan.findings import Finding, PaganError
 from pagan.importer import import_png
 from pagan.manage import apply_palette_hexes, catalogue, mark
-from pagan.palette import load_palette_file
 from pagan.project import Project, load_project
 
 MODEL = """\

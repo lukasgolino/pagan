@@ -13,12 +13,12 @@ from typing import Any
 
 import numpy as np
 import pytest
+from conftest import make_project
 from PIL import Image
 
-from conftest import make_project
+from pagan import offscreen
 from pagan.asset import Asset, load_asset
 from pagan.cli import main
-from pagan import offscreen
 from pagan.exporters.godot import find_godot_binary
 from pagan.project import Project
 from pagan.views import closeup_views, orbit_views

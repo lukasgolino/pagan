@@ -13,11 +13,12 @@ D1-D10, MCP_PLAN.md, WEBSITE_PLAN.md) are in git history: `git show e487084:PLAN
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pagan --version          # or: python -m pagan --version
+ruff check .             # lint (config in pyproject.toml; long lines allowed)
 mypy                     # strict type check (config in pyproject.toml)
 pytest
 ```
 
-CI (`.github/workflows/ci.yml`) runs install + mypy + pytest on Python 3.11–3.13 on every push/PR, and a
+CI (`.github/workflows/ci.yml`) runs install + ruff + mypy + pytest on Python 3.11–3.13 on every push/PR, and a
 `godot` job that downloads Godot 4.7.2, rebuilds the demo into `examples/godot/` (failing if the committed
 output differs), verifies every generated resource loads, and runs the demo scene headless.
 
@@ -77,7 +78,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - Versioning: bump `version` in pyproject.toml, add a CHANGELOG.md entry ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/): log under
   `[Unreleased]`, move it to `[X.Y.Z] - date` + compare link on release; new options/keys = minor) and tag `vX.Y.Z` for ANY change to the
   notation, pagan.toml settings, manifest/exporter output or rendered pixels (game repos pin tags); every fix ships in a new tag.
-- Dependencies: Pillow, PyYAML, numpy; extra `mcp`: mcp (the MCP server); dev: pytest, mypy, types-PyYAML, mcp. Others only if genuinely needed — log why below.
+- Dependencies: Pillow, PyYAML, numpy; extra `mcp`: mcp (the MCP server); dev: pytest, mypy, ruff, types-PyYAML, mcp. Others only if genuinely needed — log why below.
 
 ## Decisions log
 
