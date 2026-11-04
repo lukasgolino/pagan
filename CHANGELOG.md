@@ -19,6 +19,8 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-04
+
 ### Changed
 
 - The outline width cap (8 per ring) is in output pixels: with `supersample: N` a ring may be up to 8N source pixels
@@ -594,7 +596,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.19.3...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/lukasgolino/pagan/compare/v0.19.3...v0.20.0
 [0.19.3]: https://github.com/lukasgolino/pagan/compare/v0.19.2...v0.19.3
 [0.19.2]: https://github.com/lukasgolino/pagan/compare/v0.19.1...v0.19.2
 [0.19.1]: https://github.com/lukasgolino/pagan/compare/v0.19.0...v0.19.1
