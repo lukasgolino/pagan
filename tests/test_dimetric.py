@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from conftest import make_project
+
 from pagan.asset import Asset, load_asset
 from pagan.findings import Finding, PaganError
 from pagan.lint import lint_paths

@@ -33,7 +33,7 @@ from pagan.model import SailCell, _Builder, hull_reach, sail_cells
 from pagan.palette import TRANSPARENT, Palette
 from pagan.pixelfont import pixel_font
 from pagan.project import Project, discover_project
-from pagan.render import frame_image, layout_image
+from pagan.render import layout_image
 from pagan.voxel import Cell, Material, VoxelModel, heading_angles
 
 API_VERSION = 3  # 2: ellipse/ring exclude pixel centres exactly on the edge; 3: frames_png

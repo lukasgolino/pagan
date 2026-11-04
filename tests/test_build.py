@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
+from pagan.asset import Animation
 from pagan.build import build
 from pagan.cli import main
 from pagan.exporters.godot import centered_offset, sprite_frames_tres
-from pagan.asset import Animation
 from pagan.project import Project, load_project
 
 GOLDEN = Path(__file__).parent / "fixtures" / "golden"

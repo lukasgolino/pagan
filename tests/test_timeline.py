@@ -7,9 +7,9 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
+from conftest import make_project
 from PIL import Image
 
-from conftest import make_project
 from pagan.cli import main
 from pagan.lint import lint_paths
 from pagan.project import Project

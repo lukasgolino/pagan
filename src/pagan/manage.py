@@ -12,13 +12,12 @@ from pathlib import Path
 from typing import Any
 
 from pagan.asset import ASSET_SUFFIXES, STATUSES, asset_kind, asset_name_from_path
-from pagan.color import oklab_to_rgb, rgb_to_hex, rgb_to_oklab, to_lch, from_lch
+from pagan.color import from_lch, oklab_to_rgb, rgb_to_hex, rgb_to_oklab, to_lch
 from pagan.findings import Finding, PaganError
 from pagan.lint import lint_paths, source_files
 from pagan.palette import Palette, load_palette_file
 from pagan.project import CONFIG_NAME, Project
 from pagan.yamlio import LineMap, YamlError, load_yaml, parse_yaml
-
 
 # --- catalogue --------------------------------------------------------------------------------
 

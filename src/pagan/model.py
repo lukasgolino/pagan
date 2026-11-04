@@ -10,7 +10,6 @@ import hashlib
 import json
 import math
 import os
-import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -20,6 +19,7 @@ from typing import Any
 
 import numpy as np
 
+from pagan import jobs as pagan_jobs
 from pagan.asset import (
     MAX_MODEL_SIZE,
     MODEL_SUFFIX,
@@ -40,12 +40,10 @@ from pagan.asset import (
     check_base_variant,
     with_palette_variants,
 )
-from pagan import jobs as pagan_jobs
 from pagan.findings import Finding, has_errors
 from pagan.palette import TRANSPARENT, Palette
 from pagan.progress import note
 from pagan.project import Project, parse_render, valid_voxel_size
-from pagan.yamlio import LineMap, YamlError, load_yaml
 from pagan.voxel import (
     DIMETRIC_HEADINGS,
     DIRECTION_NAMES,
@@ -64,6 +62,7 @@ from pagan.voxel import (
     render_heading,
     render_heading_full,
 )
+from pagan.yamlio import LineMap, YamlError, load_yaml
 
 RENDERER_VERSION = "4"  # bump when rendering changes, to invalidate caches
 PART_TYPES = ("box", "hull", "cylinder", "ring", "ellipsoid", "line", "sail", "triangle", "layers")

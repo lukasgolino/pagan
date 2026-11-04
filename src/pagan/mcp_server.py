@@ -33,8 +33,8 @@ from pagan.asset import MODEL_SUFFIX, SPRITE_SUFFIX, TILESET_SUFFIX
 from pagan.findings import Finding, PaganError
 from pagan.lint import lint_paths
 from pagan.palette import NAME_RE, PALETTE_SUFFIX
-from pagan.project import CONFIG_NAME, Project, find_project_root, load_project
 from pagan.preview import PreviewOptions, auto_scale, montage
+from pagan.project import CONFIG_NAME, Project, find_project_root, load_project
 
 MAX_SOURCE_BYTES = 2_000_000
 MAX_IMAGE_SIDE = 1568  # what vision models take without downscaling further

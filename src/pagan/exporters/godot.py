@@ -18,8 +18,8 @@ from pathlib import Path
 
 from pagan import offscreen
 from pagan.asset import TILE_LAYOUTS, TILE_OFFSET_AXES, TILE_SHAPES, Animation, TileShape
-from pagan.voxel import Light
 from pagan.progress import note
+from pagan.voxel import Light
 
 
 def find_godot_project(start: Path) -> Path | None:
@@ -150,7 +150,7 @@ class AtlasTile:
     durations: tuple[float, ...] | None = None
 
 
-def tileset_tres(atlas_res: str, tile_size: tuple[int, int], tiles: list[AtlasTile], shape: TileShape = TileShape()) -> str:
+def tileset_tres(atlas_res: str, tile_size: tuple[int, int], tiles: list[AtlasTile], shape: TileShape = TileShape()) -> str:  # noqa: B008 (frozen)
     """TileSet resource text: one TileSetAtlasSource over the atlas, a tile at every (column, row). A non-square
     `shape` sets tile_shape / tile_layout / tile_offset_axis (only values other than Godot's defaults, as Godot
     4.7.2's ResourceSaver writes them)."""

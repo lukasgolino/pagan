@@ -798,9 +798,8 @@ def _parse_frames_png(
     The PNG is a grid of width x height cells (as many columns as fit its width), read left to right, top to
     bottom: cell i is frame `frames[i]`. `keys` maps every PNG palette index used to a palette key or "." (the
     PNG's own colours are ignored). Cells after the named ones must be empty ("."). Returns (frames, lines, png)."""
-    from PIL import Image  # local import: only frames_png sources need it here
-
     import numpy as np
+    from PIL import Image  # local import: only frames_png sources need it here
 
     frames: dict[str, Grid] = {}
     lines: dict[str, int | None] = {}

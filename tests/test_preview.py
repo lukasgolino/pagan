@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from pagan import preview
 from pagan.asset import Asset, load_asset_or_raise
 from pagan.lint import frame_change
-from pagan import preview
 from pagan.preview import (
     CHANGED,
     REMOVED,
@@ -78,7 +78,7 @@ def test_write_previews(tmp_path: Path) -> None:
     gifs = {p.name: p for p in result.gifs}
     assert set(gifs) == {"walk.gif", "flip.gif"}
     with Image.open(gifs["walk.gif"]) as gif:
-        assert getattr(gif, "n_frames") == 2
+        assert getattr(gif, "n_frames") == 2  # noqa: B009 (not in the stubs)
         assert gif.info["duration"] == 170  # 6 fps, rounded to GIF's 10ms steps
         assert gif.size == (36, 36)
 

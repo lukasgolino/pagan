@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 
 import numpy as np
+from conftest import LoadFn, make_project
 from PIL import Image
 
-from conftest import LoadFn, make_project
 from pagan.build import build
 from pagan.exporters.godot import texture_material_tres
 from pagan.preview import PreviewOptions, contact_sheet

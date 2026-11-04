@@ -8,10 +8,11 @@ from typing import Any
 
 import numpy as np
 import pytest
+from conftest import make_project
 from PIL import Image
 
-from conftest import make_project
-from pagan import api, asset as asset_module, spritecache
+from pagan import api, spritecache
+from pagan import asset as asset_module
 from pagan.asset import load_asset
 from pagan.build import build
 from pagan.lint import lint_paths

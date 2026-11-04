@@ -17,8 +17,8 @@ PAGAN's Godot shader picks the column from the engine's lighting instead ([mesh]
 from __future__ import annotations
 
 import math
-from itertools import groupby
 from dataclasses import dataclass, field
+from itertools import groupby
 from typing import Any
 
 import numpy as np
@@ -155,7 +155,7 @@ def greedy_quads(labels: np.ndarray, lo: tuple[int, int, int] = (0, 0, 0)) -> li
                 k, last_u = row
                 for (v0, v1, lab), u0 in items.items():
                     quads.append(
-                        Quad(axis, sign, k + offset[0], u0 + offset[1], last_u + 1 + offset[1], v0 + offset[2], v1 + offset[2], lab)
+                        Quad(axis, sign, k + offset[0], u0 + offset[1], last_u + 1 + offset[1], v0 + offset[2], v1 + offset[2], lab)  # noqa: B023 (called in this iteration)
                     )
 
             active: dict[tuple[int, int, int], int] = {}  # open rectangles: (v0, v1, label) -> first row u

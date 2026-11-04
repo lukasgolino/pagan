@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -352,7 +353,7 @@ def lint_asset(asset: Asset, project: Project) -> list[Finding]:
 
     limit_change = project.config.lint.max_frame_change
     for anim in asset.animations.values():
-        pairs = list(zip(anim.frames, anim.frames[1:]))
+        pairs = list(itertools.pairwise(anim.frames))
         start = anim.loop_from or 0  # the loop seam: last frame -> first looping frame
         if anim.loop and len(anim.frames) - start > 2:
             pairs.append((anim.frames[-1], anim.frames[start]))

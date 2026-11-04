@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 import pytest
-
 from conftest import LoadFn, make_project
+
 from pagan.buildinfo import version_string
 from pagan.cli import main
 from pagan.findings import PaganError

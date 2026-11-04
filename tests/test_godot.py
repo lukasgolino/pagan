@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from pagan.build import build
 from pagan import offscreen
+from pagan.build import build
 from pagan.exporters.godot import find_godot_binary, render_views, verify_with_godot
 from pagan.project import load_project
 

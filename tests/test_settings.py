@@ -8,9 +8,9 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from conftest import make_project
 from PIL import Image
 
-from conftest import make_project
 from pagan.asset import load_asset_or_raise
 from pagan.build import build
 from pagan.cli import main

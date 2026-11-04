@@ -8,9 +8,9 @@ from typing import Any
 
 import numpy as np
 import pytest
+from conftest import make_project
 from PIL import Image
 
-from conftest import make_project
 from pagan.build import build
 from pagan.lint import lint_paths
 from pagan.project import Project, load_project
@@ -103,8 +103,8 @@ def test_trimmed_frames_are_packed_with_full_logical_size(tmp_path: Path) -> Non
 
 
 def test_godot_atlas_textures_get_margins(tmp_path: Path) -> None:
-    from pagan.exporters.godot import sprite_frames_tres
     from pagan.asset import Animation
+    from pagan.exporters.godot import sprite_frames_tres
 
     text = sprite_frames_tres("res://s.png", {"a": (3, 0, 2, 2)}, [Animation("a", ("a",), 8.0, True)], margins={"a": (2, 1, 4, 2)})
     # Godot 4.7.2's ResourceSaver writes margin right after region; size = region size + margin size

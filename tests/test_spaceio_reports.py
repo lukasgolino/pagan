@@ -7,9 +7,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import LoadFn, make_project
 from PIL import Image
 
-from conftest import LoadFn, make_project
 from pagan import api
 from pagan.build import build
 from pagan.cli import main

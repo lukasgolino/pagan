@@ -12,14 +12,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import make_project
+from test_reports_r20_r29 import BOAT
 
 import pagan.model
-from conftest import make_project
 from pagan import jobs as pagan_jobs
 from pagan.asset import load_asset
 from pagan.build import build
 from pagan.project import Project
-from test_reports_r20_r29 import BOAT
 
 CONFIG = 'default_palette = "test"\noutput_dir = "out"\nexport = ["png", "normals", "mesh"]\n'
 

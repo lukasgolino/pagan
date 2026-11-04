@@ -11,8 +11,8 @@ from typing import Any
 
 import numpy as np
 import pytest
-
 from conftest import make_project
+
 from pagan.asset import Asset, load_asset
 from pagan.build import build
 from pagan.findings import Finding
@@ -178,7 +178,7 @@ def test_ramp_texture_layout(mproject: Project) -> None:
     assert rows == [("1", "2"), ("5",), ("0", "1", "2")]
     assert ramp_width(rows) == 6
     pixels = np.array(ramp_image(rows, asset.palette))
-    hexes = [["#%02x%02x%02x" % tuple(p) for p in row] for row in pixels]
+    hexes = [["#{:02x}{:02x}{:02x}".format(*p) for p in row] for row in pixels]
     assert hexes[0] == ["#ff0000"] * 3 + ["#ff8080"] * 3
     assert hexes[1] == ["#0000ff"] * 6
     assert hexes[2] == ["#000000"] * 2 + ["#ff0000"] * 2 + ["#ff8080"] * 2

@@ -8,13 +8,13 @@ import time
 from pathlib import Path
 
 import pytest
+from test_reports_r15_r17 import _godot_project
 
 from pagan.asset import load_asset
 from pagan.build import build
 from pagan.cli import main
 from pagan.exporters.godot import find_godot_binary, verify_with_godot
 from pagan.project import Project, load_project
-from test_reports_r15_r17 import _godot_project
 
 GODOT = find_godot_binary()
 needs_godot = pytest.mark.skipif(GODOT is None, reason="no Godot binary (set GODOT=/path/to/godot)")

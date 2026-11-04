@@ -13,19 +13,19 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
-from pagan import __version__, progress
+from pagan import progress
 from pagan.asset import MAX_MODEL_SIZE, MAX_SIZE, MODEL_SUFFIX, SPRITE_SUFFIX, TILESET_SUFFIX, Asset, load_asset_or_raise
-from pagan.findings import Finding, PaganError, display_path
 from pagan.build import build
 from pagan.buildinfo import is_editable, version_string
 from pagan.exporters.godot import find_godot_binary, find_godot_project, res_path, verify_with_godot
+from pagan.findings import Finding, PaganError, display_path
 from pagan.importer import import_png, sprite_yaml
 from pagan.lint import lint_paths
 from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_style, catalogue, mark, outdated, set_top_level_field
-from pagan.palette import KEY_ORDER, NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
-from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.model import part_cells
+from pagan.palette import KEY_ORDER, NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
 from pagan.preview import SHEET_CAP, PreviewOptions, gallery, preview_variants, write_closeup, write_native, write_orbit, write_previews
+from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.render import supersample_factor
 from pagan.settings import BY_KEY, Change, describe, set_in_toml, set_setting, unset_setting
 from pagan.swatch import render_swatch
