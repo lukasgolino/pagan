@@ -1,17 +1,28 @@
 name: CI
 
-# Checks run only when started (Actions → CI → Run workflow, or `gh workflow run ci.yml --ref <branch>`): once per PR,
-# just before merging, after the review. Pushes and PRs don't start them (Actions minutes cost money).
+# Tiered for Actions minutes. Every push: lint, types and tests on one Python. Big checks (all Pythons, Godot) run on
+# the PR once it leaves draft (PRs stay drafts while in development and review), and again only if a commit lands
+# after that: the last gate before merge. Run workflow runs everything.
 on:
+  push:
+    branches: ["**"]
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   test:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'pull_request' && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        # one Python on a push; all three before merge
+        python-version: ${{ fromJSON(github.event_name == 'push' && '["3.12"]' || '["3.11", "3.12", "3.13"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -36,6 +47,7 @@ jobs:
   godot:
     # Builds the demo into the example Godot project, checks the committed output is identical
     # (deterministic builds), then loads everything in a real headless Godot.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     env:
       GODOT_VERSION: "4.7.2-stable"

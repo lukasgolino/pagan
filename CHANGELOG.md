@@ -19,6 +19,11 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+### Changed
+
+- CI: lint, types and tests on one Python run on every push. The full Python matrix and the Godot checks run on the
+  PR once it leaves draft, and again only if a commit lands after that, as the last gate before merge.
+
 ## [0.21.0] - 2026-11-04
 
 ### Changed
