@@ -38,7 +38,7 @@ Changelog = "https://github.com/lukasgolino/pagan/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "mypy>=1.10", "ruff>=0.15", "types-PyYAML"]
-mcp = []  # kept so `pagan[mcp]` requirements still resolve after renaming to pagan-gen; the MCP server is always installed now
+mcp = []  # kept (empty) so `pagan-gen[mcp]` still resolves; the MCP server is always installed now
 
 [project.scripts]
 pagan = "pagan.cli:main"

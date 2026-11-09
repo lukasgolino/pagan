@@ -26,7 +26,7 @@
         {
           "type": "named",
           "name": "--project",
-          "description": "PAGAN project directory (holds pagan.toml); defaults to the one containing the working directory",
+          "description": "Absolute path of the PAGAN project directory (holds pagan.toml); without it, the server's working directory",
           "isRequired": false,
           "format": "filepath"
         }

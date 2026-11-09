@@ -14,12 +14,12 @@ frames:
 
 > **Status:** early development, but the full pipeline works: palettes, 2D sprites and tilesets, 3D voxel
 > models rendered from 8 headings or exported as real meshes (glTF) for 3D games, previews, lint, import, and
-> builds into Godot 4. See [CHANGELOG.md](CHANGELOG.md) and the [issues](https://github.com/lukasgolino/pagan/issues).
+> builds into Godot 4. See [CHANGELOG.md](https://github.com/lukasgolino/pagan/blob/main/CHANGELOG.md) and the [issues](https://github.com/lukasgolino/pagan/issues).
 
 **Docs:** [install](https://github.com/lukasgolino/pagan/blob/main/docs/install.md), a [tutorial](https://github.com/lukasgolino/pagan/blob/main/docs/tutorial.md), and references generated from the code:
 [every notation field](https://github.com/lukasgolino/pagan/blob/main/docs/reference/notation.md), [`pagan.toml` settings](https://github.com/lukasgolino/pagan/blob/main/docs/reference/settings.md) and
 [lint rules](https://github.com/lukasgolino/pagan/blob/main/docs/reference/lint-rules.md). The full notation with examples is the skill's
-[docs topics](src/pagan/skill/topics/) (`pagan docs`).
+[docs topics](https://github.com/lukasgolino/pagan/blob/main/src/pagan/skill/topics/) (`pagan docs`).
 
 ## Install
 
@@ -139,13 +139,13 @@ Desktop, Claude Code, Cursor, your own agent) can make, lint, preview and build 
 return the same JSON as the CLI's `--json`, and previews come back as images the model can look at.
 
 ```sh
-claude mcp add pagan -- uvx pagan-gen mcp --project ./art     # no install needed (uv); or `pagan mcp` after pip install
+claude mcp add pagan -- uvx pagan-gen mcp --project /path/to/art     # no install needed (uv); or `pagan mcp` after pip install
 ```
 
 Other clients take the same command in their config:
 
 ```json
-{ "mcpServers": { "pagan": { "command": "uvx", "args": ["pagan-gen", "mcp", "--project", "./art"] } } }
+{ "mcpServers": { "pagan": { "command": "uvx", "args": ["pagan-gen", "mcp", "--project", "/path/to/art"] } } }
 ```
 
 PAGAN is listed in the [MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.lukasgolino/pagan`.
