@@ -78,7 +78,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - Versioning: bump `version` in pyproject.toml, add a CHANGELOG.md entry ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/): log under
   `[Unreleased]`, move it to `[X.Y.Z] - date` + compare link on release; new options/keys = minor) and tag `vX.Y.Z` for ANY change to the
   notation, pagan.toml settings, manifest/exporter output or rendered pixels (game repos pin tags); every fix ships in a new tag.
-- Dependencies: Pillow, PyYAML, numpy; extra `mcp`: mcp (the MCP server); dev: pytest, mypy, ruff, types-PyYAML, mcp. Others only if genuinely needed — log why below.
+- Dependencies: Pillow, PyYAML, numpy, mcp (the MCP server; core since #85 so `uvx pagan-gen mcp` works); dev: pytest, mypy, ruff, types-PyYAML. Others only if genuinely needed — log why below.
 
 ## Decisions log
 
@@ -234,3 +234,8 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
   `lint.WARNING_RULES`, `docs.NOTATION` checked against the parsers' field tuples), plus hand-written install and
   tutorial pages in `docs/`. The skill's topics stay hand-written (examples, prose) but a test checks it names
   every rule, every setting (its pagan.toml example parses and has every key) and every accepted field.
+- 2026-11-09: #85: published as `pagan-gen` on PyPI (`pagan` is taken; the import and command stay `pagan`) and as
+  `io.github.lukasgolino/pagan` in the MCP Registry. Tags run a release job (notes from the changelog) and a publish
+  job: PyPI Trusted Publishing (environment `pypi`) and the registry's GitHub OIDC login, no tokens in the repo. `mcp`
+  became a dependency so registry clients can run `uvx pagan-gen mcp`. server.json's versions are tested against
+  pyproject.

@@ -1236,7 +1236,7 @@ def cmd_mcp(args: argparse.Namespace, out: Output) -> int:
     try:
         from pagan.mcp_server import serve
     except ImportError:
-        raise _usage_error('the MCP server needs the "mcp" extra: pip install "pagan[mcp]"') from None
+        raise _usage_error('the MCP server needs the mcp package: pip install --upgrade pagan-gen') from None
     return serve(args.project, args.allow_godot)
 
 
@@ -1532,7 +1532,7 @@ def build_parser() -> argparse.ArgumentParser:
     config_unset.add_argument("key", help="e.g. default_palette")
     config_unset.set_defaults(handler=cmd_config_unset)
 
-    mcp_cmd = commands.add_parser("mcp", help="run PAGAN as an MCP server over stdio (needs pagan[mcp])")
+    mcp_cmd = commands.add_parser("mcp", help="run PAGAN as an MCP server over stdio")
     mcp_cmd.add_argument("--project", help="PAGAN project directory (default: the one containing the cwd)")
     mcp_cmd.add_argument("--allow-godot", action="store_true", help="let the build tool run a Godot binary (verify_godot)")
     mcp_cmd.set_defaults(handler=cmd_mcp)
