@@ -19,10 +19,26 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-09
+
+PAGAN is on PyPI as `pagan-gen` and in the MCP Registry as `io.github.lukasgolino/pagan` (#85). Output is
+unchanged apart from the generator string in `manifest.json`.
+
 ### Changed
 
+- **The distribution is `pagan-gen`** (`pagan` on PyPI is another project): `pip install pagan-gen`; the command and
+  the import stay `pagan`. Git pins must use the new name from this version on (`pagan-gen @ git+...@v0.22.0`).
+- **The MCP server is always installed** (`mcp` is a dependency; the `mcp` extra is kept, empty), so
+  `uvx pagan-gen mcp` runs it without an install.
+- **Upgrading from a git-pinned `pagan`:** `pip uninstall pagan` first, then install `pagan-gen`. Both own the same
+  `pagan/` files, so uninstalling `pagan` after installing `pagan-gen` deletes them.
 - CI: lint, types and tests on one Python run on every push. The full Python matrix and the Godot checks run on the
   PR once it leaves draft, and again only if a commit lands after that, as the last gate before merge.
+
+### Added
+
+- Tags publish a GitHub release from the changelog, the package to PyPI (Trusted Publishing) and `server.json` to the
+  MCP Registry.
 
 ## [0.21.0] - 2026-11-04
 

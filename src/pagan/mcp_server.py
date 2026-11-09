@@ -5,7 +5,7 @@ One server serves one PAGAN project. Tools return the same JSON as the matching 
 Errors are results (`ok: false` + `findings`), not exceptions: agents fix them like lint output.
 Nothing reads or writes outside the project, its output dir and its preview dir.
 
-Needs the optional extra: `pip install "pagan[mcp]"`.
+Installed with PAGAN (`pip install pagan-gen`); `uvx pagan-gen mcp` runs it without an install.
 """
 
 from __future__ import annotations

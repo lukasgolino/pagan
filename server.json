@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.lukasgolino/pagan",
+  "title": "PAGAN",
+  "description": "Pixel art written as text: lint, preview and build sprites, tilesets and Godot resources.",
+  "repository": {
+    "url": "https://github.com/lukasgolino/pagan",
+    "source": "github"
+  },
+  "websiteUrl": "https://pagan.top/",
+  "version": "0.22.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "pagan-gen",
+      "version": "0.22.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        },
+        {
+          "type": "named",
+          "name": "--project",
+          "description": "PAGAN project directory (holds pagan.toml); defaults to the one containing the working directory",
+          "isRequired": false,
+          "format": "filepath"
+        }
+      ]
+    }
+  ]
+}

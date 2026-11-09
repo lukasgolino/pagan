@@ -16,10 +16,17 @@ frames:
 > models rendered from 8 headings or exported as real meshes (glTF) for 3D games, previews, lint, import, and
 > builds into Godot 4. See [CHANGELOG.md](CHANGELOG.md) and the [issues](https://github.com/lukasgolino/pagan/issues).
 
-**Docs:** [install](docs/install.md), a [tutorial](docs/tutorial.md), and references generated from the code:
-[every notation field](docs/reference/notation.md), [`pagan.toml` settings](docs/reference/settings.md) and
-[lint rules](docs/reference/lint-rules.md). The full notation with examples is the skill's
+**Docs:** [install](https://github.com/lukasgolino/pagan/blob/main/docs/install.md), a [tutorial](https://github.com/lukasgolino/pagan/blob/main/docs/tutorial.md), and references generated from the code:
+[every notation field](https://github.com/lukasgolino/pagan/blob/main/docs/reference/notation.md), [`pagan.toml` settings](https://github.com/lukasgolino/pagan/blob/main/docs/reference/settings.md) and
+[lint rules](https://github.com/lukasgolino/pagan/blob/main/docs/reference/lint-rules.md). The full notation with examples is the skill's
 [docs topics](src/pagan/skill/topics/) (`pagan docs`).
+
+## Install
+
+```sh
+pip install pagan-gen      # the package is pagan-gen on PyPI; the command and the import are `pagan`
+pagan --version
+```
 
 ## Install (development)
 
@@ -132,13 +139,22 @@ Desktop, Claude Code, Cursor, your own agent) can make, lint, preview and build 
 return the same JSON as the CLI's `--json`, and previews come back as images the model can look at.
 
 ```sh
-pip install "pagan[mcp] @ git+https://github.com/lukasgolino/pagan@v0.21.0"
-claude mcp add pagan -- pagan mcp --project ./art          # or any client: command `pagan mcp --project <dir>`
+claude mcp add pagan -- uvx pagan-gen mcp --project ./art     # no install needed (uv); or `pagan mcp` after pip install
 ```
+
+Other clients take the same command in their config:
+
+```json
+{ "mcpServers": { "pagan": { "command": "uvx", "args": ["pagan-gen", "mcp", "--project", "./art"] } } }
+```
+
+PAGAN is listed in the [MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.lukasgolino/pagan`.
 
 Add `--allow-godot` to let the build tool verify output in a headless Godot. Then ask: "make a 16x16
 health potion", "give the zombie an attack animation", "make the whole game a bit darker".
 
+<!-- mcp-name: io.github.lukasgolino/pagan -->
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/lukasgolino/pagan/blob/main/LICENSE).

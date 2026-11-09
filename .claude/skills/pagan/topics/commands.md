@@ -40,7 +40,7 @@ parallel (`PAGAN_JOBS`); output is identical.
 | `pagan build [--verify-godot] [--godot-timeout S]` | final assets + manifest (+ Godot .tres); each Godot step may take S seconds (default 600) |
 | `pagan docs [topic...] [--search words]` | these docs: list the topics, print one, or find the paragraphs you need |
 | `pagan skill install [dir]` | install this skill into a repo's `.claude/skills/` |
-| `pagan mcp [--project DIR] [--allow-godot]` | MCP server over stdio (needs `pagan[mcp]`) |
+| `pagan mcp [--project DIR] [--allow-godot]` | MCP server over stdio (`uvx pagan-gen mcp` without an install) |
 
 **MCP tools** (same JSON as the commands above): `status`, `docs` (these topics), `read_docs`, `write_doc`, `log_feedback`,
 `config_show`/`config_set`/`config_unset`, `palette_list`, `palette_show` (image), `palette_write`,
