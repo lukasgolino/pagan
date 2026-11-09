@@ -86,6 +86,7 @@ Try the demo project: `cd examples/demo && pagan palette show` → swatches in `
 - 2026-10-14: Build backend is setuptools; version is defined once in `pyproject.toml` and read via `importlib.metadata`.
 - 2026-10-14: CI matrix is Python 3.11, 3.12, 3.13.
 - 2026-10-14: Licensed MIT (open source). Uses PEP 639 `license = "MIT"`, hence setuptools>=77.
+- 2026-11-09: #88: relicensed under Apache-2.0 (explicit patent grant); releases up to 0.22.0 stay MIT.
 - 2026-10-14: Rule id `E000` = command/usage error (e.g. project already exists, no pagan.toml found) — not a source-file rule.
 - 2026-10-14: Palette colors accept `"#rrggbb"` shorthand as well as `{ hex, name }`; unquoted digit keys (YAML ints 0-9) are accepted.
 - 2026-10-14: Palette file `name` must match its file name (`dusk.pal.yaml` → `name: dusk`), since sprites reference palettes by name.

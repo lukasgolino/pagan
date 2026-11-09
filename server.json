@@ -8,12 +8,12 @@
     "source": "github"
   },
   "websiteUrl": "https://pagan.top/",
-  "version": "0.22.0",
+  "version": "0.22.1",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "pagan-gen",
-      "version": "0.22.0",
+      "version": "0.22.1",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

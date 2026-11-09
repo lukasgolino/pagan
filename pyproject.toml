@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pagan-gen"
-version = "0.22.0"
+version = "0.22.1"
 description = "PAGAN (Pixel Art Grammar And Notation): write pixel art as text, build it into PNGs and game-ready assets."
 readme = "README.md"
-license = "MIT"
-license-files = ["LICENSE"]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Lukas Golino" }]
 keywords = ["pixel-art", "sprites", "godot", "game-assets", "mcp", "procedural"]
 classifiers = [
