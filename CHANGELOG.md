@@ -19,6 +19,13 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-11-09
+
+### Changed
+
+- Licensed under the Apache License 2.0 instead of MIT (#88). Releases up to 0.22.0 stay
+  available under MIT.
+
 ## [0.22.0] - 2026-11-09
 
 PAGAN is on PyPI as `pagan-gen` and in the MCP Registry as `io.github.lukasgolino/pagan` (#85). Output is
@@ -637,7 +644,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.22.1...HEAD
+[0.22.1]: https://github.com/lukasgolino/pagan/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/lukasgolino/pagan/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/lukasgolino/pagan/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/lukasgolino/pagan/compare/v0.19.3...v0.20.0

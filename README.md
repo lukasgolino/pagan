@@ -157,4 +157,4 @@ health potion", "give the zombie an attack animation", "make the whole game a bi
 
 ## License
 
-MIT — see [LICENSE](https://github.com/lukasgolino/pagan/blob/main/LICENSE).
+Apache 2.0 — see [LICENSE](https://github.com/lukasgolino/pagan/blob/main/LICENSE).
