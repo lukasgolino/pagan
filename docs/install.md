@@ -6,7 +6,7 @@ another project); the command and the import are `pagan`:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install "pagan-gen==0.22.0"     # or from git: "pagan-gen @ git+https://github.com/lukasgolino/pagan@v0.22.0"
+pip install "pagan-gen==0.22.1"     # or from git: "pagan-gen @ git+https://github.com/lukasgolino/pagan@v0.22.1"
 pagan --version
 ```
 
