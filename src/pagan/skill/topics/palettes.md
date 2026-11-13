@@ -32,3 +32,22 @@ Translucent colours (`"#rrggbbaa"`) are for drop shadows, glows, light rays and 
 tilesets: the PNG pixel gets that alpha. The default `outline_color` is the darkest *opaque* colour, `pagan
 import` snaps to opaque colours only, and 3D model materials must be opaque (E013). `[lint] require_opaque
 = true` forbids them in a project (E015). `"#rrggbbff"` is the same as `"#rrggbb"`.
+
+## Hardware palettes
+
+`hardware:` keeps a palette to what a real machine could show, so the art could have been drawn on it (and a 3D
+game's retro pass in KILN quantises to the real thing):
+
+| `hardware` | colours | at once |
+|---|---|---|
+| `cga` | the 16 RGBI colours (`#000000 #0000aa #00aa00 #00aaaa #aa0000 #aa00aa #aa5500 #aaaaaa #555555 #5555ff #55ff55 #55ffff #ff5555 #ff55ff #ffff55 #ffffff`) | 4 |
+| `atari-st` | 3 bits per channel: each of r, g, b is one of 00 24 49 6d 92 b6 db ff (512 colours) | 16 |
+| `atari-st-mono` | `#000000`, `#ffffff` | 2 |
+
+A colour the machine can't show, too many colours, or a translucent colour is E017 (the message names the nearest
+legal colour). CGA's 4-colour modes are a free background colour plus one fixed set of three (green/red/brown or
+cyan/magenta/grey, low or high intensity; mode 5: cyan/red/grey); other combinations are W015.
+
+`pagan new palette <name> --hardware cga` scaffolds a legal palette with ramps. `pagan palette snap <name>
+[--hardware atari-st] [--dry-run]` moves every colour to the nearest legal one (Oklab; per channel for the ST)
+and writes `hardware:` into the file; comments and layout are kept, and you remove extra colours by hand.

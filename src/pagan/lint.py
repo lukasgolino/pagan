@@ -12,7 +12,7 @@ import numpy as np
 from pagan import jobs, spritecache
 from pagan.asset import ASSET_SUFFIXES, MAX_SHEET_SIDE, Asset, Grid, asset_kind, load_asset
 from pagan.findings import Finding, PaganError
-from pagan.palette import PALETTE_SUFFIX, TRANSPARENT, load_palette_file
+from pagan.palette import PALETTE_SUFFIX, TRANSPARENT, load_palette_file_with_warnings
 from pagan.progress import note
 from pagan.project import Project
 from pagan.render import frame_rects, grid_codes, trim_layout
@@ -33,6 +33,7 @@ WARNING_RULES = {
     "W012": "mesh-only model, but meshes aren't exported",
     "W013": "a model part's id has no voxels left (later parts cover it)",
     "W014": "built sheet over 16384 px on a side",
+    "W015": "CGA palette colours that aren't one of the real 4-colour modes",
 }
 
 
@@ -98,7 +99,7 @@ class Linter:
                 continue
             if path.name.endswith(PALETTE_SUFFIX):
                 try:
-                    load_palette_file(path)
+                    self._add(load_palette_file_with_warnings(path)[1])
                 except PaganError as exc:
                     self._add(exc.findings)
                 continue

@@ -19,11 +19,12 @@ from pagan.build import build
 from pagan.buildinfo import is_editable, version_string
 from pagan.exporters.godot import find_godot_binary, find_godot_project, res_path, verify_with_godot
 from pagan.findings import Finding, PaganError, display_path
+from pagan.hardware import HARDWARE
 from pagan.importer import import_png, sprite_yaml
 from pagan.lint import lint_paths
 from pagan.manage import Adjustment, adjust_colors, apply_palette_hexes, bump_style, catalogue, mark, outdated, set_top_level_field
 from pagan.model import part_cells
-from pagan.palette import KEY_ORDER, NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file
+from pagan.palette import KEY_ORDER, NAME_RE, PALETTE_SUFFIX, Palette, load_palette_file, parse_palette
 from pagan.preview import SHEET_CAP, PreviewOptions, gallery, preview_variants, write_closeup, write_native, write_orbit, write_previews
 from pagan.project import CONFIG_NAME, Project, discover_project, find_project_root, load_project
 from pagan.render import supersample_factor
@@ -193,6 +194,24 @@ ramps:
 """
 
 
+def _hardware_starter(name: str, hardware: str) -> str:
+    """A legal palette for `hardware` to start from."""
+    hw = HARDWARE[hardware]
+    keys = KEY_ORDER[: len(hw.starter)]
+    lines = [
+        f"name: {name}",
+        f"# {hw.description}.",
+        f"hardware: {hardware}",
+        '# Quote keys and hex values: YAML treats an unquoted # as the start of a comment.',
+        "colors:",
+        *(f'  "{k}": {{ hex: "{h}", name: {n} }}' for k, (h, n) in zip(keys, hw.starter, strict=True)),
+        "ramps:",
+        "  # shadow -> highlight",
+        *("  " + ramp + ": [" + ", ".join('"' + keys[i] + '"' for i in idx) + "]" for ramp, idx in hw.starter_ramps),
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def cmd_new_palette(args: argparse.Namespace, out: Output) -> int:
     name: str = args.name
     if not NAME_RE.match(name):
@@ -202,7 +221,9 @@ def cmd_new_palette(args: argparse.Namespace, out: Output) -> int:
     if path.exists():
         raise _usage_error("palette already exists", path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(Template(_PALETTE_STARTER).substitute(name=name), encoding="utf-8")
+    hardware = getattr(args, "hardware", None)
+    text = _hardware_starter(name, hardware) if hardware else Template(_PALETTE_STARTER).substitute(name=name)
+    path.write_text(text, encoding="utf-8")
 
     out.say(f"created {display_path(path)}")
     if project.config.default_palette is None:
@@ -1067,6 +1088,42 @@ def cmd_style_bump(args: argparse.Namespace, out: Output) -> int:
 # --- pagan palette adjust ---------------------------------------------------------------------
 
 
+def cmd_palette_snap(args: argparse.Namespace, out: Output) -> int:
+    from pagan.yamlio import load_yaml
+
+    project = _require_project()
+    path = project.palette_path(args.palette)
+    if not path.is_file():
+        raise _usage_error(f"unknown palette {args.palette!r}", path)
+    data = load_yaml(path)
+    if not isinstance(data, dict):
+        raise _usage_error("palette must be a mapping", path)
+    hardware = args.hardware or data.get("hardware")
+    if hardware not in HARDWARE:
+        raise _usage_error("no hardware to snap to: pass --hardware or add `hardware:` to the palette", path)
+    loose = {k: v for k, v in data.items() if k != "hardware"}  # parse without the hardware checks being fixed
+    palette, findings = parse_palette(loose, path, expected_name=args.palette)
+    if palette is None:
+        raise PaganError(findings)
+    hw = HARDWARE[hardware]
+    new_hexes = {k: hw.nearest(c.hex) for k, c in palette.colors.items()}
+    changes = {k: (palette.colors[k].hex, h) for k, h in new_hexes.items() if palette.colors[k].hex != h}
+    text = apply_palette_hexes(path, new_hexes)
+    for key, (old, new) in changes.items():
+        out.say(f"  {key}: {old} -> {new}")
+    count = len(set(new_hexes.values()))
+    if count > hw.max_colors:
+        out.say(f"{count} colours left; {hardware} shows {hw.max_colors} at once: remove some by hand")
+    if not args.dry_run:
+        path.write_text(text, encoding="utf-8")
+        if data.get("hardware") != hardware:
+            set_top_level_field(path, "hardware", hardware)
+    out.say(f"{'would snap' if args.dry_run else 'snapped'} {len(changes)} colour(s) to {hardware}")
+    out.result({"palette": args.palette, "hardware": hardware, "changes": {k: n for k, (_, n) in changes.items()},
+                "colors": count, "max_colors": hw.max_colors, "written": not args.dry_run})
+    return 0
+
+
 def cmd_palette_adjust(args: argparse.Namespace, out: Output) -> int:
     from PIL import Image
 
@@ -1395,6 +1452,7 @@ def build_parser() -> argparse.ArgumentParser:
     new_kinds = new.add_subparsers(title="kinds", metavar="<kind>", required=True)
     new_palette = new_kinds.add_parser("palette", parents=[common], help="scaffold a palette file")
     new_palette.add_argument("name", help="palette name, e.g. dusk")
+    new_palette.add_argument("--hardware", choices=list(HARDWARE), help="a legal palette for this machine (cga, atari-st, atari-st-mono)")
     new_palette.set_defaults(handler=cmd_new_palette)
 
     for kind, help_text in (("sprite", "scaffold a sprite"), ("tiles", "scaffold a tileset")):
@@ -1571,6 +1629,14 @@ def build_parser() -> argparse.ArgumentParser:
     adjust.add_argument("--force", action="store_true", help="overwrite --out if it exists")
     adjust.add_argument("--dry-run", action="store_true", help="show the changes without writing")
     adjust.set_defaults(handler=cmd_palette_adjust)
+
+    snap = palette_cmds.add_parser(
+        "snap", parents=[common], help="move every colour to the nearest one its `hardware` (or --hardware) can show"
+    )
+    snap.add_argument("palette", help="palette name")
+    snap.add_argument("--hardware", choices=list(HARDWARE), help="target machine (default: the palette's `hardware:`); written into the file")
+    snap.add_argument("--dry-run", action="store_true", help="show the changes without writing")
+    snap.set_defaults(handler=cmd_palette_snap)
 
     return parser
 

@@ -12,6 +12,7 @@ in each.
 |---|---|
 | `name` | palette name; must match the file name (`dusk.pal.yaml` -> `dusk`) |
 | `description` | what the palette is for |
+| `hardware` | `cga`, `atari-st` or `atari-st-mono`: keep to the colours (and how many) that machine shows (E017, W015) |
 | `colors` | key (one Unicode letter or digit) -> `"#rrggbb"`, `"#rrggbbaa"` or `{ hex, name }` |
 | `ramps` | ramp name -> keys, dark to light (one ramp per material) |
 | `variants` | palette-wide recolours every asset using this palette gets |

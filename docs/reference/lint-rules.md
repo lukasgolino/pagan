@@ -27,6 +27,7 @@ off project-wide (`[lint] disable` in pagan.toml) or per asset, frame or animati
 | E014 | rig or mesh problem (unknown rig id or parent, parent cycle, a hidden carving part with meshes) |
 | E015 | translucent colour with `[lint] require_opaque` |
 | E016 | timeline preview problem (`scenes/*.timeline.yaml`) |
+| E017 | hardware palette problem: a colour or colour count the palette's `hardware` can't show |
 
 ## Warnings
 
@@ -46,3 +47,4 @@ off project-wide (`[lint] disable` in pagan.toml) or per asset, frame or animati
 | W012 | mesh-only model, but meshes aren't exported |
 | W013 | a model part's id has no voxels left (later parts cover it) |
 | W014 | built sheet over 16384 px on a side |
+| W015 | CGA palette colours that aren't one of the real 4-colour modes |
