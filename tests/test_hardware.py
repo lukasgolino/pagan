@@ -56,7 +56,7 @@ def test_colour_the_machine_cant_show_names_the_nearest() -> None:
     pal, findings = parse(palette("atari-st", "#000000", "#123456"))
     assert pal is None and rules(findings) == ["E017"]
     assert findings[0].where == "colors.1" and findings[0].line == 5
-    assert "nearest is #002449" in findings[0].message
+    assert "nearest is #242449" in findings[0].message
     _, findings = parse(palette("atari-st-mono", "#000000", "#808080"))
     assert "nearest is" in findings[0].message
 
@@ -79,13 +79,17 @@ def test_translucent_colours_are_errors() -> None:
 def test_cga_set_warning() -> None:
     assert cga_set(["#000000", "#55ffff", "#ff5555", "#ffffff"]) == "mode 5 high (cyan/red/white)"
     assert cga_set(["#000000", "#55ffff", "#ff5555", "#ffff55"]) is None
+    assert cga_set(["#000000", "#5555ff"]) == "640x200 (black + one colour)"
+    assert cga_set(["#0000aa", "#5555ff"]) is None
+    pal, findings = parse(palette("cga", "#000000", "#5555ff"))
+    assert pal is not None and findings == []
     pal, findings = parse(palette("cga", "#000000", "#55ffff", "#ff5555", "#ffff55"))
     assert pal is not None and rules(findings) == ["W015"]
 
 
 def test_nearest() -> None:
     st = HARDWARE["atari-st"]
-    assert st.nearest("#fefefe") == "#ffffff" and st.nearest("#123456") == "#002449"
+    assert st.nearest("#fefefe") == "#ffffff" and st.nearest("#123456") == "#242449"
     assert HARDWARE["cga"].nearest("#f0f000") == "#ffff55"
     assert HARDWARE["atari-st-mono"].nearest("#202020") == "#000000"
 

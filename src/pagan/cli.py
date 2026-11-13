@@ -207,7 +207,7 @@ def _hardware_starter(name: str, hardware: str) -> str:
         *(f'  "{k}": {{ hex: "{h}", name: {n} }}' for k, (h, n) in zip(keys, hw.starter, strict=True)),
         "ramps:",
         "  # shadow -> highlight",
-        *(f"  {ramp}: [{', '.join(repr(keys[i]).replace(chr(39), chr(34)) for i in idx)}]" for ramp, idx in hw.starter_ramps),
+        *("  " + ramp + ": [" + ", ".join('"' + keys[i] + '"' for i in idx) + "]" for ramp, idx in hw.starter_ramps),
     ]
     return "\n".join(lines) + "\n"
 

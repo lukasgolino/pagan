@@ -236,8 +236,8 @@ def _check_hardware(data: dict[str, Any], colors: dict[str, Color], error: Error
     if len(distinct) > hw.max_colors:
         error("E017", f"{len(distinct)} colours, but {hw.name} shows {hw.max_colors} at once; remove some", _line(data, "colors"), "colors")
     elif raw == "cga" and all(hw.can_show(h) for h in distinct) and cga_set(distinct) is None:
-        error("W015", "these CGA colours aren't a real 4-colour mode (a background + one of: "
-              + "; ".join(CGA_SETS) + ")", _line(data, "colors"), "colors")
+        error("W015", "these CGA colours aren't a real mode: 640x200 is black + one colour; 320x200 is a background + one of: "
+              + "; ".join(CGA_SETS), _line(data, "colors"), "colors")
     return raw
 
 

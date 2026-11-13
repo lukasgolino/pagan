@@ -7,6 +7,7 @@ with it (2D sprites, or a 3D game's retro post pass in KILN) could have been dra
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 
 from pagan.color import distance, hex_to_rgb, rgb_to_oklab
 
@@ -44,18 +45,19 @@ class Hardware:
     def can_show(self, hex_value: str) -> bool:
         return hex_value.lower() in self._set
 
-    @property
+    @cached_property
     def _set(self) -> frozenset[str]:
         return frozenset(self.colors)
 
+    @cached_property
+    def _labs(self) -> list[tuple[float, float, float]]:
+        return [rgb_to_oklab(hex_to_rgb(c)) for c in self.colors]
+
     def nearest(self, hex_value: str) -> str:
-        """The colour this machine can show that looks closest (Oklab distance)."""
-        if self.name == "atari-st":  # per channel is exact for a grid of levels and much faster
-            r, g, b = hex_to_rgb(hex_value[:7])
-            snap = [min(ST_LEVELS, key=lambda level: abs(level - c)) for c in (r, g, b)]
-            return "#" + "".join(f"{c:02x}" for c in snap)
+        """The colour this machine can show that looks closest (Oklab distance; the first of equals)."""
         lab = rgb_to_oklab(hex_to_rgb(hex_value[:7]))
-        return min(self.colors, key=lambda c: distance(lab, rgb_to_oklab(hex_to_rgb(c))))
+        best = min(range(len(self.colors)), key=lambda i: distance(lab, self._labs[i]))
+        return self.colors[best]
 
 
 HARDWARE: dict[str, Hardware] = {
@@ -95,8 +97,11 @@ HARDWARE_HELP = ", ".join(HARDWARE)
 
 
 def cga_set(hexes: list[str]) -> str | None:
-    """The 4-colour set these CGA colours fit (a background + a fixed set of three), or None."""
+    """The CGA mode these colours fit: 640x200 (black + any one colour), or 320x200 (a background + a fixed set of
+    three); None if neither."""
     unique = list(dict.fromkeys(h.lower() for h in hexes))
+    if len(unique) <= 2 and "#000000" in unique:
+        return "640x200 (black + one colour)"
     for label, fixed in CGA_SETS.items():
         rest = [h for h in unique if h not in fixed]
         if len(rest) <= 1:
