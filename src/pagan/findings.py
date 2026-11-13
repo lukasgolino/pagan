@@ -28,6 +28,7 @@ ERROR_RULES = {
     "E014": "rig or mesh problem (unknown rig id or parent, parent cycle, a hidden carving part with meshes)",
     "E015": "translucent colour with `[lint] require_opaque`",
     "E016": "timeline preview problem (`scenes/*.timeline.yaml`)",
+    "E017": "hardware palette problem: a colour or colour count the palette's `hardware` can't show",
 }
 
 

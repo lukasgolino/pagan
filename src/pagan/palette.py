@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from pagan.findings import Finding, PaganError, has_errors
+from pagan.hardware import CGA_SETS, HARDWARE, HARDWARE_HELP, cga_set
 from pagan.yamlio import LineMap, YamlError, load_yaml
 
 TRANSPARENT = "."
@@ -30,7 +31,7 @@ def is_key(text: str) -> bool:
 PALETTE_SUFFIX = ".pal.yaml"
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
-_FIELDS = ("name", "description", "colors", "ramps", "variants", "base_variant")
+_FIELDS = ("name", "description", "hardware", "colors", "ramps", "variants", "base_variant")
 _VARIANT_FIELDS = ("ramp_swap", "key_swap", "tags")
 _COLOR_FIELDS = ("hex", "name")
 
@@ -83,6 +84,7 @@ class Palette:
     path: Path | None = None
     variants: dict[str, PaletteVariant] = field(default_factory=dict)  # palette-wide recolours, by name
     base_variant: str | None = None  # what the base colours are called on assets that get palette variants
+    hardware: str | None = None  # the machine whose colours it keeps to (pagan.hardware.HARDWARE)
 
 
 def _line(data: Any, key: Any = None) -> int | None:
@@ -203,9 +205,40 @@ def parse_palette(
     if inline and ("variants" in data or base_variant is not None):
         error("E006", "inline palettes can't have variants; use the asset's own variants", _line(data, "variants") or bline, "variants")
 
+    hardware = _check_hardware(data, colors, error)
     if has_errors(findings):
         return None, findings
-    return Palette(name=name, colors=colors, ramps=ramps, path=path, variants=variants, base_variant=base_variant), findings
+    palette = Palette(name=name, colors=colors, ramps=ramps, path=path, variants=variants, base_variant=base_variant, hardware=hardware)
+    return palette, findings
+
+
+def _check_hardware(data: dict[str, Any], colors: dict[str, Color], error: ErrorFn) -> str | None:
+    """`hardware:` keeps the palette to what that machine could show (E017; W015 for CGA sets)."""
+    raw = data.get("hardware")
+    if raw is None:
+        return None
+    hline = _line(data, "hardware")
+    if not isinstance(raw, str) or raw not in HARDWARE:
+        error("E017", f"unknown hardware {raw!r}; one of: {HARDWARE_HELP}", hline, "hardware")
+        return None
+    hw = HARDWARE[raw]
+    raw_colors = data.get("colors")
+    for key, color in colors.items():
+        line = None
+        if isinstance(raw_colors, LineMap):
+            line = raw_colors.key_lines.get(key) or (raw_colors.key_lines.get(int(key)) if key.isdigit() else None)
+        if color.alpha != 255:
+            error("E017", f"{hw.name} can't show translucent colours; use an opaque one", line, f"colors.{key}")
+        elif not hw.can_show(color.hex):
+            error("E017", f"{hw.name} can't show {color.hex}; nearest is {hw.nearest(color.hex)} "
+                  "(`pagan palette snap` fixes them all)", line, f"colors.{key}")
+    distinct = sorted({c.hex for c in colors.values()})
+    if len(distinct) > hw.max_colors:
+        error("E017", f"{len(distinct)} colours, but {hw.name} shows {hw.max_colors} at once; remove some", _line(data, "colors"), "colors")
+    elif raw == "cga" and all(hw.can_show(h) for h in distinct) and cga_set(distinct) is None:
+        error("W015", "these CGA colours aren't a real 4-colour mode (a background + one of: "
+              + "; ".join(CGA_SETS) + ")", _line(data, "colors"), "colors")
+    return raw
 
 
 def _parse_palette_variants(
@@ -340,6 +373,11 @@ def palette_name_from_path(path: Path) -> str | None:
 
 def load_palette_file(path: Path) -> Palette:
     """Load and validate a palette file. Raises PaganError with findings on any error."""
+    return load_palette_file_with_warnings(path)[0]
+
+
+def load_palette_file_with_warnings(path: Path) -> tuple[Palette, list[Finding]]:
+    """Load and validate a palette file: the palette and its warnings. Raises PaganError on any error."""
     try:
         data = load_yaml(path)
     except YamlError as exc:
@@ -347,4 +385,4 @@ def load_palette_file(path: Path) -> Palette:
     palette, findings = parse_palette(data, path, expected_name=palette_name_from_path(path))
     if palette is None:
         raise PaganError(findings)
-    return palette
+    return palette, findings

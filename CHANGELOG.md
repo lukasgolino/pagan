@@ -19,6 +19,19 @@ the manifest's `generator` (`"pagan X.Y.Z"`), so expect every manifest to change
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-13
+
+### Added
+
+- Hardware palettes (#91): `hardware: cga | atari-st | atari-st-mono` keeps a palette to the colours that machine
+  shows (CGA: the 16 RGBI colours, 4 at once; Atari ST: 3 bits per channel, 16 at once; ST mono: black and white).
+  E017 reports a colour it can't show (naming the nearest legal one), too many colours, or a translucent colour;
+  W015 a CGA palette that isn't a real 4-colour mode (a background + one fixed set of three).
+- `pagan new palette <name> --hardware <hw>` scaffolds a legal palette with ramps.
+- `pagan palette snap <name> [--hardware <hw>] [--dry-run]` moves every colour to the nearest legal one and writes
+  `hardware:` into the file (comments kept).
+- `pagan lint` now reports palette warnings (only W015 so far).
+
 ## [0.22.1] - 2026-11-09
 
 ### Changed
@@ -644,7 +657,8 @@ From orchestrator reports R1-R6 (ORCHESTRATOR_PLAN.md), the Age of Boom PAGAN lo
 - Lint: errors E000-E013, warnings W001-W008.
 - Claude skill (`pagan skill install`) with the workflow and a full notation reference.
 
-[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.22.1...HEAD
+[Unreleased]: https://github.com/lukasgolino/pagan/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/lukasgolino/pagan/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/lukasgolino/pagan/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/lukasgolino/pagan/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/lukasgolino/pagan/compare/v0.20.0...v0.21.0

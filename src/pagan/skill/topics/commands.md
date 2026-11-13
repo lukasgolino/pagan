@@ -18,7 +18,7 @@ parallel (`PAGAN_JOBS`); output is identical.
 | Command | Purpose |
 |---|---|
 | `pagan init [dir] [--open] [--godot DIR] [--perspective top-down\|top-down-3/4\|side\|iso] [--style pixel\|flat]` | create a project; perspective sets `[camera] elevation` (90/42/15/30) and BRIEF.md; `--style flat` = STYLE.md for flat / vector-like arcade art |
-| `pagan new palette <name>` | starter palette |
+| `pagan new palette <name> [--hardware cga\|atari-st\|atari-st-mono]` | starter palette (legal for that hardware) |
 | `pagan new sprite <name> [--size 16x16] [--frames N] [--directions 1\|4\|8] [--mirror] [--outline] [--palette P] [--description D]` | blank sprite; `--directions 4` scaffolds down/up/left frames + a mirrored right animation |
 | `pagan new tiles <name> [--size] [--frames N]` | blank tileset |
 | `pagan new model <name> [--size 64x64] [--directions 8]` | starter model (`--directions 0`: a mesh-only model for 3D games) |
@@ -30,6 +30,7 @@ parallel (`PAGAN_JOBS`); output is identical.
 | `pagan render <asset...>` | native-size PNGs |
 | `pagan palette show [palettes]` | swatches |
 | `pagan palette adjust <pal> [--lightness d] [--contrast k] [--saturation k] [--hue deg] [--warmth d] [--ramp r] [--keys ...] [--out new] [--dry-run]` | change the look globally |
+| `pagan palette snap <pal> [--hardware cga\|atari-st\|atari-st-mono] [--dry-run]` | move colours to the nearest ones the hardware shows |
 | `pagan import <png> [--palette P \| --open] [--scale N] [--name] [--out]` | PNG -> sprite (snaps colors, report) |
 | `pagan bake <model> [--name]` | model -> editable sprite (default name `<model>_baked`) |
 | `pagan fit <model> [--margin N] [--even] [--write]` | smallest size + pivot that fit every heading and pose |
